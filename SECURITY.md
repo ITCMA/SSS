@@ -42,7 +42,7 @@ SSS lets ordinary users log off sessions on a Citrix site through a service acco
 
 ## Known limits
 
-- Process control (off by default) gives the service account a WinRM path to the VDAs. It is limited to a JEA endpoint with three commands (list and end processes, read the profile size) that touch only processes and the profile of the user whose SID is passed in, and never the Citrix session processes. See [docs/PROCESSES.md](docs/PROCESSES.md).
+- Process control and profile reading (off by default, same endpoint; see the table of capabilities and remaining risk in [docs/PROCESSES.md](docs/PROCESSES.md#what-this-exposes-and-what-it-does-not)) — gives the service account a WinRM path to the VDAs. It is limited to a JEA endpoint with three commands (list and end processes, read the profile size) that touch only processes and the profile of the user whose SID is passed in, and never the Citrix session processes. See [docs/PROCESSES.md](docs/PROCESSES.md).
 - `GET /healthz` is the only anonymous path (when opened with `install.ps1 -HealthEndpoint`); it returns only `ok`, `degraded` or `unavailable`.
 - "Log off" starts the log-off; the Broker confirms only that the operation began on the machine.
 - The audit log is a plain file. It is not tamper-proof against someone with administrator rights on the server.

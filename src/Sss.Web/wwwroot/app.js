@@ -581,10 +581,67 @@ function profileRows(p) {
   if (p.container) rows.push([t('profileContainer'), p.container]);
   if (p.containerMb != null) rows.push([t('profileContainerSize'), p.containerMaxMb ? `${fmtMb(p.containerMb)} / ${fmtMb(p.containerMaxMb)}` : fmtMb(p.containerMb)]);
   if (p.sizeMb != null) rows.push([t('profileSize'), `${fmtMb(p.sizeMb)}${p.sizePartial ? ` ${t('profilePartial')}` : ''}`]);
-  if (p.topFolders.length) rows.push([t('profileTop'), p.topFolders.map((f) => `${f.name} ${fmtMb(f.mb)}`).join(', ')]);
+  const top = p.tree.filter((n) => !n.path.includes('\\')).slice(0, 5);
+  if (top.length) rows.push([t('profileTop'), top.map((f) => `${f.path} ${fmtMb(f.mb)}`).join(', ')]);
+  if (p.redirected.length) rows.push([t('profileRedirected'), p.redirected.map((r) => r.name).join(', ')]);
+  else if (p.type !== 'Local') rows.push([t('profileRedirected'), t('profileNoneFound')]);
   const flags = [p.temporary && t('profileTemporary'), p.mandatory && t('profileMandatory')].filter(Boolean);
   if (flags.length) rows.push([t('profileNotes'), flags.join('; ')]);
   return rows;
+}
+
+// Folder tree like a disk analyzer: nested, largest first, with a bar for the share of the whole profile.
+function profileTree(p) {
+  const total = Math.max(1, p.sizeMb || 1);
+  const set = new Map(p.tree.map((n) => [n.path.toLowerCase(), { ...n, kids: [] }]));
+  const roots = [];
+  for (const n of set.values()) {
+    const parts = n.path.split('\\');
+    let parent = null;
+    for (let i = parts.length - 1; i > 0 && !parent; i--) parent = set.get(parts.slice(0, i).join('\\').toLowerCase());
+    (parent ? parent.kids : roots).push(n);
+  }
+  const row = (n) => {
+    const line = el('span', { class: 'tnode' }, el('span', { class: 'tname', text: n.path.split('\\').pop() }),
+      el('progress', { value: n.mb, max: total, 'aria-label': `${n.path} ${fmtMb(n.mb)}` }), el('span', { class: 'tsize', text: fmtMb(n.mb) }));
+    if (!n.kids.length) return el('div', { class: 'tleaf' }, line);
+    n.kids.sort((a, b) => b.mb - a.mb);
+    return el('details', {}, el('summary', {}, line), ...n.kids.map(row));
+  };
+  roots.sort((a, b) => b.mb - a.mb);
+  return roots.map(row);
+}
+
+function profileHints(p, d) {
+  const hints = [...p.hints];
+  const step = d?.waterfall?.steps.find((s) => s.id === 'ProfileLoad' && !s.estimated);
+  if (step && step.durationMs >= 20000)
+    hints.push({ id: 'profileLoadSlow', level: 'warn', args: { s: Math.round(step.durationMs / 1000), p: Math.round((step.durationMs / d.waterfall.totalMs) * 100) } });
+  const order = { crit: 0, warn: 1, info: 2 };
+  return hints.sort((a, b) => order[a.level] - order[b.level]).map((h) => el('li', { class: `finding ${h.level}` }, el('span', { class: 'dot', 'aria-hidden': 'true', text: h.level === 'info' ? 'ℹ' : h.level === 'warn' ? '▲' : '✖' }),
+    el('span', { text: t(`hint_${h.id}`, h.args ?? {}) })));
+}
+
+function profileConfig(p) {
+  const parts = [];
+  if (p.settings.length) parts.push(el('h4', { text: t('profileSettings') }), el('dl', {}, ...p.settings.flatMap((s) => [el('dt', { text: `${s.source}: ${s.name}` }), el('dd', { text: s.value })])));
+  if (p.exclusions.length) parts.push(el('h4', { text: t('profileExclusions') }), el('ul', {}, ...p.exclusions.map((x) => el('li', { text: `${x.item}  (${x.source})` }))));
+  if (p.redirected.length) parts.push(el('h4', { text: t('profileRedirected') }), el('dl', {}, ...p.redirected.flatMap((r) => [el('dt', { text: r.name }), el('dd', { text: r.target })])));
+  return parts.length ? el('details', { class: 'pconfig' }, el('summary', { text: t('profileConfig') }), ...parts) : null;
+}
+
+function renderProfile(ctx, out) {
+  const p = ctx.profile;
+  const dl = el('dl');
+  for (const [k, v] of profileRows(p)) dl.append(el('dt', { text: k }), el('dd', { text: v }));
+  const hints = profileHints(p, ctx.d);
+  out.replaceChildren(dl,
+    hints.length ? el('ul', { class: 'hints' }, ...hints) : null,
+    p.tree.length ? el('div', { class: 'ptree' }, el('h4', { text: t('profileTree') }), ...profileTree(p)) : null,
+    p.files.length ? el('div', { class: 'pfiles' }, el('h4', { text: t('profileFiles') }),
+      ...p.files.map((f) => el('div', { class: 'tleaf' }, el('span', { class: 'tnode' }, el('span', { class: 'tname', text: f.path.split('\\').pop(), title: f.path }),
+        el('span', { class: 'tpath', text: f.path }), el('span', { class: 'tsize', text: fmtMb(f.mb) }))))) : null,
+    profileConfig(p));
 }
 
 function buildProfileSection(ctx) {
@@ -600,9 +657,7 @@ function buildProfileSection(ctx) {
       if (r.status === 429) { out.replaceChildren(el('p', { class: 'muted', text: t('rateLimited') })); return; }
       if (!r.ok) { out.replaceChildren(el('p', { class: 'muted', text: t(r.status === 503 ? 'profileUnavailable' : 'error') })); return; }
       ctx.profile = await r.json();
-      const dl = el('dl');
-      for (const [k, v] of profileRows(ctx.profile)) dl.append(el('dt', { text: k }), el('dd', { text: v }));
-      out.replaceChildren(dl);
+      renderProfile(ctx, out);
     } catch { out.replaceChildren(el('p', { class: 'muted', text: t('error') })); }
     finally { btn.disabled = false; }
   });

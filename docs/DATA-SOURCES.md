@@ -55,6 +55,8 @@ Monitor does not know what kind of profile a user has or how large it is. SSS th
 | Roaming profile (Windows) | `Win32_UserProfile` says roaming is configured; the roaming path |
 | Local profile | none of the above; temporary and mandatory profiles are flagged |
 
+Besides type and size SSS reads, read only: the folder tree (four levels, the 80 largest folders), the 10 largest files, the folders that are **redirected** (User Shell Folders of the logged-on user), the **FSLogix** settings (`Profiles` and `ODFC`, local and policy), the exclusions from `redirections.xml` if the share is readable, the **Citrix Profile Management** policy values including exclusion lists, and the number of local profiles on the machine. A rule set turns this into findings (full or bloated container, temporary profile, roaming profile that is large or not redirected, Outlook/Teams/browser/OneDrive/Temp caches, unredirected personal data, missing exclusions, profile streaming off, many leftover local profiles). Findings are advice, not proof.
+
 The size of the profile folder is counted with a time limit (`Processes:ProfileScanSeconds`, default 20 s; the result then says "partial"), reparse points are not followed, and the largest folders are listed. All of this is read only. Which technology is detected is a best effort based on the usual markers; a site with an unusual setup may show "Local profile" for a container profile.
 
 ## Traffic lights

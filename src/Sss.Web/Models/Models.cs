@@ -91,11 +91,20 @@ public sealed record ProcessListResult(string? Machine, IReadOnlyList<ProcessEnt
 
 public sealed record EndProcessResult(string Result);
 
-public sealed record ProfileFolder(string Name, int Mb);
+/// <summary>A folder or file of the profile with its size; <c>Path</c> is relative to the profile root, separated by backslashes.</summary>
+public sealed record ProfileNode(string Path, int Mb);
+public sealed record ProfileRedirect(string Name, string Target);
+public sealed record ProfileSetting(string Source, string Name, string Value);
+public sealed record ProfileExclusion(string Source, string Item);
+
+/// <summary>A finding about the profile. <c>Id</c> selects the translated text, <c>Args</c> fills its placeholders.</summary>
+public sealed record ProfileHint(string Id, string Level, IReadOnlyDictionary<string, string>? Args = null);
 
 /// <summary>What the VDA reports about the profile of a session's user. <c>Type</c> is Local, Roaming, Citrix UPM or FSLogix.
 /// Sizes are in MB; <c>SizePartial</c> means the folder scan hit its time limit.</summary>
 public sealed record ProfileInfo(
     string? Machine, string Type, bool Loaded, string? LocalPath, string? StorePath, string? Container, int? ContainerMb, int? ContainerMaxMb,
     bool Roaming, bool Temporary, bool Mandatory, int? SizeMb, bool SizePartial, int ScanSeconds,
-    IReadOnlyList<string> Notes, IReadOnlyList<ProfileFolder> TopFolders);
+    IReadOnlyList<string> Notes, IReadOnlyList<ProfileNode> Tree, IReadOnlyList<ProfileNode> Files,
+    IReadOnlyList<ProfileRedirect> Redirected, IReadOnlyList<ProfileSetting> Settings, IReadOnlyList<ProfileExclusion> Exclusions,
+    int? LocalProfiles, IReadOnlyList<ProfileHint> Hints);

@@ -24,7 +24,7 @@ public sealed partial class ProcessService(IProcessProvider provider, SessionSer
         if (!await OwnsAsync(target, uid, ct)) return null;
         var info = await provider.GetProfileAsync(target.Sid, uid, options.Citrix.Processes.ProfileScanSeconds, ct);
         audit.Write(new AuditEntry("profile-info", target, uid, "success", ip, actor));
-        return info;
+        return info with { Hints = ProfileAdvisor.Analyze(info) };
     }
 
     public async Task<ProcessListResult?> ListAsync(UserIdentity target, string uid, UserIdentity? actor, string? ip, CancellationToken ct)

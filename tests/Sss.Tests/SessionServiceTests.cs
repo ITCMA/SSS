@@ -161,4 +161,50 @@ public class CsvWriterTests
         Assert.Contains(unknown, u => u.StartsWith("Sss:UseHttps (did you mean Sss:Citrix:Monitor:UseHttps?") );
         Assert.Contains(unknown, u => u == "Sss:Citrix:Wokers" || u.StartsWith("Sss:Citrix:Wokers"));
     }
+
+    private static ProfileInfo Profile(string type = "FSLogix", int? size = 6000, int? used = null, int? max = null, ProfileNode[]? tree = null,
+        ProfileRedirect[]? redirected = null, ProfileExclusion[]? exclusions = null, bool temporary = false, int? localProfiles = null) =>
+        new("vda", type, true, null, null, null, used, max, false, temporary, false, size, false, 3, [],
+            tree ?? [], [], redirected ?? [], [], exclusions ?? [], localProfiles, []);
+
+    [Fact]
+    public void Advisor_flags_a_nearly_full_container_and_a_temporary_profile()
+    {
+        var hints = ProfileAdvisor.Analyze(Profile(used: 29000, max: 30000, temporary: true));
+
+        Assert.Contains(hints, h => h.Id == "containerFull" && h.Level == "crit" && h.Args!["pct"] == "97");
+        Assert.Contains(hints, h => h.Id == "tempProfile" && h.Level == "crit");
+    }
+
+    [Fact]
+    public void Advisor_points_at_heavy_caches_and_unredirected_user_data()
+    {
+        var hints = ProfileAdvisor.Analyze(Profile(size: 9000, tree:
+        [
+            new("AppData", 7000), new(@"AppData\Local\Microsoft\Outlook", 3000), new("Documents", 2500), new("Downloads", 100),
+        ]));
+
+        Assert.Contains(hints, h => h.Id == "cacheOutlook" && h.Args!["share"] == "33");
+        Assert.Contains(hints, h => h.Id == "userDataLocal" && h.Args!["path"] == "Documents");
+        Assert.Contains(hints, h => h.Id == "appdataDominates");
+        Assert.DoesNotContain(hints, h => h.Args?.GetValueOrDefault("path") == "Downloads");
+    }
+
+    [Fact]
+    public void Advisor_does_not_call_redirected_data_local_and_knows_roaming_and_upm_settings()
+    {
+        var redirected = ProfileAdvisor.Analyze(Profile(tree: [new("Documents", 3000)], redirected: [new("Documents", @"\\srv\home")]));
+        Assert.DoesNotContain(redirected, h => h.Id == "userDataLocal");
+
+        var roaming = ProfileAdvisor.Analyze(Profile("Roaming", size: 1500));
+        Assert.Contains(roaming, h => h.Id == "roamingLarge");
+        Assert.Contains(roaming, h => h.Id == "roamingNoRedirection");
+
+        var upm = ProfileAdvisor.Analyze(Profile("Citrix UPM", size: 3000));
+        Assert.Contains(upm, h => h.Id == "upmNoExclusions");
+        var withExclusions = ProfileAdvisor.Analyze(Profile("Citrix UPM", size: 3000, exclusions: [new("Citrix UPM ExclusionListDir", "AppData")]));
+        Assert.DoesNotContain(withExclusions, h => h.Id == "upmNoExclusions");
+
+        Assert.Contains(ProfileAdvisor.Analyze(Profile(localProfiles: 25)), h => h.Id == "manyLocalProfiles");
+    }
 }

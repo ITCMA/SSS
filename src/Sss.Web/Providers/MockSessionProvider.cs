@@ -152,7 +152,13 @@ public sealed class MockSessionProvider : ISessionProvider, IHelpdeskProvider, I
             if (!_items.Any(e => e.OwnerSid == userSid && e.Info.Uid == uid && e.Info.State != SessionState.Ended)) throw new InvalidOperationException("Session not found.");
             return Task.FromResult(new ProfileInfo("demo-vda.demo.local", "FSLogix", true, "C:\\Users\\demo.user", null, "\\\\fileserver\\profiles\\demo.user_S-1-5-21\\Profile_demo.user.vhdx", 9120, 30720,
                 false, false, false, 6480, false, 4,
-                ["Status=0"], [new("AppData", 4210), new("Documents", 1360), new("Desktop", 540), new("Downloads", 260)]));
+                ["Status=0"],
+                [new("AppData", 4210), new(@"AppData\Local", 3600), new(@"AppData\Local\Microsoft", 2300), new(@"AppData\Local\Microsoft\Outlook", 1900), new(@"AppData\Local\Google", 900),
+                 new(@"AppData\Local\Google\Chrome", 880), new("Documents", 1360), new("Desktop", 540), new("Downloads", 260)],
+                [new(@"AppData\Local\Microsoft\Outlook\mail.ost", 1850), new(@"Documents\archive.pst", 900)],
+                [new("Desktop", @"\\fileserver\home\demo.user\Desktop")],
+                [new("FSLogix", "Enabled", "1"), new("FSLogix", "VHDLocations", @"\\fileserver\profiles"), new("FSLogix", "SizeInMBs", "30720"), new("FSLogix", "IsDynamic", "1")],
+                [], 7, []));
         }
     }
 

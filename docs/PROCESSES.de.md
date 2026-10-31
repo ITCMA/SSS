@@ -27,7 +27,7 @@ Browser --> SSS (IIS) --> PowerShell-Worker --WinRM--> JEA-Endpunkt "SSS.Process
    .\Install-SssJea.ps1 -Principal 'CORP\svc-sss$'
    ```
 
-   Es aktiviert WinRM (TCP 5985), registriert den Endpunkt `SSS.Processes` für genau dieses Konto und schreibt die Transkripte nach `C:\ProgramData\SSS\jea-transcripts`. Sonst ändert es nichts. `-ConfigurationName` und `-TranscriptDirectory` ändern die Standardwerte. `.\Install-SssJea.ps1 -Remove` hebt die Registrierung des Endpunkts wieder auf.
+   (Mehrere Konten sind möglich: `-Principal 'a','b'`.) Mit `-AllowedFrom sss01.corp.local` (Hostnamen oder IP-Bereiche deiner SSS-Server) beschränkst du die Firewallregel für WinRM auf diese; ohne den Schalter darf jeder Rechner, der den VDA erreicht, es versuchen. Das Skript aktiviert WinRM (TCP 5985), registriert den Endpunkt `SSS.Processes` für genau die genannten Konten und schreibt die Transkripte nach `C:\ProgramData\SSS\jea-transcripts` (nur für Administratoren und das System lesbar). Sonst ändert es nichts. `-ConfigurationName` und `-TranscriptDirectory` ändern die Standardwerte. `.\Install-SssJea.ps1 -Remove` hebt die Registrierung des Endpunkts wieder auf.
 
 2. **Netzwerkweg öffnen:** TCP 5985 (WinRM über Kerberos, auf Nachrichtenebene verschlüsselt) vom SSS-Server zu den VDAs.
 
@@ -80,6 +80,25 @@ Neue SSS-Versionen können dem Endpunkt Befehle hinzufügen (Version 0.4 brachte
 | `protected` | ein Citrix-Sitzungsprozess; ihn zu beenden würde die Sitzung zerstören |
 | `not-owned` / `not-found` | der Prozess ist schon beendet oder gehört nicht dem Benutzer |
 | Der Knopf fehlt | Funktion aus, Zielgruppe `Helpdesk`, Expertenansicht aus, oder die Sitzung ist nicht live |
+
+## Was das freigibt und was nicht
+
+Der Endpunkt ist die einzige neue Tür auf dem VDA. Was jemand, der das SSS-Dienstkonto kontrolliert, darüber tun könnte, und was ihn bremst:
+
+| Fähigkeit | Grenze |
+|---|---|
+| Prozesse, Fenstertitel und Programmpfade der Sitzung eines Benutzers auflisten | nur lesend; eine Benutzer-SID muss übergeben werden; nur dessen Prozesse werden geliefert |
+| einen Prozess beenden | nur Prozesse, die der übergebenen SID gehören; nie Systemprozesse; nie `wfshell`, `ctxgfx`, `cmstart`; es lassen sich keine Befehle oder Skripte senden |
+| Profiltyp, Größen, Ordnernamen, FSLogix- und UPM-Einstellungen lesen | nur lesend; der **Inhalt** von Dateien wird nie gelesen, nur Namen und Größen |
+| alles andere auf dem VDA | nicht möglich: Die Sitzung ist auf diese drei Befehle beschränkt und läuft als vorübergehendes Konto, das nur für den Aufruf existiert |
+
+Das verbleibende Risiko ehrlich benannt: Wer das SSS-Dienstkonto besitzt, kann auf den VDAs mit dem Endpunkt die Prozesse **jedes** Benutzers beenden (ein Denial of Service) sowie Prozess- und Ordnernamen lesen. Code ausführen, Dateien lesen oder das System verändern kann er darüber nicht. Die Angriffsfläche verkleinerst du mit:
+
+- `-AllowedFrom` auf dem VDA, damit sich nur der oder die SSS-Server verbinden können;
+- `Sss:Citrix:Processes:Audience = Helpdesk`, wenn normale Benutzer keine Prozesse selbst beenden sollen;
+- einer **gMSA** als Dienstkonto (kein Kennwort zum Stehlen) und einer kleinen, beobachteten Helpdesk-Gruppe;
+- Testkonten nach dem Test wieder aus `-Principal` zu nehmen;
+- den JEA-Transkripten und dem Audit-Protokoll von SSS (`end-process`, `profile-info`) in eurem Log-System.
 
 ## Sicherheitshinweise
 

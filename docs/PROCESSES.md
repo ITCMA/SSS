@@ -27,7 +27,7 @@ Browser --> SSS (IIS) --> PowerShell worker --WinRM--> JEA endpoint "SSS.Process
    .\Install-SssJea.ps1 -Principal 'CORP\svc-sss$'
    ```
 
-   (several accounts are possible: `-Principal 'a','b'`.) It enables WinRM (TCP 5985), registers the endpoint `SSS.Processes` for exactly that account and writes the transcripts to `C:\ProgramData\SSS\jea-transcripts`. It changes nothing else. `-ConfigurationName` and `-TranscriptDirectory` change the defaults. `.\Install-SssJea.ps1 -Remove` unregisters the endpoint again.
+   (several accounts are possible: `-Principal 'a','b'`.) Add `-AllowedFrom sss01.corp.local` (host names or IP ranges of your SSS servers) to limit the firewall rule for WinRM to them; without it every computer that can reach the VDA may try to connect. The script enables WinRM (TCP 5985), registers the endpoint `SSS.Processes` for exactly the given accounts and writes the transcripts to `C:\ProgramData\SSS\jea-transcripts` (readable only by administrators and the system). It changes nothing else. `-ConfigurationName` and `-TranscriptDirectory` change the defaults. `.\Install-SssJea.ps1 -Remove` unregisters the endpoint again.
 
 2. **Open the network path:** TCP 5985 (WinRM over Kerberos, encrypted at message level) from the SSS server to the VDAs.
 
@@ -80,6 +80,25 @@ New SSS releases can add commands to the endpoint (version 0.4 added `Get-SssPro
 | `protected` | a Citrix session process; ending it would break the session |
 | `not-owned` / `not-found` | the process already ended, or it is not the user's |
 | The button is missing | feature off, audience `Helpdesk`, expert view off, or the session is not live |
+
+## What this exposes, and what it does not
+
+The endpoint is the only new door on the VDA. What someone who controlled the SSS service account could do through it, and what stops them:
+
+| Capability | Limit |
+|---|---|
+| list processes, window titles and program paths of a user's session | read only; a user SID must be passed in; only that user's processes are returned |
+| end a process | only processes owned by the SID passed in; never system processes; never `wfshell`, `ctxgfx`, `cmstart`; no commands or scripts can be sent |
+| read the profile type, sizes, folder names, FSLogix and UPM settings | read only; file **contents** are never read, only names and sizes |
+| anything else on the VDA | not possible: the session is restricted to these three commands and runs as a temporary account that exists only for the call |
+
+Remaining risk, honestly: an attacker who owns the SSS service account can end the processes of **any** user on the VDAs that run the endpoint (a denial of service) and read process and folder names. They cannot run code, read files or change the system through it. Reduce the exposure with:
+
+- `-AllowedFrom` on the VDA, so only the SSS server(s) can connect;
+- `Sss:Citrix:Processes:Audience = Helpdesk`, if ordinary users should not end processes themselves;
+- a **gMSA** as service account (no password to steal) and a small, watched helpdesk group;
+- keeping test accounts out of `-Principal` after testing;
+- collecting the JEA transcripts and the SSS audit trail (`end-process`, `profile-info`) in your log system.
 
 ## Security notes
 

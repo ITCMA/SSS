@@ -22,6 +22,11 @@
 .PARAMETER ConfigurationName
   Name of the endpoint. Must match Sss:Processes:Configuration in sss.config.json (default SSS.Processes).
 
+.PARAMETER AllowedFrom
+  Restricts the Windows Firewall rules for WinRM (TCP 5985) to these computers: host names (resolved now) or IP
+  addresses/ranges of the SSS server(s). Recommended: without it every computer that can reach the VDA may try to connect
+  (the endpoint still only accepts the accounts in -Principal).
+
 .PARAMETER TranscriptDirectory
   Where JEA writes the transcripts (default C:\ProgramData\SSS\jea-transcripts).
 
@@ -38,6 +43,7 @@ param(
     [string[]]$Principal = @(),
     [string]$ConfigurationName = 'SSS.Processes',
     [string]$TranscriptDirectory = 'C:\ProgramData\SSS\jea-transcripts',
+    [string[]]$AllowedFrom = @(),
     [switch]$Remove
 )
 
@@ -106,8 +112,10 @@ if ($PSCmdlet.ShouldProcess($work, 'Write role capability and session configurat
             param(
                 [Parameter(Mandatory = $true)][ValidatePattern('^S-1-\d+(-\d+)+$')][string]$UserSid,
                 [ValidateRange(0, 120)][int]$ScanSeconds = 20)
+            # Read only. Restricted session: no Sort-Object / Select-Object parameters, so lists are picked by hand.
             $r = [ordered]@{ Type = 'Local'; Loaded = $false; LocalPath = $null; StorePath = $null; Container = $null; ContainerMb = $null; ContainerMaxMb = $null
-                Roaming = $false; Temporary = $false; Mandatory = $false; SizeMb = $null; SizePartial = $false; ScanSeconds = 0; Notes = @(); Top = @() }
+                Roaming = $false; Temporary = $false; Mandatory = $false; SizeMb = $null; SizePartial = $false; ScanSeconds = 0; Notes = @()
+                Tree = @(); Files = @(); Redirected = @(); Settings = @(); Exclusions = @(); LocalProfiles = $null }
             $p = Get-WmiObject -Class Win32_UserProfile -Filter "SID='$UserSid'" -ErrorAction SilentlyContinue
             $p = @($p)[0]
             if ($p) {
@@ -122,8 +130,9 @@ if ($PSCmdlet.ShouldProcess($work, 'Write role capability and session configurat
                 $r.LocalPath = [string](Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\$UserSid" -ErrorAction SilentlyContinue).ProfileImagePath
                 if (-not $r.LocalPath) { $r.LocalPath = $null }
             }
+            try { $r.LocalProfiles = @(Get-WmiObject -Class Win32_UserProfile -ErrorAction SilentlyContinue | Where-Object { -not $_.Special }).Count } catch { }
 
-            # Which technology holds the profile?
+            # Technology: FSLogix, Citrix Profile Management, Windows roaming or local
             $fsRoot = 'HKLM:\SOFTWARE\FSLogix\Profiles'
             $fsSession = Join-Path "$fsRoot\Sessions" $UserSid
             $uname = ''
@@ -134,6 +143,7 @@ if ($PSCmdlet.ShouldProcess($work, 'Write role capability and session configurat
                 if ($v -and [string]$v.Label -ieq ('Profile-' + $uname)) { $vol = $v }
             }
             if ($vol -and $vol.Capacity) { $r.ContainerMb = [int](([int64]$vol.Capacity - [int64]$vol.FreeSpace) / 1MB); $r.ContainerMaxMb = [int]([int64]$vol.Capacity / 1MB) }
+            $upmKey = 'HKLM:\SOFTWARE\Policies\Citrix\UserProfileManager'
             if (Test-Path $fsSession) {
                 $r.Type = 'FSLogix'
                 $props = Get-ItemProperty -Path $fsSession -ErrorAction SilentlyContinue
@@ -146,47 +156,130 @@ if ($PSCmdlet.ShouldProcess($work, 'Write role capability and session configurat
                 $r.Type = 'FSLogix'; $r.Notes += 'detected-by-volume'
             } elseif ((Get-Service -Name 'ctxProfile' -ErrorAction SilentlyContinue).Status -eq 'Running') {
                 $r.Type = 'Citrix UPM'
-                $store = (Get-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Citrix\UserProfileManager' -Name PathToUserStore -ErrorAction SilentlyContinue).PathToUserStore
+                $store = (Get-ItemProperty -Path $upmKey -Name PathToUserStore -ErrorAction SilentlyContinue).PathToUserStore
                 if ($store) { $r.StorePath = [string]$store }
             } elseif ($r.Roaming) { $r.Type = 'Roaming' }
             if ($r.Mandatory) { $r.Notes += 'mandatory' }
             if ($r.Temporary) { $r.Notes += 'temporary' }
 
-            # Size of the VHD(X) container, when it can be read
+            # Configuration of the technology: FSLogix (policy wins over local setting) and Citrix Profile Management
+            $fsNames = 'Enabled', 'VHDLocations', 'SizeInMBs', 'IsDynamic', 'VolumeType', 'ProfileType', 'ConcurrentUserSessions', 'DeleteLocalProfileWhenVHDShouldApply',
+                'FlipFlopProfileDirectoryName', 'RedirXMLSourceFolder', 'CCDLocations', 'PreventLoginWithFailure', 'PreventLoginWithTempProfile'
+            $redirDir = $null
+            foreach ($base in 'HKLM:\SOFTWARE\FSLogix\Profiles', 'HKLM:\SOFTWARE\Policies\FSLogix\Profiles') {
+                $kp = Get-ItemProperty -Path $base -ErrorAction SilentlyContinue
+                if (-not $kp) { continue }
+                foreach ($n in $fsNames) {
+                    $val = $kp.$n
+                    if ($null -ne $val) {
+                        $text = (@($val) -join '; ')
+                        $r.Settings = @($r.Settings | Where-Object { -not ($_.Source -eq 'FSLogix' -and $_.Name -eq $n) }) + [pscustomobject]@{ Source = 'FSLogix'; Name = $n; Value = $text }
+                        if ($n -eq 'RedirXMLSourceFolder') { $redirDir = [string]@($val)[0] }
+                    }
+                }
+            }
+            foreach ($base in 'HKLM:\SOFTWARE\FSLogix\ODFC', 'HKLM:\SOFTWARE\Policies\FSLogix\ODFC') {
+                $kp = Get-ItemProperty -Path $base -ErrorAction SilentlyContinue
+                if (-not $kp) { continue }
+                foreach ($n in 'Enabled', 'VHDLocations') {
+                    if ($null -ne $kp.$n) { $r.Settings += [pscustomobject]@{ Source = 'FSLogix Office'; Name = $n; Value = (@($kp.$n) -join '; ') } }
+                }
+            }
+            if ($redirDir) {
+                try {
+                    $xml = [xml](Get-Content -LiteralPath (Join-Path $redirDir 'redirections.xml') -Raw -ErrorAction Stop)
+                    $count = 0
+                    foreach ($e in @($xml.FrxProfileFolderRedirection.Excludes.Exclude)) {
+                        if ($e -and $count -lt 40) { $r.Exclusions += [pscustomobject]@{ Source = 'FSLogix redirections.xml'; Item = [string]$e.'#text' }; $count++ }
+                    }
+                } catch { $r.Notes += 'redirections-xml-not-readable' }
+            }
+            foreach ($base in $upmKey, 'HKLM:\SOFTWARE\Citrix\UserProfileManager') {
+                $kp = Get-ItemProperty -Path $base -ErrorAction SilentlyContinue
+                if (-not $kp) { continue }
+                $count = 0
+                foreach ($n in ($kp.PSObject.Properties | Where-Object { $_.Name -notlike 'PS*' })) {
+                    if ($count -ge 60) { break }
+                    $text = (@($n.Value) -join '; ')
+                    if ($text.Length -gt 200) { $text = $text.Substring(0, 200) }
+                    if ($n.Name -match 'Exclu') {
+                        foreach ($item in @($n.Value)) { if ($item) { $r.Exclusions += [pscustomobject]@{ Source = 'Citrix UPM ' + $n.Name; Item = [string]$item } } }
+                    } else { $r.Settings += [pscustomobject]@{ Source = 'Citrix UPM'; Name = $n.Name; Value = $text } }
+                    $count++
+                }
+            }
+
+            # Folder redirection of the logged-on user (policy or user shell folders)
+            $names = @{ 'Desktop' = 'Desktop'; 'Personal' = 'Documents'; '{374DE290-123F-4565-9164-39C4925E467B}' = 'Downloads'; 'My Pictures' = 'Pictures'; 'My Music' = 'Music'
+                'My Video' = 'Videos'; 'Favorites' = 'Favorites'; 'AppData' = 'AppData (Roaming)'; 'Start Menu' = 'Start Menu' }
+            $sf = Get-ItemProperty -Path "Registry::HKEY_USERS\$UserSid\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders" -ErrorAction SilentlyContinue
+            if ($sf) {
+                foreach ($k in @($names.Keys)) {
+                    $val = [string]$sf.$k
+                    if ($val.StartsWith('\\')) { $r.Redirected += [pscustomobject]@{ Name = $names[$k]; Target = $val } }
+                }
+            }
+
+            # Container size from a readable VHD(X) path
             if ($r.Container -and $null -eq $r.ContainerMb) { try { $r.ContainerMb = [int]((Get-Item -LiteralPath $r.Container -ErrorAction Stop).Length / 1MB) } catch { } }
 
-            # Size of the profile folder (time boxed, reparse points are not followed)
+            # Folder tree (four levels) and the largest files, time boxed; reparse points are not followed
             if ($ScanSeconds -gt 0 -and $r.LocalPath -and (Test-Path -LiteralPath $r.LocalPath)) {
                 $sw = [System.Diagnostics.Stopwatch]::StartNew()
                 $total = [int64]0
-                $tops = @{}
+                $dirs = @{}
+                $files = New-Object System.Collections.ArrayList
+                $fileMin = [int64]0
                 $stack = New-Object System.Collections.Stack
                 $stack.Push(@($r.LocalPath, ''))
                 while ($stack.Count -gt 0) {
                     if ($sw.Elapsed.TotalSeconds -gt $ScanSeconds) { $r.SizePartial = $true; break }
-                    $item = $stack.Pop(); $dir = $item[0]; $top = $item[1]
+                    $item = $stack.Pop(); $dir = $item[0]; $rel = [string]$item[1]
+                    $parts = @()
+                    if ($rel) { $parts = $rel.Split('\') }
                     try {
                         $di = New-Object System.IO.DirectoryInfo($dir)
-                        foreach ($f in $di.EnumerateFiles()) { $total += $f.Length; $k = if ($top) { $top } else { '(files)' }; $tops[$k] = [int64]$tops[$k] + $f.Length }
+                        foreach ($f in $di.EnumerateFiles()) {
+                            $len = [int64]$f.Length
+                            $total += $len
+                            $keys = @()
+                            if ($parts.Count -eq 0) { $keys = @('(files)') } else { for ($d = 1; $d -le [math]::Min(4, $parts.Count); $d++) { $keys += ($parts[0..($d - 1)] -join '\') } }
+                            foreach ($key in $keys) { $dirs[$key] = [int64]$dirs[$key] + $len }
+                            if ($files.Count -lt 10) { [void]$files.Add(@(($(if ($rel) { $rel + '\' } else { '' }) + $f.Name), $len)) }
+                            elseif ($len -gt $fileMin) {
+                                $mi = 0
+                                for ($j = 1; $j -lt $files.Count; $j++) { if ($files[$j][1] -lt $files[$mi][1]) { $mi = $j } }
+                                $files[$mi] = @(($(if ($rel) { $rel + '\' } else { '' }) + $f.Name), $len)
+                            }
+                            if ($files.Count -ge 10) { $fileMin = $files[0][1]; for ($j = 1; $j -lt $files.Count; $j++) { if ($files[$j][1] -lt $fileMin) { $fileMin = $files[$j][1] } } }
+                        }
                         foreach ($d in $di.EnumerateDirectories()) {
                             if ($d.Attributes -band [System.IO.FileAttributes]::ReparsePoint) { continue }
-                            $stack.Push(@($d.FullName, $(if ($top) { $top } else { $d.Name })))
+                            $stack.Push(@($d.FullName, $(if ($rel) { $rel + '\' + $d.Name } else { $d.Name })))
                         }
                     } catch { }
                 }
                 $r.ScanSeconds = [int][math]::Ceiling($sw.Elapsed.TotalSeconds)
                 $r.SizeMb = [int]($total / 1MB)
-                # largest folders, picked by hand: Sort-Object / Select-Object -First are restricted inside the JEA session
+                # the 80 biggest folders (parents are at least as big as their children, so they come along) and the 10 biggest files
                 $left = New-Object System.Collections.ArrayList
-                foreach ($k in @($tops.Keys)) { [void]$left.Add(@($k, [int64]$tops[$k])) }
-                $best = @()
-                for ($i = 0; $i -lt 6 -and $left.Count -gt 0; $i++) {
+                foreach ($k in @($dirs.Keys)) { if ([int64]$dirs[$k] -ge 1MB) { [void]$left.Add(@($k, [int64]$dirs[$k])) } }
+                $tree = @()
+                for ($i = 0; $i -lt 80 -and $left.Count -gt 0; $i++) {
                     $bi = 0
                     for ($j = 1; $j -lt $left.Count; $j++) { if ($left[$j][1] -gt $left[$bi][1]) { $bi = $j } }
-                    $best += [pscustomobject]@{ Name = [string]$left[$bi][0]; Mb = [int]($left[$bi][1] / 1MB) }
+                    $tree += [pscustomobject]@{ Path = [string]$left[$bi][0]; Mb = [int]($left[$bi][1] / 1MB) }
                     $left.RemoveAt($bi)
                 }
-                $r.Top = $best
+                $r.Tree = $tree
+                $big = @()
+                while ($files.Count -gt 0) {
+                    $bi = 0
+                    for ($j = 1; $j -lt $files.Count; $j++) { if ($files[$j][1] -gt $files[$bi][1]) { $bi = $j } }
+                    $big += [pscustomobject]@{ Path = [string]$files[$bi][0]; Mb = [int]($files[$bi][1] / 1MB) }
+                    $files.RemoveAt($bi)
+                }
+                $r.Files = $big
             }
             [pscustomobject]$r
         } },
@@ -231,6 +324,27 @@ if ($PSCmdlet.ShouldProcess($work, 'Write role capability and session configurat
     if (Get-PSSessionConfiguration -Name $ConfigurationName -ErrorAction SilentlyContinue) { Unregister-PSSessionConfiguration -Name $ConfigurationName -Force }
     Register-PSSessionConfiguration -Name $ConfigurationName -Path $pssc -Force | Out-Null
     Ok "Endpoint '$ConfigurationName' registered for $($Principal -join ', ')"
+    # Transcripts show process names and paths: only administrators and the system may read them
+    try {
+        & icacls $TranscriptDirectory /inheritance:r /grant:r '*S-1-5-32-544:(OI)(CI)F' '*S-1-5-18:(OI)(CI)F' | Out-Null
+        if ($LASTEXITCODE -eq 0) { Ok 'Transcript folder readable only by administrators and the system' }
+    } catch { Write-Host "    WARNING: could not restrict the transcript folder: $($_.Exception.Message)" -ForegroundColor Yellow }
+    foreach ($pr in $Principal) {
+        if ($pr -notmatch '\$$') { Write-Host "    NOTE: '$pr' looks like a person's account. Keep it only for testing and run the script again without it afterwards." -ForegroundColor Yellow }
+    }
+    if ($AllowedFrom.Count -gt 0) {
+        $remote = @()
+        foreach ($a in $AllowedFrom) {
+            if ($a -match '^[0-9a-fA-F:./]+$') { $remote += $a }
+            else { try { $remote += ([System.Net.Dns]::GetHostAddresses($a) | ForEach-Object { $_.IPAddressToString }) } catch { throw "Cannot resolve '$a' for -AllowedFrom: $($_.Exception.Message)" } }
+        }
+        try {
+            Get-NetFirewallRule -Name 'WINRM-HTTP-In-TCP*' -ErrorAction Stop | Set-NetFirewallRule -RemoteAddress $remote
+            Ok ('WinRM (TCP 5985) accepts connections only from ' + ($remote -join ', '))
+        } catch { Write-Host "    WARNING: could not restrict the firewall rule: $($_.Exception.Message)" -ForegroundColor Yellow }
+    } else {
+        Write-Host '    NOTE: WinRM (TCP 5985) is reachable from every computer that can see this VDA. Use -AllowedFrom <SSS server> to restrict it.' -ForegroundColor Yellow
+    }
     Ok "Transcripts: $TranscriptDirectory"
 }
 

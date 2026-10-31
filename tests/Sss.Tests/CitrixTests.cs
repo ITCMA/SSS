@@ -28,7 +28,7 @@ public class CitrixSessionProviderTests
         }
         public Task<BrokerProcessList> ProcessesAsync(string sid, string uid, CancellationToken ct) => Task.FromResult(new BrokerProcessList("vdi-01", [new BrokerProcess(1, "calc", 2, null, 5, "Calculator")]));
         public Task<string> EndProcessAsync(string sid, string uid, int processId, bool force, CancellationToken ct) => Task.FromResult("closed");
-        public Task<ProfileInfo> ProfileAsync(string sid, string uid, int scanSeconds, CancellationToken ct) => Task.FromResult(new ProfileInfo("vdi-01", "Local", true, null, null, null, null, null, false, false, false, null, false, 0, [], []));
+        public Task<ProfileInfo> ProfileAsync(string sid, string uid, int scanSeconds, CancellationToken ct) => Task.FromResult(new ProfileInfo("vdi-01", "Local", true, null, null, null, null, null, false, false, false, null, false, 0, [], [], [], [], [], [], null, []));
         public Task PingAsync(CancellationToken ct) => Task.CompletedTask;
         public Task<BrokerLogoffResult> LogoffAsync(string sid, IReadOnlyCollection<string> uids, CancellationToken ct)
         {
@@ -420,7 +420,10 @@ public class BrokerWorkerPoolTests
         Assert.Equal(9120, p.ContainerMb);
         Assert.Equal(30720, p.ContainerMaxMb);
         Assert.False(p.SizePartial);
-        Assert.Equal(["AppData", "Documents"], p.TopFolders.Select(f => f.Name).ToArray());
+        Assert.Equal(["AppData", "Documents"], p.Tree.Select(f => f.Path).ToArray());
+        Assert.Equal("Documents\\b.bin", p.Files[0].Path);
+        Assert.Equal("Desktop", p.Redirected[0].Name);
+        Assert.Contains(p.Settings, s => s.Name == "SizeInMBs" && s.Value == "30720");
         await Assert.ThrowsAsync<ProviderUnavailableException>(() => pool.ProfileAsync(Alice, "201", 20, default));
         await Assert.ThrowsAsync<ArgumentException>(() => pool.ProfileAsync(Alice, "1; calc", 20, default));
     }

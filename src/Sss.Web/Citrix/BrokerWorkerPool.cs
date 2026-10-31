@@ -143,12 +143,16 @@ public sealed partial class BrokerWorkerPool : IBrokerClient, IHostedService, ID
         int? Mb(string name) => res.TryGetProperty(name, out var p) && p.ValueKind == JsonValueKind.Number ? p.GetInt32() : null;
         bool Flag(string name) => res.TryGetProperty(name, out var p) && p.ValueKind == JsonValueKind.True;
         string? Text(string name) => Str(res, name) is { Length: > 0 } s ? s : null;
-        var top = new List<ProfileFolder>();
-        if (res.TryGetProperty("top", out var arr) && arr.ValueKind == JsonValueKind.Array)
-            foreach (var t in arr.EnumerateArray())
-                top.Add(new ProfileFolder(Str(t, "name") ?? "", t.TryGetProperty("mb", out var mb) && mb.ValueKind == JsonValueKind.Number ? mb.GetInt32() : 0));
+        List<T> Rows<T>(string name, Func<JsonElement, T> map) =>
+            res.TryGetProperty(name, out var arr) && arr.ValueKind == JsonValueKind.Array ? arr.EnumerateArray().Select(map).ToList() : [];
+        ProfileNode Node(JsonElement e) => new(Str(e, "path") ?? "", e.TryGetProperty("mb", out var mb) && mb.ValueKind == JsonValueKind.Number ? mb.GetInt32() : 0);
         return new ProfileInfo(Text("machine"), Text("type") ?? "Local", Flag("loaded"), Text("localPath"), Text("storePath"), Text("container"), Mb("containerMb"), Mb("containerMaxMb"),
-            Flag("roaming"), Flag("temporary"), Flag("mandatory"), Mb("sizeMb"), Flag("sizePartial"), Mb("scanSeconds") ?? 0, Strings(res, "notes"), top);
+            Flag("roaming"), Flag("temporary"), Flag("mandatory"), Mb("sizeMb"), Flag("sizePartial"), Mb("scanSeconds") ?? 0, Strings(res, "notes"),
+            Rows("tree", Node), Rows("files", Node),
+            Rows("redirected", e => new ProfileRedirect(Str(e, "name") ?? "", Str(e, "target") ?? "")),
+            Rows("settings", e => new ProfileSetting(Str(e, "source") ?? "", Str(e, "name") ?? "", Str(e, "value") ?? "")),
+            Rows("exclusions", e => new ProfileExclusion(Str(e, "source") ?? "", Str(e, "item") ?? "")),
+            Mb("localProfiles"), []);
     }
 
     public async Task<string> EndProcessAsync(string userSid, string uid, int processId, bool force, CancellationToken ct)

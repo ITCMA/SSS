@@ -129,3 +129,23 @@ label.check { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
 .chart .wbar.est { fill-opacity: .45; stroke: var(--accent); stroke-dasharray: 4 3; }
 .chart .wbar.slow.est { stroke: var(--crit); }
 .chart text.wval { font-size: 11px; }
+
+.hints { list-style: none; margin: 12px 0; padding: 0; display: grid; gap: 6px; }
+.finding { display: flex; gap: 8px; align-items: flex-start; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; }
+.finding.warn { border-color: var(--warn); } .finding.crit { border-color: var(--crit); }
+.finding.warn .dot { color: var(--warn); } .finding.crit .dot { color: var(--crit); }
+.ptree h4, .pfiles h4, .pconfig h4 { margin: 14px 0 6px; }
+.ptree details > summary { cursor: pointer; }
+.ptree .tleaf, .pfiles .tleaf { padding-left: 22px; }
+.tnode { display: grid; grid-template-columns: minmax(120px, 28%) 1fr auto; gap: 10px; align-items: center; padding: 2px 0; }
+.pfiles .tnode { grid-template-columns: minmax(120px, 24%) 1fr auto; }
+.tname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tpath { color: var(--muted); font-size: .8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tsize { font-variant-numeric: tabular-nums; text-align: right; min-width: 70px; }
+progress { width: 100%; height: 10px; accent-color: var(--accent); }
+.pconfig { margin-top: 12px; }
+#procs-msg:not(:empty) { padding: 8px 10px; border: 1px solid var(--accent); border-radius: 8px; }
+
+.ptree summary { list-style-position: inside; }
+.ptree summary .tnode { display: inline-grid; width: calc(100% - 20px); vertical-align: middle; }
+.ptree details > :not(summary) { margin-left: 18px; }

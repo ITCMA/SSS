@@ -63,5 +63,8 @@ function Get-SssProfile {
     param([string]$UserSid, [int]$ScanSeconds)
     [pscustomobject]@{ Type = 'FSLogix'; Loaded = $true; LocalPath = 'C:\Users\alice'; StorePath = $null; Container = '\\files\profiles\alice\Profile.vhdx'; ContainerMb = 9120; ContainerMaxMb = 30720
         Roaming = $false; Temporary = $false; Mandatory = $false; SizeMb = 6480; SizePartial = ($ScanSeconds -lt 10); ScanSeconds = 3; Notes = @('Status=0')
-        Top = @([pscustomobject]@{ Name = 'AppData'; Mb = 4210 }, [pscustomobject]@{ Name = 'Documents'; Mb = 1360 }) }
+        Tree = @([pscustomobject]@{ Path = 'AppData'; Mb = 4210 }, [pscustomobject]@{ Path = 'Documents'; Mb = 1360 })
+        Files = @([pscustomobject]@{ Path = 'Documents\b.bin'; Mb = 900 })
+        Redirected = @([pscustomobject]@{ Name = 'Desktop'; Target = '\\files\home\alice\Desktop' })
+        Settings = @([pscustomobject]@{ Source = 'FSLogix'; Name = 'SizeInMBs'; Value = '30720' }); Exclusions = @(); LocalProfiles = 4 }
 }

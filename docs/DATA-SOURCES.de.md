@@ -55,6 +55,8 @@ Der Monitor weiß nicht, welche Art Profil ein Benutzer hat und wie groß es ist
 | Servergespeichertes Profil (Windows) | `Win32_UserProfile` meldet ein konfiguriertes Roaming; der Roaming-Pfad |
 | Lokales Profil | nichts davon; temporäre und verbindliche Profile werden gekennzeichnet |
 
+Neben Typ und Größe liest SSS, nur lesend: den Ordnerbaum (vier Ebenen, die 80 größten Ordner), die 10 größten Dateien, die **umgeleiteten** Ordner (User Shell Folders des angemeldeten Benutzers), die **FSLogix**-Einstellungen (`Profiles` und `ODFC`, lokal und per Richtlinie), die Ausschlüsse aus der `redirections.xml`, wenn die Freigabe lesbar ist, die Richtlinienwerte des **Citrix Profile Managements** samt Ausschlusslisten und die Zahl der lokalen Profile auf dem Rechner. Ein Regelwerk macht daraus Befunde (volles oder aufgeblähtes Container, temporäres Profil, großes oder nicht umgeleitetes servergespeichertes Profil, Outlook-/Teams-/Browser-/OneDrive-/Temp-Caches, nicht umgeleitete persönliche Daten, fehlende Ausschlüsse, abgeschaltetes Profil-Streaming, viele übrig gebliebene lokale Profile). Befunde sind Hinweise, keine Beweise.
+
 Die Größe des Profilordners wird mit Zeitlimit gezählt (`Processes:ProfileScanSeconds`, Standard 20 s; das Ergebnis sagt dann „Teilergebnis“), Reparse-Punkte werden nicht verfolgt, die größten Ordner werden aufgelistet. Alles geschieht nur lesend. Welche Technik erkannt wird, ist eine Näherung anhand der üblichen Merkmale; eine ungewöhnliche Einrichtung kann bei einem Container-Profil „Lokales Profil“ anzeigen.
 
 ## Ampeln

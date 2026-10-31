@@ -153,10 +153,15 @@ function Get-SessionProcesses([string]$sid, [string]$uid) {
 function Get-SessionProfile([string]$sid, [string]$uid, [int]$scanSeconds) {
     $machine = Get-OwnedSession $sid $uid
     $p = Use-Jea $machine @('Get-SssProfile') { Get-SssProfile -UserSid $sid -ScanSeconds $scanSeconds }
-    $top = @(@($p.Top) | Where-Object { $_ } | ForEach-Object { @{ name = [string]$_.Name; mb = [int]$_.Mb } })
+    $tree = @(@($p.Tree) | Where-Object { $_ } | ForEach-Object { @{ path = [string]$_.Path; mb = [int]$_.Mb } })
+    $files = @(@($p.Files) | Where-Object { $_ } | ForEach-Object { @{ path = [string]$_.Path; mb = [int]$_.Mb } })
+    $redirected = @(@($p.Redirected) | Where-Object { $_ } | ForEach-Object { @{ name = [string]$_.Name; target = [string]$_.Target } })
+    $settings = @(@($p.Settings) | Where-Object { $_ } | ForEach-Object { @{ source = [string]$_.Source; name = [string]$_.Name; value = [string]$_.Value } })
+    $exclusions = @(@($p.Exclusions) | Where-Object { $_ } | ForEach-Object { @{ source = [string]$_.Source; item = [string]$_.Item } })
     return @{ machine = $machine; type = [string]$p.Type; loaded = [bool]$p.Loaded; localPath = [string]$p.LocalPath; storePath = [string]$p.StorePath
         container = [string]$p.Container; containerMb = $p.ContainerMb; containerMaxMb = $p.ContainerMaxMb; roaming = [bool]$p.Roaming; temporary = [bool]$p.Temporary; mandatory = [bool]$p.Mandatory
-        sizeMb = $p.SizeMb; sizePartial = [bool]$p.SizePartial; scanSeconds = [int]$p.ScanSeconds; notes = @(@($p.Notes) | Where-Object { $_ } | ForEach-Object { [string]$_ }); top = $top }
+        sizeMb = $p.SizeMb; sizePartial = [bool]$p.SizePartial; scanSeconds = [int]$p.ScanSeconds; notes = @(@($p.Notes) | Where-Object { $_ } | ForEach-Object { [string]$_ })
+        tree = $tree; files = $files; redirected = $redirected; settings = $settings; exclusions = $exclusions; localProfiles = $p.LocalProfiles }
 }
 
 function Stop-SessionProcess([string]$sid, [string]$uid, [int]$procId, [bool]$force) {
