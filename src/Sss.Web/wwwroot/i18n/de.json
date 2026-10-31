@@ -149,7 +149,7 @@
   "procNotClosed": "{name} hat die Aufforderung zum Schließen nicht angenommen.",
   "procProtected": "{name} wird für die Sitzung gebraucht und kann hier nicht beendet werden.",
   "procGone": "{name} ist schon beendet oder gehört nicht zu dieser Sitzung.",
-  "procUnavailable": "Der Rechner der Sitzung ist für die Prozesssteuerung nicht erreichbar.",
+  "procUnavailable": "Der Rechner der Sitzung ist für die Prozesssteuerung nicht erreichbar. Ist der Endpunkt auf diesem VDA eingerichtet (Install-SssJea.ps1) und WinRM (Port 5985) offen?",
   "waterfallTitle": "Anmeldezeit nach Schritten",
   "waterfallSlowest": "Längster Schritt: {name}, {s} s ({p} % der Anmeldung).",
   "waterfallEstimated": "Gestrichelte Balken: Die Dauer ist bekannt, die Lage auf der Zeitachse ist geschätzt.",

@@ -149,7 +149,7 @@
   "procNotClosed": "{name} did not accept the request to close.",
   "procProtected": "{name} is needed for the session and cannot be ended here.",
   "procGone": "{name} is already gone or does not belong to this session.",
-  "procUnavailable": "The machine of the session cannot be reached for process control.",
+  "procUnavailable": "The machine of the session cannot be reached for process control. Is the endpoint set up on this VDA (Install-SssJea.ps1) and WinRM (port 5985) open?",
   "waterfallTitle": "Logon time by step",
   "waterfallSlowest": "Longest step: {name}, {s} s ({p} % of the logon).",
   "waterfallEstimated": "Dashed bars: the length is known, the position on the time axis is estimated.",

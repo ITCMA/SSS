@@ -98,7 +98,7 @@ if ($PSCmdlet.ShouldProcess($work, 'Write role capability and session configurat
                 [ValidateRange(0, 120)][int]$ScanSeconds = 20)
             $r = [ordered]@{ Type = 'Local'; Loaded = $false; LocalPath = $null; StorePath = $null; Container = $null; ContainerMb = $null
                 Roaming = $false; Temporary = $false; Mandatory = $false; SizeMb = $null; SizePartial = $false; ScanSeconds = 0; Notes = @(); Top = @() }
-            $p = Get-CimInstance -ClassName Win32_UserProfile -Filter "SID='$UserSid'" -ErrorAction SilentlyContinue | Select-Object -First 1
+            $p = Get-WmiObject -Class Win32_UserProfile -Filter "SID='$UserSid'" -ErrorAction SilentlyContinue | Select-Object -First 1
             if ($p) {
                 $r.LocalPath = [string]$p.LocalPath; $r.Loaded = [bool]$p.Loaded
                 $r.Roaming = [bool]$p.RoamingConfigured
@@ -115,7 +115,7 @@ if ($PSCmdlet.ShouldProcess($work, 'Write role capability and session configurat
             # Which technology holds the profile?
             $fsRoot = 'HKLM:\SOFTWARE\FSLogix\Profiles'
             $fsSession = Join-Path "$fsRoot\Sessions" $UserSid
-            $vol = Get-CimInstance -ClassName Win32_Volume -Filter "Label LIKE 'Profile-%'" -ErrorAction SilentlyContinue | Select-Object -First 1
+            $vol = Get-WmiObject -Class Win32_Volume -Filter "Label LIKE 'Profile-%'" -ErrorAction SilentlyContinue | Select-Object -First 1
             if (Test-Path $fsSession) {
                 $r.Type = 'FSLogix'
                 $props = Get-ItemProperty -Path $fsSession -ErrorAction SilentlyContinue
@@ -180,11 +180,11 @@ if ($PSCmdlet.ShouldProcess($work, 'Write role capability and session configurat
             return 'not-closed'
         } }
     )
-    # Get-SssProfile calls Get-CimInstance; a restricted session does not load CimCmdlets by itself. (Management and Utility are
-    # snap-ins in Windows PowerShell 5.1 and already loaded; importing them again fails.)
-    $needed = 'CimCmdlets'
+    # No extra modules: importing CimCmdlets (or Management/Utility, which are snap-ins in Windows PowerShell 5.1) into the
+    # restricted session breaks the implicit remoting on the SSS side ("alias gcls is read-only"). Get-WmiObject is part of the
+    # already loaded Management snap-in, so Get-SssProfile uses it instead of Get-CimInstance.
     $psrc = Join-Path $capDir 'SssProcesses.psrc'
-    New-PSRoleCapabilityFile -Path $psrc -VisibleFunctions 'Get-SssProcess', 'Get-SssProfile', 'Stop-SssProcess' -FunctionDefinitions $functions -ModulesToImport $needed
+    New-PSRoleCapabilityFile -Path $psrc -VisibleFunctions 'Get-SssProcess', 'Get-SssProfile', 'Stop-SssProcess' -FunctionDefinitions $functions
     # a module manifest next to the role capability folder makes the capability discoverable by name
     New-ModuleManifest -Path (Join-Path $moduleDir 'SssProcesses.psd1') -RootModule '' -ModuleVersion '1.0.0' -Description 'SSS process endpoint role capability'
 
@@ -192,7 +192,7 @@ if ($PSCmdlet.ShouldProcess($work, 'Write role capability and session configurat
     $roles = @{}
     foreach ($pr in $Principal) { $roles[$pr] = @{ RoleCapabilities = 'SssProcesses' } }
     New-PSSessionConfigurationFile -Path $pssc -SessionType RestrictedRemoteServer -RunAsVirtualAccount `
-        -TranscriptDirectory $TranscriptDirectory -ModulesToImport $needed -RoleDefinitions $roles
+        -TranscriptDirectory $TranscriptDirectory -RoleDefinitions $roles
 
     # make the role capability findable: JEA looks in <module>\RoleCapabilities of modules on PSModulePath
     $machineModules = Join-Path $env:ProgramFiles 'WindowsPowerShell\Modules'

@@ -149,7 +149,7 @@
   "procNotClosed": "{name} n'a pas accepté la demande de fermeture.",
   "procProtected": "{name} est nécessaire à la session et ne peut pas être terminé ici.",
   "procGone": "{name} est déjà terminé ou n'appartient pas à cette session.",
-  "procUnavailable": "La machine de la session n'est pas joignable pour la gestion des processus.",
+  "procUnavailable": "La machine de la session n'est pas joignable pour la gestion des processus. Le point de terminaison est-il configuré sur ce VDA (Install-SssJea.ps1) et WinRM (port 5985) ouvert ?",
   "waterfallTitle": "Durée d'ouverture de session par étape",
   "waterfallSlowest": "Étape la plus longue : {name}, {s} s ({p} % de l'ouverture).",
   "waterfallEstimated": "Barres en pointillés : la durée est connue, la position sur l'axe du temps est estimée.",

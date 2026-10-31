@@ -149,7 +149,7 @@
   "procNotClosed": "{name} no aceptó la petición de cierre.",
   "procProtected": "{name} es necesario para la sesión y no se puede finalizar aquí.",
   "procGone": "{name} ya no existe o no pertenece a esta sesión.",
-  "procUnavailable": "No se puede acceder al equipo de la sesión para controlar procesos.",
+  "procUnavailable": "No se puede acceder al equipo de la sesión para controlar procesos. ¿Está configurado el punto de conexión en este VDA (Install-SssJea.ps1) y abierto WinRM (puerto 5985)?",
   "waterfallTitle": "Tiempo de inicio de sesión por pasos",
   "waterfallSlowest": "Paso más largo: {name}, {s} s ({p} % del inicio de sesión).",
   "waterfallEstimated": "Barras discontinuas: se conoce la duración, la posición en el eje de tiempo es estimada.",

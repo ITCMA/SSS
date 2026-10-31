@@ -149,7 +149,7 @@
   "procNotClosed": "{name} 未接受关闭请求。",
   "procProtected": "{name} 是会话所需的进程，无法在此结束。",
   "procGone": "{name} 已结束或不属于此会话。",
-  "procUnavailable": "无法连接到会话所在的计算机以管理进程。",
+  "procUnavailable": "无法连接到会话所在的计算机以管理进程。此 VDA 上是否已设置终结点（Install-SssJea.ps1），WinRM（端口 5985）是否开放？",
   "waterfallTitle": "各步骤登录耗时",
   "waterfallSlowest": "最长步骤：{name}，{s} 秒（占登录的 {p}%）。",
   "waterfallEstimated": "虚线条：时长已知，其在时间轴上的位置为估算。",
