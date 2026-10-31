@@ -46,7 +46,12 @@ async function setLang(lang) {
   renderHd();
 }
 
+// ?lang=xx and ?theme=light|dark let the README screenshots be reproduced; they only set the usual preferences.
+const QUERY = new URLSearchParams(location.search);
+
 function detectLang() {
+  const q = QUERY.get('lang');
+  if (q && LANGS.includes(q)) return q;
   const saved = store.get('sss.lang');
   if (saved && LANGS.includes(saved)) return saved;
   const nav = (navigator.language || 'en').slice(0, 2).toLowerCase();
@@ -423,7 +428,7 @@ function groupBox(g) {
 }
 
 function chart(title, series) {
-  const W = 420, H = 150, L = 40, R = 8, T = 8, B = 20;
+  const W = 420, H = 160, L = 44, R = 8, T = 12, B = 22;
   const pts = series.flatMap((s) => s.points);
   const x0 = Math.min(...pts.map((p) => p[0])), x1 = Math.max(...pts.map((p) => p[0]));
   const y1 = Math.max(1, ...pts.map((p) => p[1]));
@@ -644,7 +649,7 @@ function applyTheme(v) {
 
 async function init() {
   state.fallback = await loadDict('en');
-  applyTheme(store.get('sss.theme') || 'auto');
+  applyTheme(QUERY.get('theme') || store.get('sss.theme') || 'auto');
   $('theme').addEventListener('change', (e) => applyTheme(e.target.value));
   $('lang').addEventListener('change', (e) => setLang(e.target.value));
   $('range').addEventListener('change', (e) => { state.range = e.target.value; load(); });
@@ -689,6 +694,8 @@ async function init() {
     setStatus(t('error'), true);
   }
   await load();
+  // demo mode only: ?shot=details opens the expert view of the first session (README screenshots)
+  if (!$('demo').hidden && QUERY.get('shot') === 'details' && state.data?.live[0]) { setExpert(true); await openDetails(state.data.live[0]); }
   state.timer = setInterval(() => { if (!document.hidden && !$('confirm').open) load(); }, refreshSeconds * 1000);
 }
 

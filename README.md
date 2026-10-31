@@ -8,6 +8,13 @@ A lightweight web portal that lets end users of a **Citrix Virtual Apps and Desk
 
 *Citrix is a trademark of Cloud Software Group, Inc. This project is independent and not affiliated with or endorsed by it.*
 
+<p align="center">
+  <img src="docs/img/overview-light.png" alt="Screenshots: overview" width="49%">
+  <img src="docs/img/overview-dark.png" alt="Screenshots: dark mode" width="49%">
+</p>
+<p align="center"><img src="docs/img/expert-light.png" alt="Screenshots: expert view" width="70%"></p>
+<p align="center"><em>Demo mode, light and dark; expert view of a session</em></p>
+
 ## Features
 
 - Shows all **active and disconnected** sessions of the signed-in user, plus **history** (1 h / 24 h / 7 d / 30 d)

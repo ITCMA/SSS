@@ -8,6 +8,13 @@ Ein schlankes Web-Portal, mit dem Endanwender einer **Citrix Virtual Apps and De
 
 *Citrix ist eine Marke der Cloud Software Group, Inc. Dieses Projekt ist unabhängig und weder mit ihr verbunden noch von ihr unterstützt.*
 
+<p align="center">
+  <img src="docs/img/overview-light.png" alt="Bildschirmfotos: Übersicht" width="49%">
+  <img src="docs/img/overview-dark.png" alt="Bildschirmfotos: Dunkelmodus" width="49%">
+</p>
+<p align="center"><img src="docs/img/expert-light.png" alt="Bildschirmfotos: Experten-Ansicht" width="70%"></p>
+<p align="center"><em>Demo-Modus, hell und dunkel; Experten-Ansicht einer Sitzung</em></p>
+
 ## Funktionen
 
 - Zeigt alle **aktiven und getrennten** Sitzungen des angemeldeten Benutzers sowie den **Verlauf** (1 h / 24 h / 7 d / 30 d)

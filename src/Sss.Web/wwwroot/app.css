@@ -103,11 +103,11 @@ textarea { font: inherit; color: var(--text); background: var(--surface); border
 .group dl { margin: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 2px 10px; font-size: .85rem; }
 .group dt { color: var(--muted); overflow-wrap: anywhere; }
 .group dd { margin: 0; overflow-wrap: anywhere; }
-.charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; margin: 12px 0; }
+.charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr)); gap: 12px; margin: 12px 0; }
 .chart { border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; }
 .chart svg { width: 100%; height: auto; display: block; }
 .chart .axis { stroke: var(--border); stroke-width: 1; }
-.chart text { fill: var(--muted); font-size: 10px; }
+.chart text { fill: var(--muted); font-size: 12px; }
 .chart .line { fill: none; stroke-width: 1.6; }
 .chart .s0 { stroke: var(--accent); } .chart .s1 { stroke: var(--warn); } .chart .s2 { stroke: var(--good); } .chart .s3 { stroke: var(--crit); }
 .legend { display: flex; gap: 10px; flex-wrap: wrap; font-size: .8rem; color: var(--muted); margin: 4px 0 0; padding: 0; list-style: none; }
