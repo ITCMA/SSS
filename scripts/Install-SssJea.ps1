@@ -91,9 +91,12 @@ if ($PSCmdlet.ShouldProcess($work, 'Write role capability and session configurat
             # plus a few well-known Windows programs.
             $windows = [string]$env:SystemRoot
             $known = 'explorer', 'notepad', 'mspaint', 'mstsc', 'wordpad', 'snippingtool', 'taskmgr', 'cmd', 'powershell', 'powershell_ise', 'regedit', 'mmc', 'calc', 'calculatorapp'
+            # Process.Path is empty for processes of other sessions here; WMI reports the executable path reliably.
+            $paths = @{}
+            foreach ($w in @(Get-WmiObject -Class Win32_Process -ErrorAction SilentlyContinue)) { if ($w -and $w.ExecutablePath) { $paths[[int]$w.ProcessId] = [string]$w.ExecutablePath } }
             Get-Process -IncludeUserName | Where-Object { $_.UserName -eq $account } | ForEach-Object {
-                $path = $null
-                try { $path = [string]$_.Path } catch { }
+                $path = $paths[[int]$_.Id]
+                if (-not $path) { try { $path = [string]$_.Path } catch { } }
                 $isApp = ($known -contains $_.ProcessName.ToLowerInvariant())
                 if (-not $isApp -and $path -and -not $path.StartsWith($windows, [System.StringComparison]::OrdinalIgnoreCase) -and $path -notmatch '\\(Citrix|FSLogix)\\') { $isApp = $true }
                 [pscustomobject]@{
