@@ -525,7 +525,8 @@ function buildWaterfall(w) {
   for (let ms = 0; ms <= w.totalMs; ms += unit) {
     svg.append(svgEl('line', { class: 'grid', x1: sx(ms), y1: T, x2: sx(ms), y2: H - B }), text(`${ms / 1000} s`, sx(ms), H - 8, ms === 0 ? 'start' : 'middle'));
   }
-  const sec = new Intl.NumberFormat(state.lang, { maximumFractionDigits: 1 });
+  const secFmt = (n) => new Intl.NumberFormat(state.lang, { maximumFractionDigits: n < 1 ? 2 : 1 }).format(n);
+  const sec = { format: secFmt };
   const measured = w.steps.filter((s) => !s.estimated);
   const slowest = (measured.length ? measured : w.steps).reduce((a, b) => (b.durationMs > a.durationMs ? b : a));
   w.steps.forEach((s, i) => {

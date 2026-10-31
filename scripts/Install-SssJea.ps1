@@ -180,8 +180,9 @@ if ($PSCmdlet.ShouldProcess($work, 'Write role capability and session configurat
             return 'not-closed'
         } }
     )
-    # The functions call these cmdlets; a restricted session does not load CimCmdlets by itself ("Get-CimInstance is not recognized").
-    $needed = 'Microsoft.PowerShell.Management', 'Microsoft.PowerShell.Utility', 'CimCmdlets'
+    # Get-SssProfile calls Get-CimInstance; a restricted session does not load CimCmdlets by itself. (Management and Utility are
+    # snap-ins in Windows PowerShell 5.1 and already loaded; importing them again fails.)
+    $needed = 'CimCmdlets'
     $psrc = Join-Path $capDir 'SssProcesses.psrc'
     New-PSRoleCapabilityFile -Path $psrc -VisibleFunctions 'Get-SssProcess', 'Get-SssProfile', 'Stop-SssProcess' -FunctionDefinitions $functions -ModulesToImport $needed
     # a module manifest next to the role capability folder makes the capability discoverable by name

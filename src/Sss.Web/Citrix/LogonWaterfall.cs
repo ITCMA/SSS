@@ -95,7 +95,8 @@ public static partial class LogonWaterfallBuilder
             cursor += dur;
         }
 
-        var ordered = steps.OrderBy(s => OrderOf(s.Id)).ThenBy(s => s.Start).ToList();
+        // chronological, like the logon itself; known steps break ties in Director's order
+        var ordered = steps.OrderBy(s => s.Start).ThenBy(s => OrderOf(s.Id)).ToList();
         var min = ordered.Min(s => s.Start);
         var max = ordered.Max(s => s.Start + s.Duration);
         var total = sessionLogOnMs is > 0 ? sessionLogOnMs.Value : max - Math.Min(0, min);
