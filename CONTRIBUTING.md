@@ -19,6 +19,10 @@ ASPNETCORE_ENVIRONMENT=Development ASPNETCORE_URLS=http://localhost:5080 dotnet 
 
 Development mode uses a fixed demo user and sample data, so no Citrix is needed. Set `Sss__Auth__DevIsHelpdesk=true` to see the helpdesk features.
 
+## Screenshots
+
+README screenshots come only from the built-in demo mode, never from a real site. With the development server running (`ASPNETCORE_ENVIRONMENT=Development`), headless Chrome reproduces them: `?lang=en&theme=light` for the overview and `&shot=details`, `&shot=profile` or `&shot=processes` for the expert dialogs (these parameters work in demo mode only). Look at every image before committing: it must show demo data (`DEMO\demo.user`, `10.20.x.x`, `*.demo.local`) and nothing else.
+
 ## Reporting a problem with a real Citrix site
 
 Run `Test-SssSetup.ps1` and `Test-SssCitrix.ps1` on the server and paste the output into the issue (run both with `-Redact`, which hides user, domain, host names, SIDs and IP addresses). Please name your Citrix version.

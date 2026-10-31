@@ -4,7 +4,7 @@
 
 A lightweight web portal that lets end users of a **Citrix Virtual Apps and Desktops** (CVAD) site see and log off **their own sessions** – and nobody else's.
 
-> **Status: early development.** Tested end to end on Citrix Virtual Apps and Desktops **2203, 2402, 2507 and 2607 (LTSR)** test sites (single Delivery Controller): sessions, history, quality and log-off through IIS. Several Delivery Controllers and several web servers are implemented (see [docs/MULTI-SERVER.md](docs/MULTI-SERVER.md)) but not yet verified on a real site. Built-in demo mode lets you try the UI without Citrix.
+> **Status: beta.** Tested end to end on Citrix Virtual Apps and Desktops **2203, 2402, 2507 and 2607 (LTSR)** test sites (single Delivery Controller): sessions, history, quality, log-off, helpdesk messages, the expert view with logon waterfall, profile analysis and ending processes (through the JEA endpoint) on a test farm. Several Delivery Controllers and several web servers are implemented (see [docs/MULTI-SERVER.md](docs/MULTI-SERVER.md)) but not yet verified on a real site. Built-in demo mode lets you try the UI without Citrix.
 
 *Citrix is a trademark of Cloud Software Group, Inc. This project is independent and not affiliated with or endorsed by it.*
 
@@ -12,7 +12,9 @@ A lightweight web portal that lets end users of a **Citrix Virtual Apps and Desk
   <img src="docs/img/overview-light.png" alt="Screenshots: overview" width="49%">
   <img src="docs/img/overview-dark.png" alt="Screenshots: dark mode" width="49%">
 </p>
-<p align="center"><img src="docs/img/expert-light.png" alt="Screenshots: expert view" width="70%"></p>
+<p align="center"><img src="docs/img/expert-light.png" alt="Screenshots: expert view with logon waterfall" width="49%">
+  <img src="docs/img/profile-light.png" alt="Screenshots: profile type, size and findings" width="49%"></p>
+<p align="center"><img src="docs/img/processes-light.png" alt="Screenshots: applications and processes of a session" width="70%"></p>
 <p align="center"><em>Demo mode, light and dark; expert view of a session</em></p>
 
 ## Features
@@ -197,10 +199,12 @@ Everything a helpdesk user does is written to the audit log with the acting user
 - [x] Verified on CVAD 2507 CU1 (single Delivery Controller)
 - [x] Tested on CVAD 2203, 2402, 2507 and 2607
 - [ ] Verify multi-controller and multi-server setups on a real site (separate Delivery Controllers, StoreFront, Web Studio)
-- [x] Helpdesk role (AD group): search, farm overview, log off with reason, audit (not yet verified on a real farm)
+- [x] Helpdesk role (AD group): search, farm overview, log off with reason, message to a session, audit
 - [x] IIS installer script (app pool, permissions, Windows authentication)
-- [x] Expert view with charts, support info, message to a session, StoreFront link, status page, setup check (the expert view's optional record sets, the message and the installer's `-Update` still need a run on a real farm)
-- [x] End single applications/processes of a session (JEA endpoint on the VDAs; not yet verified on a real farm)
+- [x] Expert view with charts, logon waterfall, profile analysis, support info, StoreFront link, status page, setup check
+- [x] End single processes of a session (JEA endpoint on the VDAs)
+- [ ] Polite "close" of an application (needs a helper inside the user's session)
+- [ ] Stricter custom Citrix role for the service account
 - [ ] Citrix Cloud (DaaS) backend
 - [x] Release builds via GitHub Actions
 

@@ -4,7 +4,7 @@
 
 Ein schlankes Web-Portal, mit dem Endanwender einer **Citrix Virtual Apps and Desktops**-Farm (CVAD) **ihre eigenen Sitzungen** sehen und abmelden können – und die von niemand anderem.
 
-> **Status: frühe Entwicklung.** Durchgängig getestet auf Testfarmen mit Citrix Virtual Apps and Desktops **2203, 2402, 2507 und 2607 (LTSR)** (jeweils ein Delivery Controller): Sitzungen, Verlauf, Qualität und Abmelden über den IIS. Mehrere Delivery Controller und mehrere Webserver sind umgesetzt (siehe [docs/MULTI-SERVER.de.md](docs/MULTI-SERVER.de.md)), aber noch nicht in einer echten Umgebung geprüft. Mit dem eingebauten Demo-Modus lässt sich die Oberfläche ohne Citrix ausprobieren.
+> **Status: Beta.** Durchgängig getestet auf Testfarmen mit Citrix Virtual Apps and Desktops **2203, 2402, 2507 und 2607 (LTSR)** (jeweils ein Delivery Controller): Sitzungen, Verlauf, Qualität, Abmelden, Helpdesk-Nachrichten, die Experten-Ansicht mit Anmelde-Wasserfall, die Profilanalyse und das Beenden von Prozessen (über den JEA-Endpunkt) auf einer Testfarm. Mehrere Delivery Controller und mehrere Webserver sind umgesetzt (siehe [docs/MULTI-SERVER.de.md](docs/MULTI-SERVER.de.md)), aber noch nicht in einer echten Umgebung geprüft. Mit dem eingebauten Demo-Modus lässt sich die Oberfläche ohne Citrix ausprobieren.
 
 *Citrix ist eine Marke der Cloud Software Group, Inc. Dieses Projekt ist unabhängig und weder mit ihr verbunden noch von ihr unterstützt.*
 
@@ -12,7 +12,9 @@ Ein schlankes Web-Portal, mit dem Endanwender einer **Citrix Virtual Apps and De
   <img src="docs/img/overview-light.png" alt="Bildschirmfotos: Übersicht" width="49%">
   <img src="docs/img/overview-dark.png" alt="Bildschirmfotos: Dunkelmodus" width="49%">
 </p>
-<p align="center"><img src="docs/img/expert-light.png" alt="Bildschirmfotos: Experten-Ansicht" width="70%"></p>
+<p align="center"><img src="docs/img/expert-light.png" alt="Bildschirmfotos: Experten-Ansicht mit Anmelde-Wasserfall" width="49%">
+  <img src="docs/img/profile-light.png" alt="Bildschirmfotos: Profiltyp, Größe und Befunde" width="49%"></p>
+<p align="center"><img src="docs/img/processes-light.png" alt="Bildschirmfotos: Anwendungen und Prozesse einer Sitzung" width="70%"></p>
 <p align="center"><em>Demo-Modus, hell und dunkel; Experten-Ansicht einer Sitzung</em></p>
 
 ## Funktionen
@@ -197,10 +199,12 @@ Als erstes: den Reiter **Status** öffnen (Helpdesk) oder `Test-SssSetup.ps1` au
 - [x] Auf CVAD 2507 CU1 verifiziert (ein Delivery Controller)
 - [x] Auf CVAD 2203, 2402, 2507 und 2607 getestet
 - [ ] Setups mit mehreren Controllern und Servern in einer echten Umgebung prüfen (getrennte Delivery Controller, StoreFront, Web Studio)
-- [x] Helpdesk-Rolle (AD-Gruppe): Suche, Farm-Übersicht, Abmelden mit Grund, Audit (auf einer echten Farm noch nicht verifiziert)
+- [x] Helpdesk-Rolle (AD-Gruppe): Suche, Farm-Übersicht, Abmelden mit Grund, Nachricht an eine Sitzung, Audit
 - [x] IIS-Installationsskript (App-Pool, Berechtigungen, Windows-Authentifizierung)
-- [x] Experten-Ansicht mit Diagrammen, Support-Info, Nachricht an eine Sitzung, StoreFront-Link, Statusseite, Setup-Prüfung (die optionalen Datensätze der Experten-Ansicht, die Nachricht und `-Update` des Installers brauchen noch einen Lauf auf einer echten Farm)
-- [x] Einzelne Anwendungen/Prozesse einer Sitzung beenden (JEA-Endpunkt auf den VDAs; auf einer echten Farm noch nicht geprüft)
+- [x] Experten-Ansicht mit Diagrammen, Anmelde-Wasserfall, Profilanalyse, Support-Info, StoreFront-Link, Statusseite, Setup-Prüfung
+- [x] Einzelne Prozesse einer Sitzung beenden (JEA-Endpunkt auf den VDAs)
+- [ ] Freundliches „Schließen“ einer Anwendung (braucht einen Helfer in der Sitzung des Benutzers)
+- [ ] Engere eigene Citrix-Rolle für das Dienstkonto
 - [ ] Citrix-Cloud-Backend (DaaS)
 - [x] Release-Builds über GitHub Actions
 

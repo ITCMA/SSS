@@ -965,8 +965,14 @@ async function init() {
     setStatus(t('error'), true);
   }
   await load();
-  // demo mode only: ?shot=details opens the expert view of the first session (README screenshots)
-  if (!$('demo').hidden && QUERY.get('shot') === 'details' && state.data?.live[0]) { setExpert(true); await openDetails(state.data.live[0]); }
+  // demo mode only (README screenshots): ?shot=details opens the expert view of the first session, ?shot=profile also reads its
+  // profile, ?shot=processes opens its process list
+  const shot = QUERY.get('shot');
+  if (!$('demo').hidden && state.data?.live[0] && ['details', 'profile', 'processes'].includes(shot)) {
+    setExpert(true);
+    if (shot === 'processes') await openProcesses(state.data.live[0]);
+    else { await openDetails(state.data.live[0]); if (shot === 'profile') document.querySelector('.profile button')?.click(); }
+  }
   state.timer = setInterval(() => { if (!document.hidden && !$('confirm').open) load(); }, refreshSeconds * 1000);
 }
 
