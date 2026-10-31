@@ -242,7 +242,8 @@ if ($Vda) {
             foreach ($p in ($procs | Where-Object { $_.Window } | Select-Object -First 5)) { Info ("Application: {0} (PID {1}) '{2}'" -f $p.Name, $p.Id, $p.Window) }
             if (Get-Command Get-SssProfile -ErrorAction SilentlyContinue) {
                 $prof = Get-SssProfile -UserSid $sid -ScanSeconds 5
-                Ok ("Get-SssProfile: type {0}, size {1} MB{2}" -f $prof.Type, $prof.SizeMb, $(if ($prof.SizePartial) { ' (partial)' } else { '' }))
+                Ok ("Get-SssProfile: type {0}, folder size {1}{2}, container {3}, local path {4}" -f $prof.Type, $(if ($null -ne $prof.SizeMb) { "$($prof.SizeMb) MB" } else { 'not read' }), $(if ($prof.SizePartial) { ' (partial)' } else { '' }), $(if ($null -ne $prof.ContainerMb) { "$($prof.ContainerMb) MB" } else { 'not read' }), $(if ($prof.LocalPath) { 'found' } else { 'missing' }))
+                if ($prof.Notes) { Info ('Profile notes: ' + (@($prof.Notes) -join ', ')) }
             } else { Info 'Get-SssProfile is not offered: run Install-SssJea.ps1 again on this VDA to add the profile command.' }
             $other = Stop-SssProcess -UserSid $sid -ProcessId 2147483647
             if ($other -eq 'not-found' -or $other -eq 'not-owned') { Ok "Safety check: a process id that does not exist is refused ($other)" }

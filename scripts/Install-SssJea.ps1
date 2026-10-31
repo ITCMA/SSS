@@ -107,6 +107,10 @@ if ($PSCmdlet.ShouldProcess($work, 'Write role capability and session configurat
                 $r.Temporary = [bool]($st -band 1); $r.Mandatory = [bool]($st -band 4)
                 if ($st -band 8) { $r.Notes += 'corrupted' }
             } else { $r.Notes += 'no-profile-record' }
+            if (-not $r.LocalPath) {
+                $r.LocalPath = [string](Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\$UserSid" -ErrorAction SilentlyContinue).ProfileImagePath
+                if (-not $r.LocalPath) { $r.LocalPath = $null }
+            }
 
             # Which technology holds the profile?
             $fsRoot = 'HKLM:\SOFTWARE\FSLogix\Profiles'
@@ -176,8 +180,10 @@ if ($PSCmdlet.ShouldProcess($work, 'Write role capability and session configurat
             return 'not-closed'
         } }
     )
+    # The functions call these cmdlets; a restricted session does not load CimCmdlets by itself ("Get-CimInstance is not recognized").
+    $needed = 'Microsoft.PowerShell.Management', 'Microsoft.PowerShell.Utility', 'CimCmdlets'
     $psrc = Join-Path $capDir 'SssProcesses.psrc'
-    New-PSRoleCapabilityFile -Path $psrc -VisibleFunctions 'Get-SssProcess', 'Get-SssProfile', 'Stop-SssProcess' -FunctionDefinitions $functions
+    New-PSRoleCapabilityFile -Path $psrc -VisibleFunctions 'Get-SssProcess', 'Get-SssProfile', 'Stop-SssProcess' -FunctionDefinitions $functions -ModulesToImport $needed
     # a module manifest next to the role capability folder makes the capability discoverable by name
     New-ModuleManifest -Path (Join-Path $moduleDir 'SssProcesses.psd1') -RootModule '' -ModuleVersion '1.0.0' -Description 'SSS process endpoint role capability'
 
@@ -185,7 +191,7 @@ if ($PSCmdlet.ShouldProcess($work, 'Write role capability and session configurat
     $roles = @{}
     foreach ($pr in $Principal) { $roles[$pr] = @{ RoleCapabilities = 'SssProcesses' } }
     New-PSSessionConfigurationFile -Path $pssc -SessionType RestrictedRemoteServer -RunAsVirtualAccount `
-        -TranscriptDirectory $TranscriptDirectory -RoleDefinitions $roles
+        -TranscriptDirectory $TranscriptDirectory -ModulesToImport $needed -RoleDefinitions $roles
 
     # make the role capability findable: JEA looks in <module>\RoleCapabilities of modules on PSModulePath
     $machineModules = Join-Path $env:ProgramFiles 'WindowsPowerShell\Modules'
