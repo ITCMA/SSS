@@ -136,17 +136,11 @@
   "procNone": "Rien à afficher.",
   "procOnlyWindows": "Uniquement les applications (masquer les processus système Windows et Citrix)",
   "colProcess": "Processus",
-  "colWindow": "Fenêtre",
   "colPid": "PID",
   "colMemory": "Mémoire",
-  "procClose": "Fermer",
   "procKill": "Terminer",
-  "procConfirmClose": "Demander à {name} de se fermer ? Le travail non enregistré peut être perdu.",
   "procConfirmKill": "Terminer {name} immédiatement ? Le travail non enregistré est perdu.",
-  "procClosed": "{name} a reçu la demande de fermeture.",
   "procKilled": "{name} a été terminé.",
-  "procNoWindow": "{name} n'a pas de fenêtre à fermer. Utilisez « Terminer » s'il doit s'arrêter.",
-  "procNotClosed": "{name} n'a pas accepté la demande de fermeture.",
   "procProtected": "{name} est nécessaire à la session et ne peut pas être terminé ici.",
   "procGone": "{name} est déjà terminé ou n'appartient pas à cette session.",
   "procUnavailable": "La machine de la session n'est pas joignable pour la gestion des processus. Le point de terminaison est-il configuré sur ce VDA (Install-SssJea.ps1) et WinRM (port 5985) ouvert ?",
@@ -210,5 +204,8 @@
   "hint_fslogixNoExclusions": "Aucune exclusion redirections.xml trouvée pour ce profil FSLogix de {size}. Exclure les caches (Teams, navigateurs, Temp) garde le conteneur petit.",
   "hint_manyLocalProfiles": "{count} profils locaux existent sur cette machine. Supprimez les profils à la fermeture de session pour gagner de la place et du temps.",
   "hint_scanPartial": "L'analyse des dossiers s'est arrêtée après {seconds} s. Toutes les tailles sont des minimums.",
-  "hint_profileLoadSlow": "Le chargement du profil a pris {s} s ({p} % de l'ouverture de session). Comparez avec la taille et le type ci-dessus."
+  "hint_profileLoadSlow": "Le chargement du profil a pris {s} s ({p} % de l'ouverture de session). Comparez avec la taille et le type ci-dessus.",
+  "colProgram": "Programme",
+  "stepUnaccounted": "Non détaillé par Monitor",
+  "waterfallAt": "commence {s} s après le début de l'ouverture de session"
 }

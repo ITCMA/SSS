@@ -95,6 +95,18 @@ public static partial class LogonWaterfallBuilder
             cursor += dur;
         }
 
+        // Time inside the logon window that no measured step explains (connection set-up, authentication, session start ...)
+        // becomes a visible "Unaccounted" bar, so a pause in the chart is not mistaken for a gap in the data.
+        var measured = steps.Where(x => !x.Estimated).OrderBy(x => x.Start).ToList();
+        var frameEnd = Date("LogOnEndDate") is { } le && origin is { } o3 ? (le - o3).TotalMilliseconds : (measured.Count > 0 ? measured.Max(x => x.Start + x.Duration) : 0);
+        var covered = 0.0;
+        foreach (var m in measured)
+        {
+            if (m.Start - covered >= 1000) steps.Add(("Unaccounted", covered, m.Start - covered, false));
+            covered = Math.Max(covered, m.Start + m.Duration);
+        }
+        if (frameEnd - covered >= 1000) steps.Add(("Unaccounted", covered, frameEnd - covered, false));
+
         // chronological, like the logon itself; known steps break ties in Director's order
         var ordered = steps.OrderBy(s => s.Start).ThenBy(s => OrderOf(s.Id)).ToList();
         var min = ordered.Min(s => s.Start);

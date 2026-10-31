@@ -136,17 +136,11 @@
   "procNone": "Nada que mostrar.",
   "procOnlyWindows": "Solo aplicaciones (ocultar procesos del sistema de Windows y Citrix)",
   "colProcess": "Proceso",
-  "colWindow": "Ventana",
   "colPid": "PID",
   "colMemory": "Memoria",
-  "procClose": "Cerrar",
   "procKill": "Finalizar",
-  "procConfirmClose": "¿Pedir a {name} que se cierre? Se puede perder el trabajo sin guardar.",
   "procConfirmKill": "¿Finalizar {name} de inmediato? Se pierde el trabajo sin guardar.",
-  "procClosed": "Se pidió a {name} que se cierre.",
   "procKilled": "{name} se finalizó.",
-  "procNoWindow": "{name} no tiene ventana que cerrar. Use «Finalizar» si debe detenerse.",
-  "procNotClosed": "{name} no aceptó la petición de cierre.",
   "procProtected": "{name} es necesario para la sesión y no se puede finalizar aquí.",
   "procGone": "{name} ya no existe o no pertenece a esta sesión.",
   "procUnavailable": "No se puede acceder al equipo de la sesión para controlar procesos. ¿Está configurado el punto de conexión en este VDA (Install-SssJea.ps1) y abierto WinRM (puerto 5985)?",
@@ -210,5 +204,8 @@
   "hint_fslogixNoExclusions": "No se encontraron exclusiones de redirections.xml para este perfil FSLogix de {size}. Excluir cachés (Teams, navegadores, Temp) mantiene pequeño el contenedor.",
   "hint_manyLocalProfiles": "Hay {count} perfiles locales en este equipo. Elimine los perfiles al cerrar sesión para ahorrar espacio y tiempo.",
   "hint_scanPartial": "El análisis de carpetas se detuvo tras {seconds} s. Todos los tamaños son mínimos.",
-  "hint_profileLoadSlow": "Cargar el perfil tardó {s} s ({p} % del inicio de sesión). Compárelo con el tamaño y el tipo de arriba."
+  "hint_profileLoadSlow": "Cargar el perfil tardó {s} s ({p} % del inicio de sesión). Compárelo con el tamaño y el tipo de arriba.",
+  "colProgram": "Programa",
+  "stepUnaccounted": "Monitor no lo desglosa",
+  "waterfallAt": "empieza {s} s después del inicio de sesión"
 }

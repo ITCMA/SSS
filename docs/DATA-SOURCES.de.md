@@ -40,6 +40,7 @@ Die Expertenansicht zeichnet die Anmeldung als Balken auf einer gemeinsamen Zeit
 
 - jedes Paar `<Schritt>StartDate` / `<Schritt>EndDate` wird ein Balken mit gemessener Lage, zum Beispiel `Hdx`, `Gpo` (Gruppenrichtlinien), `LogOnScripts`, `ProfileLoad`, `Interactive` (Shell und Desktop);
 - jede `<Schritt>Duration` ohne solches Paar (etwa `BrokeringDuration`, `AuthenticationDuration`) wird ein Balken mit bekannter Länge, aber **geschätzter Lage** (gestrichelt): Brokering endet dort, wo die Anmeldung beginnt, andere Schritte folgen der HDX-Verbindung;
+- Zeit innerhalb der Anmeldung, die kein Schritt erklärt (Verbindungsaufbau, Authentifizierung, Sitzungsstart ...), erscheint als grauer Balken „Vom Monitor nicht aufgeschlüsselt“, damit eine Pause im Diagramm als fehlende Daten und nicht als Leerlauf erkennbar ist. Alle Positionen sind die Zeitstempel, die der Monitor liefert, bezogen auf `LogOnStartDate`; Schritte können sich überlappen, etwa Gruppenrichtlinien und Shellstart;
 - das Gesamtfenster `LogOnStartDate`/`LogOnEndDate` und die `LogOnDuration` der Sitzung sind der Rahmen, keine Schritte.
 
 SSS legt über dieses Muster hinaus keine Feldnamen fest, neue Citrix-Versionen erscheinen also von selbst. Liefert eine Site keine Schrittdaten, erscheint kein Wasserfall; `Test-SssCitrix.ps1` listet die `Connection`-Eigenschaften und nennt, welche Schritte deine Site liefert. Der längste gemessene Schritt wird mit seinem Anteil an der Anmeldung hervorgehoben.

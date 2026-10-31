@@ -145,7 +145,7 @@ function Get-SessionProcesses([string]$sid, [string]$uid) {
     $machine = Get-OwnedSession $sid $uid
     $list = Use-Jea $machine @('Get-SssProcess') { @(Get-SssProcess -UserSid $sid) }
     $rows = @($list | Where-Object { $_ } | ForEach-Object {
-        @{ id = [int]$_.Id; name = [string]$_.Name; sessionId = [int]$_.SessionId; started = [string]$_.Started; memoryMb = [int]$_.MemoryMb; window = [string]$_.Window; isApp = [bool]$_.IsApp }
+        @{ id = [int]$_.Id; name = [string]$_.Name; sessionId = [int]$_.SessionId; started = [string]$_.Started; memoryMb = [int]$_.MemoryMb; window = [string]$_.Window; path = [string]$_.Path; isApp = [bool]$_.IsApp }
     })
     return @{ machine = $machine; processes = $rows }
 }

@@ -59,8 +59,8 @@ Browser --> SSS (IIS) --> PowerShell-Worker --WinRM--> JEA-Endpunkt "SSS.Process
 Die **Expertenansicht** einschalten (Knopf im Kopf). Jede Live-Sitzung hat nun neben *Details* einen Knopf **Prozesse**. Er öffnet eine Liste der Prozesse des Benutzers auf dem Rechner dieser Sitzung:
 
 - Standardmäßig werden nur **Anwendungen** gezeigt (Filter im Dialog); ohne Haken erscheinen auch System- und Hintergrundprozesse. Der Endpunkt läuft in Sitzung 0, wo Windows keine Fenstertitel anderer Sitzungen meldet; „Anwendung“ ist deshalb eine Näherung anhand des Programmpfads: alles außerhalb des Windows-Ordners und der Citrix-/FSLogix-Infrastruktur sowie bekannte Windows-Programme wie Explorer oder Notepad.
-- **Schließen** fordert die Anwendung auf, ihr Hauptfenster zu schließen, wie ein Klick auf das X, damit der Benutzer noch speichern kann. Das geht nur, wo Windows dem Endpunkt das Fenster zeigt; bei einer anderen Sitzung kommt meist „kein Fenster“, und **Sofort beenden** ist der Weg.
-- **Sofort beenden** beendet den Prozess hart. Nicht gespeicherte Arbeit geht verloren. Beides fragt vorher nach.
+- **Beenden** beendet den Prozess sofort, nach einer Rückfrage. Nicht gespeicherte Arbeit geht verloren. Ein freundliches „Schließen“ gibt es nicht: Der Endpunkt läuft in Sitzung 0, und Windows lässt ihn die Fenster einer anderen Sitzung nicht erreichen.
+- Die Tabelle zeigt den Programmpfad jedes Prozesses, damit du eine Benutzeranwendung von einem Hilfsprozess unterscheiden kannst.
 - Das Helpdesk findet denselben Knopf, wenn es einen Benutzer geöffnet hat (Reiter Helpdesk).
 
 Auf einem Multi-Session-Host (RDS-Server) zeigt die Liste die Prozesse des Benutzers dieses Rechners; hat er dort mehrere Sitzungen, erscheinen alle.

@@ -136,17 +136,11 @@
   "procNone": "Nichts anzuzeigen.",
   "procOnlyWindows": "Nur Anwendungen (Windows- und Citrix-Systemprozesse ausblenden)",
   "colProcess": "Prozess",
-  "colWindow": "Fenster",
   "colPid": "PID",
   "colMemory": "Speicher",
-  "procClose": "Schließen",
   "procKill": "Sofort beenden",
-  "procConfirmClose": "{name} zum Schließen auffordern? Nicht gespeicherte Arbeit kann verloren gehen.",
   "procConfirmKill": "{name} sofort beenden? Nicht gespeicherte Arbeit geht verloren.",
-  "procClosed": "{name} wurde zum Schließen aufgefordert.",
   "procKilled": "{name} wurde beendet.",
-  "procNoWindow": "{name} hat kein Fenster, das sich schließen lässt. „Sofort beenden“ verwenden, wenn es enden muss.",
-  "procNotClosed": "{name} hat die Aufforderung zum Schließen nicht angenommen.",
   "procProtected": "{name} wird für die Sitzung gebraucht und kann hier nicht beendet werden.",
   "procGone": "{name} ist schon beendet oder gehört nicht zu dieser Sitzung.",
   "procUnavailable": "Der Rechner der Sitzung ist für die Prozesssteuerung nicht erreichbar. Ist der Endpunkt auf diesem VDA eingerichtet (Install-SssJea.ps1) und WinRM (Port 5985) offen?",
@@ -210,5 +204,8 @@
   "hint_fslogixNoExclusions": "Für dieses {size} große FSLogix-Profil wurden keine Ausschlüsse in der redirections.xml gefunden. Caches (Teams, Browser, Temp) auszuschließen hält den Container klein.",
   "hint_manyLocalProfiles": "Auf diesem Rechner liegen {count} lokale Profile. Profile bei der Abmeldung löschen (Bereinigungsrichtlinie), um Plattenplatz und Anmeldezeit zu sparen.",
   "hint_scanPartial": "Der Ordnerscan wurde nach {seconds} s abgebrochen. Alle Größen sind Untergrenzen.",
-  "hint_profileLoadSlow": "Das Laden des Profils dauerte {s} s ({p} % der Anmeldung). Mit Größe und Typ oben vergleichen."
+  "hint_profileLoadSlow": "Das Laden des Profils dauerte {s} s ({p} % der Anmeldung). Mit Größe und Typ oben vergleichen.",
+  "colProgram": "Programm",
+  "stepUnaccounted": "Vom Monitor nicht aufgeschlüsselt",
+  "waterfallAt": "beginnt {s} s nach dem Anmeldebeginn"
 }

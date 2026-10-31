@@ -136,17 +136,11 @@
   "procNone": "Nothing to show.",
   "procOnlyWindows": "Only applications (hide Windows and Citrix system processes)",
   "colProcess": "Process",
-  "colWindow": "Window",
   "colPid": "PID",
   "colMemory": "Memory",
-  "procClose": "Close",
   "procKill": "End now",
-  "procConfirmClose": "Ask {name} to close? Unsaved work may be lost.",
   "procConfirmKill": "End {name} immediately? Unsaved work is lost.",
-  "procClosed": "{name} was asked to close.",
   "procKilled": "{name} was ended.",
-  "procNoWindow": "{name} has no window to close. Use \"End now\" if it must stop.",
-  "procNotClosed": "{name} did not accept the request to close.",
   "procProtected": "{name} is needed for the session and cannot be ended here.",
   "procGone": "{name} is already gone or does not belong to this session.",
   "procUnavailable": "The machine of the session cannot be reached for process control. Is the endpoint set up on this VDA (Install-SssJea.ps1) and WinRM (port 5985) open?",
@@ -210,5 +204,8 @@
   "hint_fslogixNoExclusions": "No redirections.xml exclusions were found for this {size} FSLogix profile. Excluding caches (Teams, browsers, Temp) keeps the container small.",
   "hint_manyLocalProfiles": "{count} local profiles exist on this machine. Delete profiles at logoff (cleanup policy) to save disk space and logon time.",
   "hint_scanPartial": "The folder scan stopped after {seconds} s. All sizes are lower bounds.",
-  "hint_profileLoadSlow": "Loading the profile took {s} s ({p} % of the logon). Compare it with the size and type above."
+  "hint_profileLoadSlow": "Loading the profile took {s} s ({p} % of the logon). Compare it with the size and type above.",
+  "colProgram": "Program",
+  "stepUnaccounted": "Not itemized by Monitor",
+  "waterfallAt": "starts {s} s after the logon began"
 }

@@ -149,3 +149,5 @@ progress { width: 100%; height: 10px; accent-color: var(--accent); }
 .ptree summary { list-style-position: inside; }
 .ptree summary .tnode { display: inline-grid; width: calc(100% - 20px); vertical-align: middle; }
 .ptree details > :not(summary) { margin-left: 18px; }
+
+.chart .wbar.gap { fill: var(--muted); fill-opacity: .35; }

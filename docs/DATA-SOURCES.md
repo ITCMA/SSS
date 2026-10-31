@@ -40,6 +40,7 @@ The expert view draws the logon as bars on one time axis, so the step that eats 
 
 - every `<Step>StartDate` / `<Step>EndDate` pair becomes a bar with a measured position, for example `Hdx`, `Gpo` (group policies), `LogOnScripts`, `ProfileLoad`, `Interactive` (shell and desktop);
 - every `<Step>Duration` without such a pair (for example `BrokeringDuration`, `AuthenticationDuration`) becomes a bar with a known length but an **estimated position** (dashed): brokering ends where the logon starts, other steps follow the HDX connection;
+- time inside the logon window that no step explains (connection set-up, authentication, session start ...) is drawn as a grey "not itemized" bar, so a pause in the chart is visible as missing data and not mistaken for idle time. All positions are the timestamps Monitor delivers, relative to `LogOnStartDate`; steps can overlap, for example group policies and the shell start;
 - the overall window `LogOnStartDate`/`LogOnEndDate` and the session's `LogOnDuration` are the frame, not steps.
 
 SSS does not hard-code the field names beyond this pattern, so new Citrix versions appear automatically. A site that delivers no step data shows no waterfall; `Test-SssCitrix.ps1` lists the `Connection` properties and tells you which steps your site provides. The longest measured step is highlighted with its share of the logon.

@@ -90,6 +90,8 @@ if ($PSCmdlet.ShouldProcess($work, 'Write role capability and session configurat
             # a best guess from the program path: everything outside the Windows folder and the Citrix/FSLogix infrastructure,
             # plus a few well-known Windows programs.
             $windows = [string]$env:SystemRoot
+            $noise = 'svchost', 'conhost', 'sihost', 'taskhostw', 'ctfmon', 'runtimebroker', 'searchui', 'searchapp', 'shellexperiencehost', 'startmenuexperiencehost', 'smartscreen', 'dllhost',
+                'fontdrvhost', 'dwm', 'csrss', 'winlogon', 'wininit', 'services', 'lsass', 'spoolsv', 'sipahost', 'vdaredirector', 'websocketagent', 'wfshell', 'ctxgfx', 'cmstart', 'rdpclip', 'wudfhost', 'backgroundtaskhost', 'applicationframehost', 'textinputhost', 'registry', 'system', 'idle'
             $known = 'explorer', 'notepad', 'mspaint', 'mstsc', 'wordpad', 'snippingtool', 'taskmgr', 'cmd', 'powershell', 'powershell_ise', 'regedit', 'mmc', 'calc', 'calculatorapp'
             # Process.Path is empty for processes of other sessions here; WMI reports the executable path reliably.
             $paths = @{}
@@ -98,7 +100,8 @@ if ($PSCmdlet.ShouldProcess($work, 'Write role capability and session configurat
                 $path = $paths[[int]$_.Id]
                 if (-not $path) { try { $path = [string]$_.Path } catch { } }
                 $isApp = ($known -contains $_.ProcessName.ToLowerInvariant())
-                if (-not $isApp -and $path -and -not $path.StartsWith($windows, [System.StringComparison]::OrdinalIgnoreCase) -and $path -notmatch '\\(Citrix|FSLogix)\\') { $isApp = $true }
+                if (-not $path -and $paths.Count -eq 0) { $isApp = -not ($noise -contains $_.ProcessName.ToLowerInvariant()) }   # no paths at all: fall back to a list of system process names
+                elseif (-not $isApp -and $path -and -not $path.StartsWith($windows, [System.StringComparison]::OrdinalIgnoreCase) -and $path -notmatch '\\(Citrix|FSLogix)\\') { $isApp = $true }
                 [pscustomobject]@{
                     Id        = $_.Id
                     Name      = $_.ProcessName
@@ -106,6 +109,7 @@ if ($PSCmdlet.ShouldProcess($work, 'Write role capability and session configurat
                     Started   = $(try { $_.StartTime.ToUniversalTime().ToString('o') } catch { $null })
                     MemoryMb  = [int]($_.WorkingSet64 / 1MB)
                     Window    = $_.MainWindowTitle
+                    Path      = $path
                     IsApp     = [bool]$isApp
                 }
             }

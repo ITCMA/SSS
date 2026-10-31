@@ -125,11 +125,11 @@ public sealed class MockSessionProvider : ISessionProvider, IHelpdeskProvider, I
             var t = DateTimeOffset.UtcNow;
             _processes[uid] = list =
             [
-                new(4120, "explorer", t.AddHours(-3), 148, null, true),
-                new(5304, "chrome", t.AddHours(-2), 612, "Wiki - Google Chrome", true),
-                new(6212, "EXCEL", t.AddMinutes(-95), 284, "Budget.xlsx - Excel", true),
-                new(7188, "OUTLOOK", t.AddHours(-3), 402, "Inbox - Outlook", true),
-                new(8040, "notepad", t.AddMinutes(-12), 18, "Untitled - Notepad", true),
+                new(4120, "explorer", t.AddHours(-3), 148, null, true, @"C:\Windows\explorer.exe"),
+                new(5304, "chrome", t.AddHours(-2), 612, "Wiki - Google Chrome", true, @"C:\Program Files\Google\Chrome\Application\chrome.exe"),
+                new(6212, "EXCEL", t.AddMinutes(-95), 284, "Budget.xlsx - Excel", true, @"C:\Program Files\Microsoft Office\root\Office16\EXCEL.EXE"),
+                new(7188, "OUTLOOK", t.AddHours(-3), 402, "Inbox - Outlook", true, @"C:\Program Files\Microsoft Office\root\Office16\OUTLOOK.EXE"),
+                new(8040, "notepad", t.AddMinutes(-12), 18, "Untitled - Notepad", true, @"C:\Windows\System32\notepad.exe"),
                 new(9020, "backgroundTask", t.AddHours(-3), 41, null),
             ];
         }

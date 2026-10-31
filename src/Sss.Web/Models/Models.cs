@@ -85,7 +85,7 @@ public sealed record LogonWaterfall(double TotalMs, IReadOnlyList<LogonStep> Ste
 /// <summary>One health check of the status page.</summary>
 public sealed record StatusCheck(string Id, bool? Ok, string Detail);
 
-public sealed record ProcessEntry(int Id, string Name, DateTimeOffset? Started, int MemoryMb, string? Window, bool IsApp = false);
+public sealed record ProcessEntry(int Id, string Name, DateTimeOffset? Started, int MemoryMb, string? Window, bool IsApp = false, string? Path = null);
 
 public sealed record ProcessListResult(string? Machine, IReadOnlyList<ProcessEntry> Processes);
 

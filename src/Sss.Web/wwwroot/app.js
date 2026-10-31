@@ -527,13 +527,13 @@ function buildWaterfall(w) {
   }
   const secFmt = (n) => new Intl.NumberFormat(state.lang, { maximumFractionDigits: n < 1 ? 2 : 1 }).format(n);
   const sec = { format: secFmt };
-  const measured = w.steps.filter((s) => !s.estimated);
+  const measured = w.steps.filter((s) => !s.estimated && s.id !== 'Unaccounted');
   const slowest = (measured.length ? measured : w.steps).reduce((a, b) => (b.durationMs > a.durationMs ? b : a));
   w.steps.forEach((s, i) => {
     const y = T + i * rowH, name = t(`step${s.id}`) === `step${s.id}` ? fieldLabel(s.id) : t(`step${s.id}`);
     const pct = Math.round((s.durationMs / w.totalMs) * 100);
-    const bar = svgEl('rect', { class: `wbar${s.estimated ? ' est' : ''}${s === slowest ? ' slow' : ''}`, x: sx(s.startMs), y: y + 4, width: Math.max(2, sx(s.durationMs) - sx(0)), height: rowH - 10, rx: 3 });
-    const tip = svgEl('title'); tip.textContent = `${name}: ${sec.format(s.durationMs / 1000)} s (${pct} %)${s.estimated ? ` – ${t('waterfallEstimated')}` : ''}`;
+    const bar = svgEl('rect', { class: `wbar${s.estimated ? ' est' : ''}${s.id === 'Unaccounted' ? ' gap' : ''}${s === slowest ? ' slow' : ''}`, x: sx(s.startMs), y: y + 4, width: Math.max(2, sx(s.durationMs) - sx(0)), height: rowH - 10, rx: 3 });
+    const tip = svgEl('title'); tip.textContent = `${name}: ${sec.format(s.durationMs / 1000)} s (${pct} %), ${t('waterfallAt', { s: sec.format(s.startMs / 1000) })}${s.estimated ? ` – ${t('waterfallEstimated')}` : ''}`;
     bar.append(tip);
     svg.append(text(name, L - 8, y + rowH / 2 + 4, 'end'), bar, text(`${sec.format(s.durationMs / 1000)} s`, sx(s.startMs + s.durationMs) + 5, y + rowH / 2 + 4, 'start', 'wval'));
   });
@@ -684,8 +684,7 @@ function supportText(s, d, profile) {
 }
 
 // ---------- applications and processes of a session ----------
-const PROC_RESULT = { closed: 'procClosed', killed: 'procKilled', 'no-window': 'procNoWindow', 'not-closed': 'procNotClosed',
-  protected: 'procProtected', 'not-owned': 'procGone', 'not-found': 'procGone' };
+const PROC_RESULT = { killed: 'procKilled', closed: 'procKilled', protected: 'procProtected', 'not-owned': 'procGone', 'not-found': 'procGone' };
 
 async function openProcesses(s) {
   const dlg = $('procs');
@@ -721,29 +720,27 @@ function renderProcesses(ctx) {
   const onlyWindows = $('procs-windows').checked;
   const rows = ctx.items.filter((p) => !onlyWindows || p.window || p.isApp).sort((a, b) => ((b.window || b.isApp) ? 1 : 0) - ((a.window || a.isApp) ? 1 : 0) || a.name.localeCompare(b.name));
   $('procs-msg').textContent = rows.length ? '' : t('procNone');
-  const head = el('tr', {}, ...['colProcess', 'colWindow', 'colPid', 'colStarted', 'colMemory', 'colAction'].map((k) => el('th', { scope: 'col', text: t(k) })));
+  const head = el('tr', {}, ...['colProcess', 'colProgram', 'colPid', 'colStarted', 'colMemory', 'colAction'].map((k) => el('th', { scope: 'col', text: t(k) })));
   $('procs-table').replaceChildren(el('thead', {}, head), el('tbody', {}, ...rows.map((p) => {
-    const close = el('button', { type: 'button', text: t('procClose') });
     const kill = el('button', { type: 'button', class: 'danger-outline', text: t('procKill') });
-    close.addEventListener('click', () => endProcess(ctx, p, false));
-    kill.addEventListener('click', () => endProcess(ctx, p, true));
+    kill.addEventListener('click', () => endProcess(ctx, p));
     return el('tr', {},
-      el('td', { 'data-label': t('colProcess'), text: p.name }), el('td', { 'data-label': t('colWindow'), text: p.window ?? '' }),
+      el('td', { 'data-label': t('colProcess'), text: p.name }), el('td', { 'data-label': t('colProgram'), class: 'tpath', title: p.path ?? '', text: p.path ?? '' }),
       el('td', { 'data-label': t('colPid'), text: String(p.id) }), el('td', { 'data-label': t('colStarted'), text: fmtDate(p.started) }),
       el('td', { 'data-label': t('colMemory'), text: `${p.memoryMb} MB` }),
-      el('td', { 'data-label': t('colAction') }, el('div', { class: 'rowactions' }, close, kill)));
+      el('td', { 'data-label': t('colAction') }, el('div', { class: 'rowactions' }, kill)));
   })));
 }
 
-async function endProcess(ctx, p, force) {
-  if (!(await confirmDialog(t(force ? 'procConfirmKill' : 'procConfirmClose', { name: p.name }), force ? 'procKill' : 'procClose'))) return;
+async function endProcess(ctx, p) {
+  if (!(await confirmDialog(t('procConfirmKill', { name: p.name }), 'procKill'))) return;
   $('procs-msg').textContent = '…';
   try {
     const hd = state.view === 'hduser';
     const r = await fetch(`${procsBase(ctx)}/${p.id}/end`, {
       method: 'POST', credentials: 'same-origin',
       headers: { 'X-CSRF-TOKEN': await csrf(), 'Content-Type': 'application/json' },
-      body: JSON.stringify(hd ? { sid: state.target.sid, force } : { force }),
+      body: JSON.stringify(hd ? { sid: state.target.sid, force: true } : { force: true }),
     });
     if (r.status === 429) { $('procs-msg').textContent = t('rateLimited'); return; }
     if (r.status === 503) { $('procs-msg').textContent = t('procUnavailable'); return; }

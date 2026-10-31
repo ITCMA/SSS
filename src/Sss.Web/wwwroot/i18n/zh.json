@@ -136,17 +136,11 @@
   "procNone": "没有可显示的内容。",
   "procOnlyWindows": "仅显示应用程序（隐藏 Windows 和 Citrix 系统进程）",
   "colProcess": "进程",
-  "colWindow": "窗口",
   "colPid": "PID",
   "colMemory": "内存",
-  "procClose": "关闭",
   "procKill": "立即结束",
-  "procConfirmClose": "要求 {name} 关闭？未保存的工作可能丢失。",
   "procConfirmKill": "立即结束 {name}？未保存的工作将丢失。",
-  "procClosed": "已要求 {name} 关闭。",
   "procKilled": "{name} 已结束。",
-  "procNoWindow": "{name} 没有可关闭的窗口。如需停止，请使用“立即结束”。",
-  "procNotClosed": "{name} 未接受关闭请求。",
   "procProtected": "{name} 是会话所需的进程，无法在此结束。",
   "procGone": "{name} 已结束或不属于此会话。",
   "procUnavailable": "无法连接到会话所在的计算机以管理进程。此 VDA 上是否已设置终结点（Install-SssJea.ps1），WinRM（端口 5985）是否开放？",
@@ -210,5 +204,8 @@
   "hint_fslogixNoExclusions": "此 {size} 的 FSLogix 配置文件没有找到 redirections.xml 排除项。排除缓存（Teams、浏览器、Temp）可使容器保持较小。",
   "hint_manyLocalProfiles": "此计算机上有 {count} 个本地配置文件。请在注销时删除配置文件，以节省磁盘空间和登录时间。",
   "hint_scanPartial": "文件夹扫描在 {seconds} 秒后停止。所有大小均为下限。",
-  "hint_profileLoadSlow": "加载配置文件耗时 {s} 秒（占登录的 {p}%）。请与上方的大小和类型对比。"
+  "hint_profileLoadSlow": "加载配置文件耗时 {s} 秒（占登录的 {p}%）。请与上方的大小和类型对比。",
+  "colProgram": "程序",
+  "stepUnaccounted": "Monitor 未细分",
+  "waterfallAt": "在登录开始后 {s} 秒开始"
 }

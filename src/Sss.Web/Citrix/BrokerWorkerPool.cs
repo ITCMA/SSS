@@ -129,7 +129,8 @@ public sealed partial class BrokerWorkerPool : IBrokerClient, IHostedService, ID
                     DateTimeOffset.TryParse(Str(p, "started"), out var st) ? st : null,
                     p.TryGetProperty("memoryMb", out var mem) ? mem.GetInt32() : 0,
                     Str(p, "window") is { Length: > 0 } w ? w : null,
-                    p.TryGetProperty("isApp", out var ia) && ia.ValueKind == JsonValueKind.True));
+                    p.TryGetProperty("isApp", out var ia) && ia.ValueKind == JsonValueKind.True,
+                    Str(p, "path") is { Length: > 0 } pa ? pa : null));
         return new BrokerProcessList(Str(res, "machine"), list);
     }
 

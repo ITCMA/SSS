@@ -596,6 +596,8 @@ public class ConfigValidationTests
         var w = LogonWaterfallBuilder.Build([reconnect, original], null)!;
 
         Assert.Equal(10000, w.Steps.Single(s => s.Id == "ProfileLoad").DurationMs);
+        // 0-5 s before the profile load and 15-20 s after it are not explained by any measured step
+        Assert.Equal([5000, 5000], w.Steps.Where(s => s.Id == "Unaccounted").Select(s => s.DurationMs).ToArray());
         Assert.Null(LogonWaterfallBuilder.Build([Conn("""{"IsReconnect":true,"LogOnStartDate":"2026-10-31T19:34:00Z","LogOnEndDate":"2026-10-31T19:34:02Z"}""")], 2000));
     }
 }
