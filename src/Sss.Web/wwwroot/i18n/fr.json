@@ -134,7 +134,7 @@
   "procButton": "Processus",
   "procTitle": "Applications et processus",
   "procNone": "Rien à afficher.",
-  "procOnlyWindows": "Uniquement les applications avec une fenêtre",
+  "procOnlyWindows": "Uniquement les applications (masquer les processus système Windows et Citrix)",
   "colProcess": "Processus",
   "colWindow": "Fenêtre",
   "colPid": "PID",

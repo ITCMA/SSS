@@ -125,11 +125,11 @@ public sealed class MockSessionProvider : ISessionProvider, IHelpdeskProvider, I
             var t = DateTimeOffset.UtcNow;
             _processes[uid] = list =
             [
-                new(4120, "explorer", t.AddHours(-3), 148, null),
-                new(5304, "chrome", t.AddHours(-2), 612, "Wiki - Google Chrome"),
-                new(6212, "EXCEL", t.AddMinutes(-95), 284, "Budget.xlsx - Excel"),
-                new(7188, "OUTLOOK", t.AddHours(-3), 402, "Inbox - Outlook"),
-                new(8040, "notepad", t.AddMinutes(-12), 18, "Untitled - Notepad"),
+                new(4120, "explorer", t.AddHours(-3), 148, null, true),
+                new(5304, "chrome", t.AddHours(-2), 612, "Wiki - Google Chrome", true),
+                new(6212, "EXCEL", t.AddMinutes(-95), 284, "Budget.xlsx - Excel", true),
+                new(7188, "OUTLOOK", t.AddHours(-3), 402, "Inbox - Outlook", true),
+                new(8040, "notepad", t.AddMinutes(-12), 18, "Untitled - Notepad", true),
                 new(9020, "backgroundTask", t.AddHours(-3), 41, null),
             ];
         }
@@ -150,7 +150,7 @@ public sealed class MockSessionProvider : ISessionProvider, IHelpdeskProvider, I
         lock (_gate)
         {
             if (!_items.Any(e => e.OwnerSid == userSid && e.Info.Uid == uid && e.Info.State != SessionState.Ended)) throw new InvalidOperationException("Session not found.");
-            return Task.FromResult(new ProfileInfo("demo-vda.demo.local", "FSLogix", true, "C:\\Users\\demo.user", null, "\\\\fileserver\\profiles\\demo.user_S-1-5-21\\Profile_demo.user.vhdx", 9120,
+            return Task.FromResult(new ProfileInfo("demo-vda.demo.local", "FSLogix", true, "C:\\Users\\demo.user", null, "\\\\fileserver\\profiles\\demo.user_S-1-5-21\\Profile_demo.user.vhdx", 9120, 30720,
                 false, false, false, 6480, false, 4,
                 ["Status=0"], [new("AppData", 4210), new("Documents", 1360), new("Desktop", 540), new("Downloads", 260)]));
         }

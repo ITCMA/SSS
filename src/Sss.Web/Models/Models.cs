@@ -85,7 +85,7 @@ public sealed record LogonWaterfall(double TotalMs, IReadOnlyList<LogonStep> Ste
 /// <summary>One health check of the status page.</summary>
 public sealed record StatusCheck(string Id, bool? Ok, string Detail);
 
-public sealed record ProcessEntry(int Id, string Name, DateTimeOffset? Started, int MemoryMb, string? Window);
+public sealed record ProcessEntry(int Id, string Name, DateTimeOffset? Started, int MemoryMb, string? Window, bool IsApp = false);
 
 public sealed record ProcessListResult(string? Machine, IReadOnlyList<ProcessEntry> Processes);
 
@@ -96,6 +96,6 @@ public sealed record ProfileFolder(string Name, int Mb);
 /// <summary>What the VDA reports about the profile of a session's user. <c>Type</c> is Local, Roaming, Citrix UPM or FSLogix.
 /// Sizes are in MB; <c>SizePartial</c> means the folder scan hit its time limit.</summary>
 public sealed record ProfileInfo(
-    string? Machine, string Type, bool Loaded, string? LocalPath, string? StorePath, string? Container, int? ContainerMb,
+    string? Machine, string Type, bool Loaded, string? LocalPath, string? StorePath, string? Container, int? ContainerMb, int? ContainerMaxMb,
     bool Roaming, bool Temporary, bool Mandatory, int? SizeMb, bool SizePartial, int ScanSeconds,
     IReadOnlyList<string> Notes, IReadOnlyList<ProfileFolder> TopFolders);

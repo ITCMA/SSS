@@ -50,7 +50,7 @@ Der Monitor weiß nicht, welche Art Profil ein Benutzer hat und wie groß es ist
 
 | Erkannt | Woran |
 |---|---|
-| Microsoft FSLogix | ein Sitzungseintrag unter `HKLM\SOFTWARE\FSLogix\Profiles\Sessions\<SID>` (mit dem VHD/VHDX-Pfad und, wenn lesbar, dessen Dateigröße) oder die Volumebezeichnung des FSLogix-Profils |
+| Microsoft FSLogix | ein Sitzungseintrag unter `HKLM\SOFTWARE\FSLogix\Profiles\Sessions\<SID>` oder das eingehängte Container-Volume mit der Bezeichnung `Profile-<Benutzer>`, dessen belegter und gesamter Platz als Containergröße erscheint |
 | Citrix Profile Management (UPM) | der Dienst `ctxProfile` läuft; der Benutzerspeicher aus der Richtlinie `PathToUserStore` |
 | Servergespeichertes Profil (Windows) | `Win32_UserProfile` meldet ein konfiguriertes Roaming; der Roaming-Pfad |
 | Lokales Profil | nichts davon; temporäre und verbindliche Profile werden gekennzeichnet |

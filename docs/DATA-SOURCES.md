@@ -50,7 +50,7 @@ Monitor does not know what kind of profile a user has or how large it is. SSS th
 
 | Detected | How |
 |---|---|
-| Microsoft FSLogix | a session entry under `HKLM\SOFTWARE\FSLogix\Profiles\Sessions\<SID>` (with the VHD/VHDX path and its file size when readable), or the FSLogix profile volume label |
+| Microsoft FSLogix | a session entry under `HKLM\SOFTWARE\FSLogix\Profiles\Sessions\<SID>` or the mounted container volume labelled `Profile-<user>`, whose used and total space is shown as the container size |
 | Citrix Profile Management (UPM) | the service `ctxProfile` is running; the user store from the `PathToUserStore` policy |
 | Roaming profile (Windows) | `Win32_UserProfile` says roaming is configured; the roaming path |
 | Local profile | none of the above; temporary and mandatory profiles are flagged |

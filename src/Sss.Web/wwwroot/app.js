@@ -579,7 +579,7 @@ function profileRows(p) {
   if (p.localPath) rows.push([t('profilePath'), p.localPath]);
   if (p.storePath) rows.push([t('profileStore'), p.storePath]);
   if (p.container) rows.push([t('profileContainer'), p.container]);
-  if (p.containerMb != null) rows.push([t('profileContainerSize'), fmtMb(p.containerMb)]);
+  if (p.containerMb != null) rows.push([t('profileContainerSize'), p.containerMaxMb ? `${fmtMb(p.containerMb)} / ${fmtMb(p.containerMaxMb)}` : fmtMb(p.containerMb)]);
   if (p.sizeMb != null) rows.push([t('profileSize'), `${fmtMb(p.sizeMb)}${p.sizePartial ? ` ${t('profilePartial')}` : ''}`]);
   if (p.topFolders.length) rows.push([t('profileTop'), p.topFolders.map((f) => `${f.name} ${fmtMb(f.mb)}`).join(', ')]);
   const flags = [p.temporary && t('profileTemporary'), p.mandatory && t('profileMandatory')].filter(Boolean);
@@ -664,7 +664,7 @@ async function loadProcesses(ctx) {
 
 function renderProcesses(ctx) {
   const onlyWindows = $('procs-windows').checked;
-  const rows = ctx.items.filter((p) => !onlyWindows || p.window).sort((a, b) => (b.window ? 1 : 0) - (a.window ? 1 : 0) || a.name.localeCompare(b.name));
+  const rows = ctx.items.filter((p) => !onlyWindows || p.window || p.isApp).sort((a, b) => ((b.window || b.isApp) ? 1 : 0) - ((a.window || a.isApp) ? 1 : 0) || a.name.localeCompare(b.name));
   $('procs-msg').textContent = rows.length ? '' : t('procNone');
   const head = el('tr', {}, ...['colProcess', 'colWindow', 'colPid', 'colStarted', 'colMemory', 'colAction'].map((k) => el('th', { scope: 'col', text: t(k) })));
   $('procs-table').replaceChildren(el('thead', {}, head), el('tbody', {}, ...rows.map((p) => {

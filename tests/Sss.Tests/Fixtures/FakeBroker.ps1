@@ -48,8 +48,8 @@ function Get-SssProcess {
     [CmdletBinding()]
     param([string]$UserSid)
     if ($UserSid -eq 'S-1-5-21-1-1-1-1001') {
-        [pscustomobject]@{ Id = 4120; Name = 'explorer'; SessionId = 2; Started = '2026-10-29T08:00:00.0000000Z'; MemoryMb = 150; Window = '' }
-        [pscustomobject]@{ Id = 5304; Name = 'chrome'; SessionId = 2; Started = '2026-10-29T08:30:00.0000000Z'; MemoryMb = 600; Window = 'Wiki - Chrome' }
+        [pscustomobject]@{ Id = 4120; Name = 'explorer'; SessionId = 2; Started = '2026-10-29T08:00:00.0000000Z'; MemoryMb = 150; Window = ''; IsApp = $true }
+        [pscustomobject]@{ Id = 5304; Name = 'chrome'; SessionId = 2; Started = '2026-10-29T08:30:00.0000000Z'; MemoryMb = 600; Window = 'Wiki - Chrome'; IsApp = $true }
     }
 }
 function Stop-SssProcess {
@@ -61,7 +61,7 @@ function Stop-SssProcess {
 function Get-SssProfile {
     [CmdletBinding()]
     param([string]$UserSid, [int]$ScanSeconds)
-    [pscustomobject]@{ Type = 'FSLogix'; Loaded = $true; LocalPath = 'C:\Users\alice'; StorePath = $null; Container = '\\files\profiles\alice\Profile.vhdx'; ContainerMb = 9120
+    [pscustomobject]@{ Type = 'FSLogix'; Loaded = $true; LocalPath = 'C:\Users\alice'; StorePath = $null; Container = '\\files\profiles\alice\Profile.vhdx'; ContainerMb = 9120; ContainerMaxMb = 30720
         Roaming = $false; Temporary = $false; Mandatory = $false; SizeMb = 6480; SizePartial = ($ScanSeconds -lt 10); ScanSeconds = 3; Notes = @('Status=0')
         Top = @([pscustomobject]@{ Name = 'AppData'; Mb = 4210 }, [pscustomobject]@{ Name = 'Documents'; Mb = 1360 }) }
 }

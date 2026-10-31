@@ -134,7 +134,7 @@
   "procButton": "进程",
   "procTitle": "应用程序和进程",
   "procNone": "没有可显示的内容。",
-  "procOnlyWindows": "仅显示有窗口的应用程序",
+  "procOnlyWindows": "仅显示应用程序（隐藏 Windows 和 Citrix 系统进程）",
   "colProcess": "进程",
   "colWindow": "窗口",
   "colPid": "PID",

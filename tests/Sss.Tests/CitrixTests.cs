@@ -28,7 +28,7 @@ public class CitrixSessionProviderTests
         }
         public Task<BrokerProcessList> ProcessesAsync(string sid, string uid, CancellationToken ct) => Task.FromResult(new BrokerProcessList("vdi-01", [new BrokerProcess(1, "calc", 2, null, 5, "Calculator")]));
         public Task<string> EndProcessAsync(string sid, string uid, int processId, bool force, CancellationToken ct) => Task.FromResult("closed");
-        public Task<ProfileInfo> ProfileAsync(string sid, string uid, int scanSeconds, CancellationToken ct) => Task.FromResult(new ProfileInfo("vdi-01", "Local", true, null, null, null, null, false, false, false, null, false, 0, [], []));
+        public Task<ProfileInfo> ProfileAsync(string sid, string uid, int scanSeconds, CancellationToken ct) => Task.FromResult(new ProfileInfo("vdi-01", "Local", true, null, null, null, null, null, false, false, false, null, false, 0, [], []));
         public Task PingAsync(CancellationToken ct) => Task.CompletedTask;
         public Task<BrokerLogoffResult> LogoffAsync(string sid, IReadOnlyCollection<string> uids, CancellationToken ct)
         {
@@ -382,6 +382,7 @@ public class BrokerWorkerPoolTests
         Assert.Equal([4120, 5304], list.Processes.Select(p => p.Id).ToArray());
         Assert.Equal("Wiki - Chrome", list.Processes[1].Window);
         Assert.Null(list.Processes[0].Window);
+        Assert.True(list.Processes[0].IsApp);
         Assert.Equal(600, list.Processes[1].MemoryMb);
     }
 
@@ -417,6 +418,7 @@ public class BrokerWorkerPoolTests
         Assert.Equal("FSLogix", p.Type);
         Assert.Equal(6480, p.SizeMb);
         Assert.Equal(9120, p.ContainerMb);
+        Assert.Equal(30720, p.ContainerMaxMb);
         Assert.False(p.SizePartial);
         Assert.Equal(["AppData", "Documents"], p.TopFolders.Select(f => f.Name).ToArray());
         await Assert.ThrowsAsync<ProviderUnavailableException>(() => pool.ProfileAsync(Alice, "201", 20, default));

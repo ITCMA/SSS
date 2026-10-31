@@ -128,7 +128,8 @@ public sealed partial class BrokerWorkerPool : IBrokerClient, IHostedService, ID
                     p.TryGetProperty("sessionId", out var sid) ? sid.GetInt32() : 0,
                     DateTimeOffset.TryParse(Str(p, "started"), out var st) ? st : null,
                     p.TryGetProperty("memoryMb", out var mem) ? mem.GetInt32() : 0,
-                    Str(p, "window") is { Length: > 0 } w ? w : null));
+                    Str(p, "window") is { Length: > 0 } w ? w : null,
+                    p.TryGetProperty("isApp", out var ia) && ia.ValueKind == JsonValueKind.True));
         return new BrokerProcessList(Str(res, "machine"), list);
     }
 
@@ -146,7 +147,7 @@ public sealed partial class BrokerWorkerPool : IBrokerClient, IHostedService, ID
         if (res.TryGetProperty("top", out var arr) && arr.ValueKind == JsonValueKind.Array)
             foreach (var t in arr.EnumerateArray())
                 top.Add(new ProfileFolder(Str(t, "name") ?? "", t.TryGetProperty("mb", out var mb) && mb.ValueKind == JsonValueKind.Number ? mb.GetInt32() : 0));
-        return new ProfileInfo(Text("machine"), Text("type") ?? "Local", Flag("loaded"), Text("localPath"), Text("storePath"), Text("container"), Mb("containerMb"),
+        return new ProfileInfo(Text("machine"), Text("type") ?? "Local", Flag("loaded"), Text("localPath"), Text("storePath"), Text("container"), Mb("containerMb"), Mb("containerMaxMb"),
             Flag("roaming"), Flag("temporary"), Flag("mandatory"), Mb("sizeMb"), Flag("sizePartial"), Mb("scanSeconds") ?? 0, Strings(res, "notes"), top);
     }
 

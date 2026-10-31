@@ -58,8 +58,8 @@ Browser --> SSS (IIS) --> PowerShell worker --WinRM--> JEA endpoint "SSS.Process
 
 Switch on the **expert view** (button in the header). Every live session now has a **Processes** button next to *Details*. It opens a list of the user's processes on the machine of that session:
 
-- By default only **applications with a window** are shown (filter in the dialog); untick it to see background processes as well.
-- **Close** asks the application to close its main window, like clicking the X. Unsaved work can still be saved by the user. Applications without a window answer "no window".
+- By default only **applications** are shown (filter in the dialog); untick it to see system and background processes as well. The endpoint runs in session 0, where Windows reports no window titles of other sessions, so "application" is a best guess from the program path: everything outside the Windows folder and the Citrix/FSLogix infrastructure, plus well-known Windows programs such as Explorer or Notepad.
+- **Close** asks the application to close its main window, like clicking the X, so the user can still save. This works only where Windows exposes the window to the endpoint; for another session it usually answers "no window" and **End now** is the way.
 - **End now** kills the process. Unsaved work is lost. Both ask for confirmation first.
 - The helpdesk finds the same button when it has opened a user (Helpdesk tab).
 

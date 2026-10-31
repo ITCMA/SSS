@@ -80,7 +80,16 @@ if ($PSCmdlet.ShouldProcess($work, 'Write role capability and session configurat
             [CmdletBinding()]
             param([Parameter(Mandatory = $true)][ValidatePattern('^S-1-\d+(-\d+)+$')][string]$UserSid)
             $account = (New-Object System.Security.Principal.SecurityIdentifier($UserSid)).Translate([System.Security.Principal.NTAccount]).Value
+            # The endpoint runs in session 0, where Windows reports no window titles for other sessions. "IsApp" is therefore
+            # a best guess from the program path: everything outside the Windows folder and the Citrix/FSLogix infrastructure,
+            # plus a few well-known Windows programs.
+            $windows = [string]$env:SystemRoot
+            $known = 'explorer', 'notepad', 'mspaint', 'mstsc', 'wordpad', 'snippingtool', 'taskmgr', 'cmd', 'powershell', 'powershell_ise', 'regedit', 'mmc', 'calc', 'calculatorapp'
             Get-Process -IncludeUserName | Where-Object { $_.UserName -eq $account } | ForEach-Object {
+                $path = $null
+                try { $path = [string]$_.Path } catch { }
+                $isApp = ($known -contains $_.ProcessName.ToLowerInvariant())
+                if (-not $isApp -and $path -and -not $path.StartsWith($windows, [System.StringComparison]::OrdinalIgnoreCase) -and $path -notmatch '\\(Citrix|FSLogix)\\') { $isApp = $true }
                 [pscustomobject]@{
                     Id        = $_.Id
                     Name      = $_.ProcessName
@@ -88,6 +97,7 @@ if ($PSCmdlet.ShouldProcess($work, 'Write role capability and session configurat
                     Started   = $(try { $_.StartTime.ToUniversalTime().ToString('o') } catch { $null })
                     MemoryMb  = [int]($_.WorkingSet64 / 1MB)
                     Window    = $_.MainWindowTitle
+                    IsApp     = [bool]$isApp
                 }
             }
         } },
@@ -96,9 +106,10 @@ if ($PSCmdlet.ShouldProcess($work, 'Write role capability and session configurat
             param(
                 [Parameter(Mandatory = $true)][ValidatePattern('^S-1-\d+(-\d+)+$')][string]$UserSid,
                 [ValidateRange(0, 120)][int]$ScanSeconds = 20)
-            $r = [ordered]@{ Type = 'Local'; Loaded = $false; LocalPath = $null; StorePath = $null; Container = $null; ContainerMb = $null
+            $r = [ordered]@{ Type = 'Local'; Loaded = $false; LocalPath = $null; StorePath = $null; Container = $null; ContainerMb = $null; ContainerMaxMb = $null
                 Roaming = $false; Temporary = $false; Mandatory = $false; SizeMb = $null; SizePartial = $false; ScanSeconds = 0; Notes = @(); Top = @() }
-            $p = Get-WmiObject -Class Win32_UserProfile -Filter "SID='$UserSid'" -ErrorAction SilentlyContinue | Select-Object -First 1
+            $p = Get-WmiObject -Class Win32_UserProfile -Filter "SID='$UserSid'" -ErrorAction SilentlyContinue
+            $p = @($p)[0]
             if ($p) {
                 $r.LocalPath = [string]$p.LocalPath; $r.Loaded = [bool]$p.Loaded
                 $r.Roaming = [bool]$p.RoamingConfigured
@@ -115,7 +126,14 @@ if ($PSCmdlet.ShouldProcess($work, 'Write role capability and session configurat
             # Which technology holds the profile?
             $fsRoot = 'HKLM:\SOFTWARE\FSLogix\Profiles'
             $fsSession = Join-Path "$fsRoot\Sessions" $UserSid
-            $vol = Get-WmiObject -Class Win32_Volume -Filter "Label LIKE 'Profile-%'" -ErrorAction SilentlyContinue | Select-Object -First 1
+            $uname = ''
+            try { $uname = ((New-Object System.Security.Principal.SecurityIdentifier($UserSid)).Translate([System.Security.Principal.NTAccount]).Value).Split('\')[-1] } catch { }
+            # FSLogix mounts the container as a volume labelled "Profile-<user>": its used and total space is the container size
+            $vol = $null
+            foreach ($v in @(Get-WmiObject -Class Win32_Volume -Filter "Label LIKE 'Profile-%'" -ErrorAction SilentlyContinue)) {
+                if ($v -and [string]$v.Label -ieq ('Profile-' + $uname)) { $vol = $v }
+            }
+            if ($vol -and $vol.Capacity) { $r.ContainerMb = [int](([int64]$vol.Capacity - [int64]$vol.FreeSpace) / 1MB); $r.ContainerMaxMb = [int]([int64]$vol.Capacity / 1MB) }
             if (Test-Path $fsSession) {
                 $r.Type = 'FSLogix'
                 $props = Get-ItemProperty -Path $fsSession -ErrorAction SilentlyContinue
@@ -124,7 +142,7 @@ if ($PSCmdlet.ShouldProcess($work, 'Write role capability and session configurat
                     if ($v -match '\.vhdx?$') { $r.Container = $v }
                     elseif ($n.Name -match '^(Status|Reason|ProfileState|ErrorCode)$') { $r.Notes += ('{0}={1}' -f $n.Name, $v) }
                 }
-            } elseif ($vol -and (Get-ItemProperty -Path $fsRoot -Name Enabled -ErrorAction SilentlyContinue).Enabled -eq 1) {
+            } elseif ($vol) {
                 $r.Type = 'FSLogix'; $r.Notes += 'detected-by-volume'
             } elseif ((Get-Service -Name 'ctxProfile' -ErrorAction SilentlyContinue).Status -eq 'Running') {
                 $r.Type = 'Citrix UPM'
@@ -135,7 +153,7 @@ if ($PSCmdlet.ShouldProcess($work, 'Write role capability and session configurat
             if ($r.Temporary) { $r.Notes += 'temporary' }
 
             # Size of the VHD(X) container, when it can be read
-            if ($r.Container) { try { $r.ContainerMb = [int]((Get-Item -LiteralPath $r.Container -ErrorAction Stop).Length / 1MB) } catch { } }
+            if ($r.Container -and $null -eq $r.ContainerMb) { try { $r.ContainerMb = [int]((Get-Item -LiteralPath $r.Container -ErrorAction Stop).Length / 1MB) } catch { } }
 
             # Size of the profile folder (time boxed, reparse points are not followed)
             if ($ScanSeconds -gt 0 -and $r.LocalPath -and (Test-Path -LiteralPath $r.LocalPath)) {
@@ -158,7 +176,17 @@ if ($PSCmdlet.ShouldProcess($work, 'Write role capability and session configurat
                 }
                 $r.ScanSeconds = [int][math]::Ceiling($sw.Elapsed.TotalSeconds)
                 $r.SizeMb = [int]($total / 1MB)
-                $r.Top = @($tops.GetEnumerator() | Sort-Object Value -Descending | Select-Object -First 6 | ForEach-Object { [pscustomobject]@{ Name = [string]$_.Key; Mb = [int]($_.Value / 1MB) } })
+                # largest folders, picked by hand: Sort-Object / Select-Object -First are restricted inside the JEA session
+                $left = New-Object System.Collections.ArrayList
+                foreach ($k in @($tops.Keys)) { [void]$left.Add(@($k, [int64]$tops[$k])) }
+                $best = @()
+                for ($i = 0; $i -lt 6 -and $left.Count -gt 0; $i++) {
+                    $bi = 0
+                    for ($j = 1; $j -lt $left.Count; $j++) { if ($left[$j][1] -gt $left[$bi][1]) { $bi = $j } }
+                    $best += [pscustomobject]@{ Name = [string]$left[$bi][0]; Mb = [int]($left[$bi][1] / 1MB) }
+                    $left.RemoveAt($bi)
+                }
+                $r.Top = $best
             }
             [pscustomobject]$r
         } },

@@ -145,7 +145,7 @@ function Get-SessionProcesses([string]$sid, [string]$uid) {
     $machine = Get-OwnedSession $sid $uid
     $list = Use-Jea $machine @('Get-SssProcess') { @(Get-SssProcess -UserSid $sid) }
     $rows = @($list | Where-Object { $_ } | ForEach-Object {
-        @{ id = [int]$_.Id; name = [string]$_.Name; sessionId = [int]$_.SessionId; started = [string]$_.Started; memoryMb = [int]$_.MemoryMb; window = [string]$_.Window }
+        @{ id = [int]$_.Id; name = [string]$_.Name; sessionId = [int]$_.SessionId; started = [string]$_.Started; memoryMb = [int]$_.MemoryMb; window = [string]$_.Window; isApp = [bool]$_.IsApp }
     })
     return @{ machine = $machine; processes = $rows }
 }
@@ -155,7 +155,7 @@ function Get-SessionProfile([string]$sid, [string]$uid, [int]$scanSeconds) {
     $p = Use-Jea $machine @('Get-SssProfile') { Get-SssProfile -UserSid $sid -ScanSeconds $scanSeconds }
     $top = @(@($p.Top) | Where-Object { $_ } | ForEach-Object { @{ name = [string]$_.Name; mb = [int]$_.Mb } })
     return @{ machine = $machine; type = [string]$p.Type; loaded = [bool]$p.Loaded; localPath = [string]$p.LocalPath; storePath = [string]$p.StorePath
-        container = [string]$p.Container; containerMb = $p.ContainerMb; roaming = [bool]$p.Roaming; temporary = [bool]$p.Temporary; mandatory = [bool]$p.Mandatory
+        container = [string]$p.Container; containerMb = $p.ContainerMb; containerMaxMb = $p.ContainerMaxMb; roaming = [bool]$p.Roaming; temporary = [bool]$p.Temporary; mandatory = [bool]$p.Mandatory
         sizeMb = $p.SizeMb; sizePartial = [bool]$p.SizePartial; scanSeconds = [int]$p.ScanSeconds; notes = @(@($p.Notes) | Where-Object { $_ } | ForEach-Object { [string]$_ }); top = $top }
 }
 
