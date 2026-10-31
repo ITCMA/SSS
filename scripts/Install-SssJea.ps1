@@ -15,7 +15,9 @@
   Remove it again with -Remove.
 
 .PARAMETER Principal
-  The SSS service account that may connect, e.g. CORP\svc-sss$ (the gMSA of the SSS app pool).
+  The accounts that may connect, e.g. CORP\svc-sss$ (the gMSA of the SSS app pool). Several accounts are allowed:
+  -Principal 'CORP\svc-sss$','CORP\admin.alice' also lets Alice run Test-SssCitrix.ps1 -Vda for a test. Run the
+  script again with only the service account to take such a test account out.
 
 .PARAMETER ConfigurationName
   Name of the endpoint. Must match Sss:Processes:Configuration in sss.config.json (default SSS.Processes).
@@ -33,7 +35,7 @@
 #Requires -RunAsAdministrator
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
-    [string]$Principal = '',
+    [string[]]$Principal = @(),
     [string]$ConfigurationName = 'SSS.Processes',
     [string]$TranscriptDirectory = 'C:\ProgramData\SSS\jea-transcripts',
     [switch]$Remove
@@ -56,10 +58,12 @@ if ($Remove) {
     return
 }
 
-if (-not $Principal) { throw "Give the SSS service account with -Principal, e.g. -Principal 'CORP\svc-sss`$'." }
-if ($Principal -notmatch '^[^\\]+\\[^\\]+$') { throw "Principal must be written as DOMAIN\account, not '$Principal'." }
-try { $null = (New-Object System.Security.Principal.NTAccount($Principal)).Translate([System.Security.Principal.SecurityIdentifier]) }
-catch { throw "Principal '$Principal' cannot be resolved: $($_.Exception.Message)" }
+if ($Principal.Count -eq 0) { throw "Give the SSS service account with -Principal, e.g. -Principal 'CORP\svc-sss`$'." }
+foreach ($pr in $Principal) {
+    if ($pr -notmatch '^[^\\]+\\[^\\]+$') { throw "Principal must be written as DOMAIN\account, not '$pr'." }
+    try { $null = (New-Object System.Security.Principal.NTAccount($pr)).Translate([System.Security.Principal.SecurityIdentifier]) }
+    catch { throw "Principal '$pr' cannot be resolved: $($_.Exception.Message)" }
+}
 
 Step 'Preparing WinRM'
 if ($PSCmdlet.ShouldProcess('WinRM', 'Enable-PSRemoting')) { Enable-PSRemoting -SkipNetworkProfileCheck -Force | Out-Null; Ok 'WinRM enabled (TCP 5985)' }
@@ -178,9 +182,10 @@ if ($PSCmdlet.ShouldProcess($work, 'Write role capability and session configurat
     New-ModuleManifest -Path (Join-Path $moduleDir 'SssProcesses.psd1') -RootModule '' -ModuleVersion '1.0.0' -Description 'SSS process endpoint role capability'
 
     $pssc = Join-Path $work "$ConfigurationName.pssc"
+    $roles = @{}
+    foreach ($pr in $Principal) { $roles[$pr] = @{ RoleCapabilities = 'SssProcesses' } }
     New-PSSessionConfigurationFile -Path $pssc -SessionType RestrictedRemoteServer -RunAsVirtualAccount `
-        -TranscriptDirectory $TranscriptDirectory `
-        -RoleDefinitions @{ $Principal = @{ RoleCapabilities = 'SssProcesses' } }
+        -TranscriptDirectory $TranscriptDirectory -RoleDefinitions $roles
 
     # make the role capability findable: JEA looks in <module>\RoleCapabilities of modules on PSModulePath
     $machineModules = Join-Path $env:ProgramFiles 'WindowsPowerShell\Modules'
@@ -190,7 +195,7 @@ if ($PSCmdlet.ShouldProcess($work, 'Write role capability and session configurat
 
     if (Get-PSSessionConfiguration -Name $ConfigurationName -ErrorAction SilentlyContinue) { Unregister-PSSessionConfiguration -Name $ConfigurationName -Force }
     Register-PSSessionConfiguration -Name $ConfigurationName -Path $pssc -Force | Out-Null
-    Ok "Endpoint '$ConfigurationName' registered for $Principal"
+    Ok "Endpoint '$ConfigurationName' registered for $($Principal -join ', ')"
     Ok "Transcripts: $TranscriptDirectory"
 }
 

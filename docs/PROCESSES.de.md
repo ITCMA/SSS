@@ -45,7 +45,14 @@ Browser --> SSS (IIS) --> PowerShell-Worker --WinRM--> JEA-Endpunkt "SSS.Process
    .\Test-SssCitrix.ps1 -Controller ddc01 -UserName CORP\alice -Vda vda01.corp.local
    ```
 
-   Das Skript verbindet sich mit dem Endpunkt, listet die Prozesse des Benutzers auf und prüft, dass eine nicht vorhandene Prozess-ID abgelehnt wird. Führe es möglichst als Dienstkonto aus (`runas`), sonst mit deinem eigenen Konto, nachdem du es über `-Principal` in die JEA-Rolle aufgenommen hast.
+   Das Skript verbindet sich mit dem Endpunkt, listet die Prozesse des Benutzers auf und prüft, dass eine nicht vorhandene Prozess-ID abgelehnt wird. Nur die mit `-Principal` genannten Konten dürfen sich verbinden. Führe es deshalb als Dienstkonto aus (`runas`), oder nimm für den Test zusätzlich dein eigenes Administratorkonto auf und entferne es danach, indem du das Skript nur mit dem Dienstkonto erneut ausführst:
+
+   ```powershell
+   .\Install-SssJea.ps1 -Principal 'CORP\svc-sss$','CORP\admin.alice'   # für den Test
+   .\Install-SssJea.ps1 -Principal 'CORP\svc-sss$'                      # danach
+   ```
+
+   „Access is denied“ im Test heißt, dass das ausführende Konto nicht in dieser Liste steht.
 
 ## Verwenden
 

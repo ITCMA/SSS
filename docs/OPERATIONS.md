@@ -56,6 +56,7 @@ The API behind it is `GET /api/helpdesk/status` (helpdesk only).
 
 - It reveals nothing else: no version, names or details. For details use the Status tab.
 - The result is cached for 10 seconds, so frequent polling does not load the controller. The endpoint is rate limited (120 requests per minute).
+- IIS settings of the application live in the shipped `web.config` (handler outside a `location path="."` block), so the extra rule for `/healthz` inherits them.
 - It needs **no sign-in**, but IIS requires one for the whole application. `install.ps1 -HealthEndpoint` (also together with `-Update`) opens exactly the path `<application>/healthz` for anonymous access, nothing else, and tests it. To undo it, `install.ps1 -Uninstall` removes the rule; by hand: `Clear-WebConfiguration -Filter /system.webServer/security/authentication -PSPath MACHINE/WEBROOT/APPHOST -Location "Default Web Site/sss/healthz"`.
 - Without that rule a probe gets `401`. Many load balancers accept `401` as "alive" (it proves IIS and the application pool respond), but then they do not notice a lost Broker connection. Use the rule if you want real health checks.
 - Turn the endpoint off in the application with `Sss:Health:Enabled = false`.

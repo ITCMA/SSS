@@ -27,7 +27,7 @@ Browser --> SSS (IIS) --> PowerShell worker --WinRM--> JEA endpoint "SSS.Process
    .\Install-SssJea.ps1 -Principal 'CORP\svc-sss$'
    ```
 
-   It enables WinRM (TCP 5985), registers the endpoint `SSS.Processes` for exactly that account and writes the transcripts to `C:\ProgramData\SSS\jea-transcripts`. It changes nothing else. `-ConfigurationName` and `-TranscriptDirectory` change the defaults. `.\Install-SssJea.ps1 -Remove` unregisters the endpoint again.
+   (several accounts are possible: `-Principal 'a','b'`.) It enables WinRM (TCP 5985), registers the endpoint `SSS.Processes` for exactly that account and writes the transcripts to `C:\ProgramData\SSS\jea-transcripts`. It changes nothing else. `-ConfigurationName` and `-TranscriptDirectory` change the defaults. `.\Install-SssJea.ps1 -Remove` unregisters the endpoint again.
 
 2. **Open the network path:** TCP 5985 (WinRM over Kerberos, encrypted at message level) from the SSS server to the VDAs.
 
@@ -45,7 +45,14 @@ Browser --> SSS (IIS) --> PowerShell worker --WinRM--> JEA endpoint "SSS.Process
    .\Test-SssCitrix.ps1 -Controller ddc01 -UserName CORP\alice -Vda vda01.corp.local
    ```
 
-   The script connects to the endpoint, lists the user's processes and checks that a process id that does not exist is refused. Run it as the service account if you can (`runas`), otherwise with your own account after adding yourself to the JEA role (`-Principal`).
+   The script connects to the endpoint, lists the user's processes and checks that a process id that does not exist is refused. Only the accounts given with `-Principal` may connect, so run it as the service account (`runas`), or register your own administrator account for the test as well and take it out afterwards by running the script again with the service account only:
+
+   ```powershell
+   .\Install-SssJea.ps1 -Principal 'CORP\svc-sss$','CORP\admin.alice'   # for the test
+   .\Install-SssJea.ps1 -Principal 'CORP\svc-sss$'                      # afterwards
+   ```
+
+   "Access is denied" in the test means the account running it is not in that list.
 
 ## Using it
 

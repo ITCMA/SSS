@@ -118,6 +118,15 @@ try {
             foreach ($p in 'Uid','UserSID','SessionState','SessionType','DesktopGroupName','DNSName','StartTime','IdleDuration','ClientName','ClientAddress','ApplicationsInUse','SessionKey') {
                 if ($names -contains $p) { Ok "Session property $p" } else { Bad "Session property $p is missing (SSS will show it empty)" }
             }
+            if ($Redact) {
+                foreach ($s in $sessions) {
+                    Add-MaskTerm ([string]$s.DNSName) '<vda>'
+                    if ([string]$s.DNSName -match '^([^.]+)\.') { Add-MaskTerm $Matches[1] '<vda>' }
+                    Add-MaskTerm ([string]$s.DesktopGroupName) '<group>'
+                    Add-MaskTerm ([string]$s.ClientName) '<client>'
+                    Add-MaskTerm ([string]$s.UserName) '<user>'
+                }
+            }
             foreach ($s in $sessions) { Info ("Session: state={0} type={1} group={2} machine={3} apps={4}" -f $s.SessionState, $s.SessionType, $s.DesktopGroupName, $s.DNSName, (@($s.ApplicationsInUse) -join ',')) }
         } else {
             Info 'No session returned for this SID. If the user is logged on, check that -Controller is the right Delivery Controller / site.'
@@ -218,6 +227,7 @@ if ($sid) {
 if ($Vda) {
     Write-Host ''
     Write-Host "== Process control on $Vda ==" -ForegroundColor Cyan
+    if ($Redact) { Add-MaskTerm $Vda '<vda>' }
     if ($Vda -notmatch '^[A-Za-z0-9._-]{1,253}$') { Bad "-Vda must be a host name, not '$Vda'" }
     elseif (-not $sid) { Bad 'Process control needs the user SID (see the check above)' }
     else {
