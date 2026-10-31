@@ -9,7 +9,7 @@ namespace Sss.Web.Services;
 /// the detail text is technical and only shown to helpdesk members. Nothing here changes any state.</summary>
 public sealed class StatusService(
     SssOptions options, HelpdeskAccess helpdesk, TimeProvider clock,
-    IBrokerClient? broker = null, IMonitorClient? monitor = null)
+    IBrokerClient? broker = null, IMonitorClient? monitor = null, IReadOnlyList<string>? unknownConfigKeys = null)
 {
     private static readonly DateTimeOffset Started = new(Process.GetCurrentProcess().StartTime.ToUniversalTime());
 
@@ -38,6 +38,9 @@ public sealed class StatusService(
             new("identity", true, CurrentIdentity()),
             new("uptime", true, (clock.GetUtcNow() - Started).ToString(@"d\.hh\:mm\:ss")),
             AuditCheck(),
+            unknownConfigKeys is { Count: > 0 }
+                ? new("config", null, "unknown key(s) ignored: " + string.Join("; ", unknownConfigKeys))
+                : new("config", true, "ok"),
             new("helpdesk", helpdesk.Enabled ? true : null, helpdesk.Enabled ? options.Helpdesk.Group : "not configured"),
         };
 

@@ -120,6 +120,7 @@
   "stBroker": "Citrix Broker",
   "stMonitor": "Citrix Monitor (Verlauf, Qualität)",
   "stMonitorHttps": "Monitor über HTTPS",
+  "stConfig": "Konfigurationsschlüssel",
   "statusOk": "OK",
   "statusWarn": "Prüfen",
   "statusFail": "Fehler",

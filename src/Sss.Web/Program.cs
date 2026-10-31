@@ -25,6 +25,7 @@ builder.Configuration.AddJsonFile("sss.config.json", optional: true, reloadOnCha
 // ---------------------------------------------------------------------------------------------
 var options = builder.Configuration.GetSection("Sss").Get<SssOptions>() ?? new SssOptions();
 
+var unknownConfigKeys = ConfigCheck.UnknownKeys(builder.Configuration.GetSection("Sss"));
 var devAuth = options.Auth.Mode.Equals("Dev", StringComparison.OrdinalIgnoreCase);
 if (devAuth && !builder.Environment.IsDevelopment())
     throw new InvalidOperationException("Sss:Auth:Mode=Dev is only allowed when ASPNETCORE_ENVIRONMENT=Development.");
@@ -105,7 +106,7 @@ builder.Services.AddSingleton<SessionService>();
 builder.Services.AddSingleton<DetailsService>();
 builder.Services.AddSingleton<StatusService>(sp => new StatusService(
     options, sp.GetRequiredService<HelpdeskAccess>(), sp.GetRequiredService<TimeProvider>(),
-    sp.GetService<IBrokerClient>(), sp.GetService<IMonitorClient>()));
+    sp.GetService<IBrokerClient>(), sp.GetService<IMonitorClient>(), unknownConfigKeys));
 builder.Services.AddSingleton<HelpdeskAccess>();
 builder.Services.AddSingleton<HelpdeskService>();
 
@@ -162,6 +163,9 @@ builder.Services.AddRateLimiter(rl =>
 });
 
 var app = builder.Build();
+
+foreach (var key in unknownConfigKeys)
+    app.Logger.LogWarning("Unknown configuration key {Key} is ignored.", key);
 
 if (!mockProvider && options.Citrix.Monitor.Enabled && ODataMonitorClient.BuildBaseAddresses(options.Citrix).Any(u => u.Scheme == Uri.UriSchemeHttp))
     app.Logger.LogWarning("Monitor OData is accessed over HTTP (Windows authentication without transport encryption). Remove Sss:Citrix:Monitor:UseHttps=false or set Sss:Citrix:Monitor:BaseUrl to an https:// address.");

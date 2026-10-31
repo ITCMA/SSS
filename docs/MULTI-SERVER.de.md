@@ -25,7 +25,7 @@ Die Monitor-Datenbank gehört zur ganzen Site, jeder Controller liefert dieselbe
 SSS nutzt für den Monitor standardmäßig `https://` (`Citrix:Monitor:UseHttps`). Der Monitor-OData-Dienst ist **keine** IIS-Anwendung. Ihn stellt der Citrix-Monitor-Dienst selbst (`Citrix.Monitor.exe`) unter einer eigenen Adresse bereit, und diese ist standardmäßig `http://`. Antwortet `https://<Controller>/Citrix/Monitor/...` mit `404`, während `http://` `200` liefert, wurde der Dienst noch nicht auf HTTPS umgestellt. Zwei Wege:
 
 1. HTTPS am Controller aktivieren: Zertifikat installieren und binden wie in der Citrix-Dokumentation [TLS on Delivery Controllers](https://docs.citrix.com/en-us/citrix-virtual-apps-desktops/2402-ltsr/secure/tls) beschrieben, in `Citrix.Monitor.exe.Config` den Wert `owin:baseAddress` auf `https://` ändern und den Citrix Monitor Service neu starten. Auf jedem Controller wiederholen.
-2. HTTP im Verwaltungsnetz belassen: in `sss.config.json` `"Monitor": { "UseHttps": false }` setzen. Die Windows-Authentifizierung schützt die Anmeldedaten weiterhin, die Daten laufen aber unverschlüsselt.
+2. HTTP im Verwaltungsnetz belassen: in `sss.config.json` `{ "Sss": { "Citrix": { "Monitor": { "UseHttps": false } } } }` setzen (auf die Verschachtelung achten; der Status-Reiter listet Schlüssel, die SSS nicht kennt) und den App-Pool neu starten. Die Windows-Authentifizierung schützt die Anmeldedaten weiterhin, die Daten laufen aber unverschlüsselt.
 
 `Test-SssSetup.ps1` und der Status-Reiter zeigen das verwendete Protokoll und nennen diese Ursache bei einem 404.
 

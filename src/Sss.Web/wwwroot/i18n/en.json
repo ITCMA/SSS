@@ -120,6 +120,7 @@
   "stBroker": "Citrix Broker",
   "stMonitor": "Citrix Monitor (history, quality)",
   "stMonitorHttps": "Monitor over HTTPS",
+  "stConfig": "Configuration keys",
   "statusOk": "OK",
   "statusWarn": "Check",
   "statusFail": "Error",

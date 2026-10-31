@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using Sss.Web;
 using Sss.Web.Models;
 using Sss.Web.Providers;
@@ -139,5 +140,25 @@ public class CsvWriterTests
             Assert.Contains($"\"server\":\"{Environment.MachineName}\"", File.ReadAllText(file));
         }
         finally { if (Directory.Exists(dir)) Directory.Delete(dir, true); }
+    }
+
+    [Fact]
+    public void Misplaced_configuration_keys_are_reported_with_a_hint()
+    {
+        var cfg = new Microsoft.Extensions.Configuration.ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Sss:Provider"] = "Citrix",
+            ["Sss:UseHttps"] = "false",
+            ["Sss:Citrix:Monitor:UseHttps"] = "false",
+            ["Sss:Citrix:Controllers:0"] = "ddc",
+            ["Sss:PathBase"] = "/sss",
+            ["Sss:Citrix:Wokers"] = "3",
+        }).Build();
+
+        var unknown = Sss.Web.Services.ConfigCheck.UnknownKeys(cfg.GetSection("Sss"));
+
+        Assert.Equal(2, unknown.Count);
+        Assert.Contains(unknown, u => u.StartsWith("Sss:UseHttps (did you mean Sss:Citrix:Monitor:UseHttps?") );
+        Assert.Contains(unknown, u => u == "Sss:Citrix:Wokers" || u.StartsWith("Sss:Citrix:Wokers"));
     }
 }

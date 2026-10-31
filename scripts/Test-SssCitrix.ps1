@@ -84,6 +84,19 @@ Write-Host "== SSS Citrix check ==" -ForegroundColor Cyan
 Info ("Running as {0}" -f [Security.Principal.WindowsIdentity]::GetCurrent().Name)
 Info ("PowerShell {0}" -f $PSVersionTable.PSVersion)
 
+# Monitor transport: https:// unless told otherwise; falls back to http:// when the controller serves the Monitor over http only.
+if (-not $PSBoundParameters.ContainsKey('MonitorBaseUrl') -and -not $UseHttp) {
+    try { $null = Invoke-WebRequest -Uri ($MonitorBaseUrl + '$metadata') -UseDefaultCredentials -UseBasicParsing -TimeoutSec 20 -ErrorAction Stop }
+    catch {
+        $httpUrl = $MonitorBaseUrl -replace '^https://', 'http://'
+        try {
+            $null = Invoke-WebRequest -Uri ($httpUrl + '$metadata') -UseDefaultCredentials -UseBasicParsing -TimeoutSec 20 -ErrorAction Stop
+            Info 'Monitor does not answer over https:// but does over http://; checking over http:// (set Sss:Citrix:Monitor:UseHttps to false in sss.config.json, or enable HTTPS on the controller: docs/MULTI-SERVER.md)'
+            $MonitorBaseUrl = $httpUrl
+        } catch { }
+    }
+}
+
 # 0. Resolve the user to a SID (exactly what SSS uses; accepts "alice" or "DOMAIN\alice") ---------
 $sid = $null
 try {

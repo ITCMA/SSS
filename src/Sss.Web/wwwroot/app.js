@@ -379,7 +379,7 @@ const logoffSelected = (s, question) => state.view === 'hduser'
   : logoff(`api/sessions/${encodeURIComponent(s.uid)}/logoff`, question);
 
 // ---------- status page (helpdesk) ----------
-const CHECK_LABEL = { version: 'stVersion', provider: 'stProvider', identity: 'stIdentity', uptime: 'stUptime', audit: 'stAudit',
+const CHECK_LABEL = { version: 'stVersion', provider: 'stProvider', identity: 'stIdentity', uptime: 'stUptime', audit: 'stAudit', config: 'stConfig',
   helpdesk: 'stHelpdesk', broker: 'stBroker', monitor: 'stMonitor', 'monitor-https': 'stMonitorHttps' };
 
 async function loadSys() {

@@ -120,6 +120,7 @@
   "stBroker": "Citrix Broker",
   "stMonitor": "Citrix Monitor（历史、质量）",
   "stMonitorHttps": "通过 HTTPS 访问 Monitor",
+  "stConfig": "配置项",
   "statusOk": "正常",
   "statusWarn": "检查",
   "statusFail": "错误",
