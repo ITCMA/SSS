@@ -97,6 +97,7 @@
   "groupTechnical": "Identificadores técnicos",
   "chartNetwork": "Su dispositivo y red – latencia",
   "chartBandwidth": "Ancho de banda",
+  "chartBandwidthAvail": "Ancho de banda disponible",
   "chartDatacenter": "Centro de datos y VDA – latencia",
   "chartMore": "Más métricas",
   "chartNoData": "No hay mediciones en el tiempo para esta sesión (aún no recopiladas o ya eliminadas).",

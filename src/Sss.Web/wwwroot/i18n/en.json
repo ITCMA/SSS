@@ -97,6 +97,7 @@
   "groupTechnical": "Technical ids",
   "chartNetwork": "Your device & network – latency",
   "chartBandwidth": "Bandwidth",
+  "chartBandwidthAvail": "Available bandwidth",
   "chartDatacenter": "Datacenter & VDA – latency",
   "chartMore": "More metrics",
   "chartNoData": "No measurements over time for this session (they may not be collected yet or already removed).",

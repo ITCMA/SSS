@@ -427,26 +427,85 @@ function groupBox(g) {
   return el('section', { class: 'group' }, el('h3', { text: t(GROUP_TITLE[g.id] ?? g.id) }), dl);
 }
 
+// Axis steps that read well: 1, 2, 5 times a power of ten.
+function niceMax(v) {
+  const p = 10 ** Math.floor(Math.log10(v)), f = v / p;
+  return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * p;
+}
+
+const TIME_STEPS_MIN = [1, 2, 5, 10, 15, 30, 60, 120, 180, 360, 720, 1440, 2880, 10080];
+
+// Time ticks on round local times (full hours, quarter hours, midnight) so values can be read at a glance.
+function timeTicks(x0, x1, maxTicks) {
+  const span = (x1 - x0) / 60000;
+  const step = (TIME_STEPS_MIN.find((m) => span / m <= maxTicks) ?? 10080) * 60000;
+  const tzMs = new Date(x0).getTimezoneOffset() * 60000;
+  const ticks = [];
+  for (let x = Math.ceil((x0 - tzMs) / step) * step + tzMs; x <= x1; x += step) ticks.push(x);
+  return ticks;
+}
+
 function chart(title, series) {
-  const W = 420, H = 160, L = 44, R = 8, T = 12, B = 22;
+  const W = 420, H = 180, L = 46, R = 10, T = 12, B = 24;
   const pts = series.flatMap((s) => s.points);
   const x0 = Math.min(...pts.map((p) => p[0])), x1 = Math.max(...pts.map((p) => p[0]));
-  const y1 = Math.max(1, ...pts.map((p) => p[1]));
+  const yMax = niceMax(Math.max(1, ...pts.map((p) => p[1])));
   const sx = (x) => L + (x1 === x0 ? 0 : (x - x0) / (x1 - x0)) * (W - L - R);
-  const sy = (y) => H - B - (y / y1) * (H - T - B);
+  const sy = (y) => H - B - (y / yMax) * (H - T - B);
   const svg = svgEl('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': title });
-  svg.append(svgEl('line', { class: 'axis', x1: L, y1: H - B, x2: W - R, y2: H - B }), svgEl('line', { class: 'axis', x1: L, y1: T, x2: L, y2: H - B }));
   const label = (txt, x, y, anchor) => { const e = svgEl('text', { x, y, 'text-anchor': anchor }); e.textContent = txt; return e; };
-  svg.append(label(String(Math.round(y1)), L - 4, T + 8, 'end'), label('0', L - 4, H - B, 'end'));
-  const tf = new Intl.DateTimeFormat(state.lang, { timeStyle: 'short' });
-  svg.append(label(tf.format(x0), L, H - 5, 'start'), label(tf.format(x1), W - R, H - 5, 'end'));
+  const num = new Intl.NumberFormat(state.lang, { notation: 'compact', maximumFractionDigits: 1 });
+  const multiDay = x1 - x0 > 20 * 3600000;
+  const tf = new Intl.DateTimeFormat(state.lang, multiDay ? { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' } : { hour: '2-digit', minute: '2-digit' });
+  const full = new Intl.DateTimeFormat(state.lang, { dateStyle: 'short', timeStyle: 'medium' });
+  const val = new Intl.NumberFormat(state.lang, { maximumFractionDigits: 1 });
+
+  for (let i = 0; i <= 4; i++) {
+    const y = sy((yMax / 4) * i);
+    svg.append(svgEl('line', { class: i === 0 ? 'axis' : 'grid', x1: L, y1: y, x2: W - R, y2: y }), label(num.format((yMax / 4) * i), L - 4, y + 4, 'end'));
+  }
+  const ticks = timeTicks(x0, x1, 5);
+  ticks.forEach((x, i) => {
+    svg.append(svgEl('line', { class: 'grid', x1: sx(x), y1: T, x2: sx(x), y2: H - B }));
+    const anchor = sx(x) < L + 22 ? 'start' : sx(x) > W - R - 22 ? 'end' : 'middle';
+    svg.append(label(tf.format(x), sx(x), H - 7, anchor));
+  });
+  if (!ticks.length) svg.append(label(tf.format(x0), L, H - 7, 'start'), label(tf.format(x1), W - R, H - 7, 'end'));
+
   const legend = el('ul', { class: 'legend' });
   series.forEach((s, n) => {
     svg.append(svgEl('polyline', { class: `line s${n % 4}`, points: s.points.map((p) => `${sx(p[0]).toFixed(1)},${sy(p[1]).toFixed(1)}`).join(' ') }));
     const last = s.points[s.points.length - 1][1];
-    legend.append(el('li', { class: `k${n % 4}`, text: `■ ${fieldLabel(s.name)}${s.unit ? ` (${s.unit})` : ''}: ${Math.round(last)}` }));
+    legend.append(el('li', { class: `k${n % 4}`, text: `■ ${fieldLabel(s.name)}${s.unit ? ` (${s.unit})` : ''}: ${val.format(last)}` }));
   });
-  return el('figure', { class: 'chart' }, el('h3', { text: title }), svg, legend);
+
+  // Hover (mouse, pen and touch): vertical line, a dot per series and a box with the time and the values.
+  const cross = svgEl('line', { class: 'cross', y1: T, y2: H - B, visibility: 'hidden' });
+  const dots = series.map((_, n) => svgEl('circle', { class: `dot s${n % 4}`, r: 3.5, visibility: 'hidden' }));
+  const hit = svgEl('rect', { class: 'hit', x: L, y: T, width: W - L - R, height: H - T - B });
+  svg.append(cross, ...dots, hit);
+  const tip = el('div', { class: 'tip', hidden: '' });
+  const fig = el('figure', { class: 'chart' }, el('h3', { text: title }), svg, legend, tip);
+  const hide = () => { cross.setAttribute('visibility', 'hidden'); dots.forEach((d) => d.setAttribute('visibility', 'hidden')); tip.hidden = true; };
+  const show = (ev) => {
+    const box = svg.getBoundingClientRect();
+    if (!box.width) return;
+    const x = x0 + ((ev.clientX - box.left) / box.width * W - L) / (W - L - R) * (x1 - x0);
+    const near = series.map((s) => s.points.reduce((best, p) => (Math.abs(p[0] - x) < Math.abs(best[0] - x) ? p : best), s.points[0]));
+    const at = near.reduce((best, p) => (Math.abs(p[0] - x) < Math.abs(best[0] - x) ? p : best), near[0]);
+    cross.setAttribute('x1', sx(at[0])); cross.setAttribute('x2', sx(at[0])); cross.setAttribute('visibility', 'visible');
+    near.forEach((p, n) => { dots[n].setAttribute('cx', sx(p[0])); dots[n].setAttribute('cy', sy(p[1])); dots[n].setAttribute('visibility', 'visible'); });
+    tip.replaceChildren(el('strong', { text: full.format(at[0]) }),
+      ...near.map((p, n) => el('div', { class: `k${n % 4}`, text: `■ ${fieldLabel(series[n].name)}: ${val.format(p[1])}${series[n].unit ? ` ${series[n].unit}` : ''}` })));
+    tip.hidden = false;
+    const fb = fig.getBoundingClientRect();
+    const px = box.left - fb.left + (sx(at[0]) / W) * box.width;
+    tip.style.left = `${Math.max(0, Math.min(px + 12, fb.width - tip.offsetWidth))}px`;
+    tip.style.top = `${box.top - fb.top + 8}px`;
+  };
+  for (const type of ['pointermove', 'pointerdown']) hit.addEventListener(type, show);
+  hit.addEventListener('pointerleave', hide);
+  return fig;
 }
 
 function buildCharts(series) {
@@ -457,7 +516,8 @@ function buildCharts(series) {
   const used = new Set([...bw, ...dc, ...net]);
   const more = series.filter((s) => !used.has(s)).slice(0, 6);
   const box = el('div', { class: 'charts' });
-  for (const [title, list] of [[t('chartNetwork'), net], [t('chartBandwidth'), bw], [t('chartDatacenter'), dc]])
+  const bwAvail = bw.filter(is(/Available/i)), bwUsed = bw.filter((x) => !bwAvail.includes(x));
+  for (const [title, list] of [[t('chartNetwork'), net], [t('chartBandwidth'), bwUsed], [t('chartBandwidthAvail'), bwAvail], [t('chartDatacenter'), dc]])
     if (list.length) box.append(chart(title, list.slice(0, 4)));
   for (const s of more) box.append(chart(`${t('chartMore')}: ${fieldLabel(s.name)}`, [s]));
   return box.childElementCount ? box : el('p', { class: 'muted', text: t('chartNoData') });

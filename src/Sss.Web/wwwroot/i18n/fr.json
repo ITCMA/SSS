@@ -97,6 +97,7 @@
   "groupTechnical": "Identifiants techniques",
   "chartNetwork": "Votre appareil et réseau – latence",
   "chartBandwidth": "Bande passante",
+  "chartBandwidthAvail": "Bande passante disponible",
   "chartDatacenter": "Datacenter et VDA – latence",
   "chartMore": "Autres mesures",
   "chartNoData": "Aucune mesure dans le temps pour cette session (pas encore collectées ou déjà supprimées).",

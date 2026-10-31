@@ -10,7 +10,7 @@ labels: bug
 
 **SSS version** (Status tab, or the release you installed):
 
-**Output of `Test-SssSetup.ps1` and `Test-SssCitrix.ps1`** (remove real user names, host names and SIDs):
+**Output of `Test-SssSetup.ps1` and `Test-SssCitrix.ps1`** (run both with `-Redact` to hide user, domain, host names, SIDs and IP addresses):
 
 ```
 ```

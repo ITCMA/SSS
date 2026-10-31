@@ -149,7 +149,7 @@ builder.Services.AddRateLimiter(rl =>
 var app = builder.Build();
 
 if (!mockProvider && options.Citrix.Monitor.Enabled && ODataMonitorClient.BuildBaseAddress(options.Citrix).Scheme == Uri.UriSchemeHttp)
-    app.Logger.LogWarning("Monitor OData is accessed over HTTP (Windows authentication without transport encryption). Set Sss:Citrix:Monitor:BaseUrl to an https:// address.");
+    app.Logger.LogWarning("Monitor OData is accessed over HTTP (Windows authentication without transport encryption). Remove Sss:Citrix:Monitor:UseHttps=false or set Sss:Citrix:Monitor:BaseUrl to an https:// address.");
 
 // ---------------------------------------------------------------------------------------------
 // Pipeline (order matters)

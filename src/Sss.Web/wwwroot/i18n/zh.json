@@ -97,6 +97,7 @@
   "groupTechnical": "技术标识",
   "chartNetwork": "您的设备和网络 – 延迟",
   "chartBandwidth": "带宽",
+  "chartBandwidthAvail": "可用带宽",
   "chartDatacenter": "数据中心和 VDA – 延迟",
   "chartMore": "更多指标",
   "chartNoData": "此会话没有时间序列测量值（可能尚未采集或已被清除）。",

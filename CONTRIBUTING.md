@@ -21,7 +21,7 @@ Development mode uses a fixed demo user and sample data, so no Citrix is needed.
 
 ## Reporting a problem with a real Citrix site
 
-Run `Test-SssSetup.ps1` and `Test-SssCitrix.ps1` on the server and paste the output into the issue (remove real user names, host names and SIDs). Please name your Citrix version.
+Run `Test-SssSetup.ps1` and `Test-SssCitrix.ps1` on the server and paste the output into the issue (run both with `-Redact`, which hides user, domain, host names, SIDs and IP addresses). Please name your Citrix version.
 
 ## Pull requests
 

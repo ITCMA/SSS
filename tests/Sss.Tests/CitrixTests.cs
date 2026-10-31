@@ -447,4 +447,15 @@ public class ConfigValidationTests
         Assert.Throws<InvalidOperationException>(() =>
             new ODataMonitorClient(new HttpClient { BaseAddress = new Uri("http://ddc/") }, o));
     }
+
+    [Fact]
+    public void Monitor_address_defaults_to_https_and_http_is_an_option()
+    {
+        var o = new CitrixOptions { Controllers = ["ddc"] };
+        Assert.Equal("https://ddc/Citrix/Monitor/OData/v4/Data/", ODataMonitorClient.BuildBaseAddress(o).ToString());
+        o.Monitor.UseHttps = false;
+        Assert.Equal("http://ddc/Citrix/Monitor/OData/v4/Data/", ODataMonitorClient.BuildBaseAddress(o).ToString());
+        o.Monitor.BaseUrl = "https://other/odata";
+        Assert.Equal("https://other/odata/", ODataMonitorClient.BuildBaseAddress(o).ToString());
+    }
 }

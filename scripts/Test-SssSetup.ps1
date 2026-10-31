@@ -11,6 +11,10 @@
 
 .EXAMPLE
   .\Test-SssSetup.ps1 -Controller ddc01.corp.local
+
+.NOTES
+  Add -Redact before pasting the output into a public issue: it replaces user, domain, host names, SIDs,
+  IP addresses and GUIDs (-Mask adds more words).
 #>
 #Requires -Version 5.1
 [CmdletBinding()]
@@ -19,12 +23,50 @@ param(
     [string]$SiteName = 'Default Web Site',
     [string]$AppPath = 'sss',
     [string]$AppPoolName = 'SSS',
-    [string]$PhysicalPath = 'C:\inetpub\sss'
+    [string]$PhysicalPath = 'C:\inetpub\sss',
+    [switch]$Redact,
+    [string[]]$Mask = @()
 )
 
 $ErrorActionPreference = 'Continue'
 $script:problems = 0
 $script:warnings = 0
+
+# -Redact: replaces user, domain, host names, SIDs and IP addresses in everything the script prints,
+# so the output can be pasted into a public issue. Add further words with -Mask.
+$script:maskTerms = @()
+function Add-MaskTerm([string]$term, [string]$label) {
+    if ($term -and $term.Length -ge 2) { $script:maskTerms += [pscustomobject]@{ Term = $term; Label = $label } }
+}
+function Hide-Sensitive([string]$text) {
+    foreach ($m in ($script:maskTerms | Where-Object { $_.Label -eq '<domain>.local' })) {
+        $text = [regex]::Replace($text, '(?<![\w.-])([\w-]+\.)*' + [regex]::Escape($m.Term) + '(?![\w])', '<host>.<domain>.local', 'IgnoreCase')
+    }
+    foreach ($m in ($script:maskTerms | Where-Object { $_.Label -ne '<domain>.local' } | Sort-Object { $_.Term.Length } -Descending)) {
+        $text = [regex]::Replace($text, '(?<![\w])' + [regex]::Escape($m.Term) + '(?![\w])', $m.Label, 'IgnoreCase')
+    }
+    $text = [regex]::Replace($text, 'S-1-\d+(-\d+)+', '<sid>')
+    $text = [regex]::Replace($text, '\b\d{1,3}(\.\d{1,3}){3}\b', '<ip>')
+    $text = [regex]::Replace($text, '\b[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}\b', '<guid>')
+    $text
+}
+if ($Redact) {
+    Add-MaskTerm $Controller '<controller>'
+    if ($Controller -match '^[^.]+\.(.+)$') { Add-MaskTerm $Matches[1] '<domain>.local' }
+    Add-MaskTerm $env:USERNAME '<user>'
+    Add-MaskTerm $env:USERDOMAIN '<domain>'
+    Add-MaskTerm $env:COMPUTERNAME '<server>'
+    foreach ($d in @($env:USERDNSDOMAIN)) { if ($d) { Add-MaskTerm $d '<domain>.local' } }
+    foreach ($t in $Mask) { Add-MaskTerm $t '<masked>' }
+    function Write-Host {
+        param([Parameter(Position = 0, ValueFromRemainingArguments = $true)]$Object, $ForegroundColor, $BackgroundColor, [switch]$NoNewline)
+        $line = Hide-Sensitive ((@($Object) | ForEach-Object { "$_" }) -join ' ')
+        $p = @{ Object = $line }
+        if ($ForegroundColor) { $p.ForegroundColor = $ForegroundColor }
+        if ($NoNewline) { $p.NoNewline = $true }
+        Microsoft.PowerShell.Utility\Write-Host @p
+    }
+}
 function Ok($m)   { Write-Host "[ OK ] $m" -ForegroundColor Green }
 function Bad($m, $fix) {
     Write-Host "[FAIL] $m" -ForegroundColor Red
@@ -94,8 +136,9 @@ if (Test-Path $cfgPath) {
 if ($cfg) {
     if ($cfg.Provider -eq 'Citrix') { Ok 'Provider = Citrix' } else { Warn "Provider is '$($cfg.Provider)': SSS shows demo data" 'Set Sss:Provider to "Citrix"' }
     if (-not $Controller -and $cfg.Citrix.Controllers) { $Controller = @($cfg.Citrix.Controllers)[0] }
+    if ($Redact) { foreach ($c in @($cfg.Citrix.Controllers)) { Add-MaskTerm $c '<controller>'; if ($c -match '^[^.]+\.(.+)$') { Add-MaskTerm $Matches[1] '<domain>.local' } } }
     if ($cfg.Citrix -and $cfg.Citrix.Monitor -and $cfg.Citrix.Monitor.BaseUrl -like 'http://*') { Warn 'Monitor is accessed over HTTP' 'Set Sss:Citrix:Monitor:BaseUrl to https://<controller>/Citrix/Monitor/OData/v4/Data/' }
-    elseif ($cfg.Provider -eq 'Citrix' -and -not ($cfg.Citrix.Monitor -and $cfg.Citrix.Monitor.BaseUrl)) { Warn 'Monitor uses the default http:// address' 'Set Sss:Citrix:Monitor:BaseUrl to an https:// address' }
+    elseif ($cfg.Provider -eq 'Citrix' -and -not ($cfg.Citrix.Monitor -and $cfg.Citrix.Monitor.BaseUrl) -and $cfg.Citrix.Monitor -and $cfg.Citrix.Monitor.UseHttps -eq $false) { Warn 'Monitor uses the default http:// address (UseHttps = false)' 'Remove Sss:Citrix:Monitor:UseHttps or set Sss:Citrix:Monitor:BaseUrl to an https:// address' }
 }
 
 # 5. Helpdesk group -------------------------------------------------------------------------------

@@ -97,6 +97,7 @@
   "groupTechnical": "Technische IDs",
   "chartNetwork": "Ihr Gerät & Netzwerk – Latenz",
   "chartBandwidth": "Bandbreite",
+  "chartBandwidthAvail": "Verfügbare Bandbreite",
   "chartDatacenter": "Rechenzentrum & VDA – Latenz",
   "chartMore": "Weitere Messwerte",
   "chartNoData": "Keine Messwerte im Zeitverlauf für diese Sitzung (noch nicht erfasst oder bereits gelöscht).",

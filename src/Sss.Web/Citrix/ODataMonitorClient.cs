@@ -68,7 +68,8 @@ public sealed partial class ODataMonitorClient(HttpClient http, CitrixOptions op
 
     public static Uri BuildBaseAddress(CitrixOptions o)
     {
-        var url = o.Monitor.BaseUrl ?? $"http://{o.Controllers.FirstOrDefault() ?? "localhost"}/Citrix/Monitor/OData/v4/Data/";
+        var scheme = o.Monitor.UseHttps ? "https" : "http";
+        var url = o.Monitor.BaseUrl ?? $"{scheme}://{o.Controllers.FirstOrDefault() ?? "localhost"}/Citrix/Monitor/OData/v4/Data/";
         if (!url.EndsWith('/')) url += "/";
         return new Uri(url);
     }
@@ -143,8 +144,8 @@ public sealed partial class ODataMonitorClient(HttpClient http, CitrixOptions op
             next = null;
             if (doc.RootElement.TryGetProperty("@odata.nextLink", out var nl) && nl.GetString() is { } link
                 && Uri.TryCreate(http.BaseAddress, link, out var candidate)
-                && candidate.Authority == http.BaseAddress!.Authority)   // never follow links to other hosts
-                next = candidate;
+                && string.Equals(candidate.Host, http.BaseAddress!.Host, StringComparison.OrdinalIgnoreCase))   // never follow links to other hosts
+                next = new Uri(http.BaseAddress, candidate.PathAndQuery);   // keep scheme and port of the configured address (Monitor may advertise http://)
         }
         return result;
     }
@@ -304,7 +305,7 @@ public sealed partial class ODataMonitorClient(HttpClient http, CitrixOptions op
 
     private static IEnumerable<JsonProperty> Props(JsonElement e) =>
         e.ValueKind == JsonValueKind.Object
-            ? e.EnumerateObject().Where(p => p.Value.ValueKind is not (JsonValueKind.Object or JsonValueKind.Array) && !p.Name.StartsWith('@'))
+            ? e.EnumerateObject().Where(p => p.Value.ValueKind is not (JsonValueKind.Object or JsonValueKind.Array) && !p.Name.Contains('@'))
             : [];
 
     private static string Classify(string source, string name)

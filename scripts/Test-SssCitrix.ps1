@@ -9,7 +9,8 @@
     1. Broker SDK is available and the controller answers (Get-BrokerSession for the given user)
     2. Monitor OData is reachable with the current Windows identity
     3. The properties SSS relies on exist in the OData $metadata (User.Sid, Session.*, SessionMetrics date/RTT field)
-  Copy the output into a GitHub issue if something does not match; do not post real user names or SIDs.
+  Copy the output into a GitHub issue if something does not match. Add -Redact first: it replaces user, domain,
+  host names, SIDs, IP addresses and GUIDs in the output (-Mask adds more words, -UseHttp selects http:// for the Monitor).
 
 .EXAMPLE
   .\Test-SssCitrix.ps1 -Controller ddc01.corp.local -UserName CORP\alice
@@ -22,7 +23,10 @@
 param(
     [Parameter(Mandatory = $true)][string]$Controller,
     [Parameter(Mandatory = $true)][string]$UserName,
-    [string]$MonitorBaseUrl = "http://$Controller/Citrix/Monitor/OData/v4/Data/",
+    [switch]$UseHttp,
+    [switch]$Redact,
+    [string[]]$Mask = @(),
+    [string]$MonitorBaseUrl = $(if ($UseHttp) { "http://$Controller/Citrix/Monitor/OData/v4/Data/" } else { "https://$Controller/Citrix/Monitor/OData/v4/Data/" }),
     [string]$MetricsDateField = 'CollectedDate',
     [string]$IcaRttField = 'IcaRttMS'
 )
@@ -33,6 +37,45 @@ if ($UserName -notmatch '^[^\\]+\\[^\\]+$') {
 
 $ErrorActionPreference = 'Continue'
 $failed = 0
+
+# -Redact: replaces user, domain, host names, SIDs and IP addresses in everything the script prints,
+# so the output can be pasted into a public issue. Add further words with -Mask.
+$script:maskTerms = @()
+function Add-MaskTerm([string]$term, [string]$label) {
+    if ($term -and $term.Length -ge 2) { $script:maskTerms += [pscustomobject]@{ Term = $term; Label = $label } }
+}
+function Hide-Sensitive([string]$text) {
+    foreach ($m in ($script:maskTerms | Where-Object { $_.Label -eq '<domain>.local' })) {
+        $text = [regex]::Replace($text, '(?<![\w.-])([\w-]+\.)*' + [regex]::Escape($m.Term) + '(?![\w])', '<host>.<domain>.local', 'IgnoreCase')
+    }
+    foreach ($m in ($script:maskTerms | Where-Object { $_.Label -ne '<domain>.local' } | Sort-Object { $_.Term.Length } -Descending)) {
+        $text = [regex]::Replace($text, '(?<![\w])' + [regex]::Escape($m.Term) + '(?![\w])', $m.Label, 'IgnoreCase')
+    }
+    $text = [regex]::Replace($text, 'S-1-\d+(-\d+)+', '<sid>')
+    $text = [regex]::Replace($text, '\b\d{1,3}(\.\d{1,3}){3}\b', '<ip>')
+    $text = [regex]::Replace($text, '\b[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}\b', '<guid>')
+    $text
+}
+if ($Redact) {
+    Add-MaskTerm $UserName '<domain>\<user>'
+    Add-MaskTerm $Controller '<controller>'
+    Add-MaskTerm ($UserName -split '\\')[0] '<domain>'
+    Add-MaskTerm ($UserName -split '\\')[1] '<user>'
+    if ($Controller -match '^[^.]+\.(.+)$') { Add-MaskTerm $Matches[1] '<domain>.local' }
+    Add-MaskTerm $env:USERNAME '<user>'
+    Add-MaskTerm $env:USERDOMAIN '<domain>'
+    Add-MaskTerm $env:COMPUTERNAME '<server>'
+    foreach ($d in @($env:USERDNSDOMAIN)) { if ($d) { Add-MaskTerm $d '<domain>.local' } }
+    foreach ($t in $Mask) { Add-MaskTerm $t '<masked>' }
+    function Write-Host {
+        param([Parameter(Position = 0, ValueFromRemainingArguments = $true)]$Object, $ForegroundColor, $BackgroundColor, [switch]$NoNewline)
+        $line = Hide-Sensitive ((@($Object) | ForEach-Object { "$_" }) -join ' ')
+        $p = @{ Object = $line }
+        if ($ForegroundColor) { $p.ForegroundColor = $ForegroundColor }
+        if ($NoNewline) { $p.NoNewline = $true }
+        Microsoft.PowerShell.Utility\Write-Host @p
+    }
+}
 function Ok($m)   { Write-Host "[ OK ] $m" -ForegroundColor Green }
 function Bad($m)  { Write-Host "[FAIL] $m" -ForegroundColor Red; $script:failed++ }
 function Info($m) { Write-Host "[info] $m" }

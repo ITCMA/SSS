@@ -72,7 +72,8 @@ The Broker SDK exists only as Windows PowerShell 5.1 snap-ins. Starting PowerShe
 | `Citrix:Workers` | `2` | warm PowerShell workers |
 | `Citrix:RequestTimeoutSeconds` | `20` | per worker or Monitor request |
 | `Citrix:Monitor:Enabled` | `true` | `false` = live sessions and log-off only |
-| `Citrix:Monitor:BaseUrl` | `http://{controller}/Citrix/Monitor/OData/v4/Data/` | use `https://` |
+| `Citrix:Monitor:BaseUrl` | `https://{controller}/Citrix/Monitor/OData/v4/Data/` | full address, overrides `UseHttps` |
+| `Citrix:Monitor:UseHttps` | `true` | `false` = default address uses `http://` (controller without HTTPS binding) |
 | `Citrix:Monitor:MetricsDateField` / `IcaRttField` / `BandwidthField` | `CollectedDate` / `IcaRttMS` / `OutputBandwidthAvailable` | metric property names (verified on CVAD 2507 CU1) |
 | `Citrix:Monitor:BandwidthDivisor` | `1000` | converts the bandwidth field (bit/s) to kbit/s |
 | `StoreFrontUrl` | `""` | optional "Open StoreFront" link (absolute http(s) address) |

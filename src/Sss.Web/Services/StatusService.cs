@@ -31,7 +31,7 @@ public sealed class StatusService(
         {
             checks.Add(await TimedAsync("monitor", () => monitor.PingAsync(ct)));
             var https = ODataMonitorClient.BuildBaseAddress(options.Citrix).Scheme == Uri.UriSchemeHttps;
-            checks.Add(new("monitor-https", https ? true : null, https ? "https" : "http (use https:// in Sss:Citrix:Monitor:BaseUrl)"));
+            checks.Add(new("monitor-https", https ? true : null, https ? "https" : "http (set Sss:Citrix:Monitor:UseHttps to true or BaseUrl to https://)"));
         }
         else if (!options.Provider.Equals("Mock", StringComparison.OrdinalIgnoreCase))
             checks.Add(new("monitor", null, "disabled (no history, no quality data)"));

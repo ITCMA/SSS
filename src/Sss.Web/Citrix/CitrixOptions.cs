@@ -28,8 +28,11 @@ public sealed class MonitorOptions
     /// <summary>Set to false to run without history and metrics (live sessions and log-off only).</summary>
     public bool Enabled { get; set; } = true;
 
-    /// <summary>Defaults to http://{first controller}/Citrix/Monitor/OData/v4/Data/ – prefer https.</summary>
+    /// <summary>Defaults to {scheme}://{first controller}/Citrix/Monitor/OData/v4/Data/ (see UseHttps).</summary>
     public string? BaseUrl { get; set; }
+
+    /// <summary>Scheme of the default address when BaseUrl is empty. Set to false only for a controller without an HTTPS binding.</summary>
+    public bool UseHttps { get; set; } = true;
 
     /// <summary>Property of SessionMetrics used to pick the newest sample. Verify with scripts/Test-SssCitrix.ps1.</summary>
     public string MetricsDateField { get; set; } = "CollectedDate";
