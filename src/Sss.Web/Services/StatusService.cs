@@ -13,6 +13,22 @@ public sealed class StatusService(
 {
     private static readonly DateTimeOffset Started = new(Process.GetCurrentProcess().StartTime.ToUniversalTime());
 
+    private (DateTimeOffset At, bool Ok, string Status)? _health;
+
+    /// <summary>Cheap and cached for 10 s, so a load balancer polling often does not load the Delivery Controller.</summary>
+    public async Task<(bool Ok, string Status)> HealthAsync(CancellationToken ct)
+    {
+        if (_health is { } h && clock.GetUtcNow() - h.At < TimeSpan.FromSeconds(10)) return (h.Ok, h.Status);
+        var ok = true;
+        var status = "ok";
+        if (broker is not null)
+            try { await broker.PingAsync(ct); } catch (Exception ex) when (ex is not OperationCanceledException) { ok = false; status = "unavailable"; }
+        if (ok && monitor is not null)
+            try { await monitor.PingAsync(ct); } catch (Exception ex) when (ex is not OperationCanceledException) { status = "degraded"; }
+        _health = (clock.GetUtcNow(), ok, status);
+        return (ok, status);
+    }
+
     public async Task<IReadOnlyList<StatusCheck>> RunAsync(CancellationToken ct)
     {
         var checks = new List<StatusCheck>
@@ -30,7 +46,7 @@ public sealed class StatusService(
         if (monitor is not null)
         {
             checks.Add(await TimedAsync("monitor", () => monitor.PingAsync(ct)));
-            var https = ODataMonitorClient.BuildBaseAddress(options.Citrix).Scheme == Uri.UriSchemeHttps;
+            var https = ODataMonitorClient.BuildBaseAddresses(options.Citrix).All(u => u.Scheme == Uri.UriSchemeHttps);
             checks.Add(new("monitor-https", https ? true : null, https ? "https" : "http (set Sss:Citrix:Monitor:UseHttps to true or BaseUrl to https://)"));
         }
         else if (!options.Provider.Equals("Mock", StringComparison.OrdinalIgnoreCase))

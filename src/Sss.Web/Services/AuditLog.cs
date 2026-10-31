@@ -9,7 +9,7 @@ public sealed record AuditEntry(string Action, UserIdentity User, string? Sessio
     UserIdentity? Actor = null, string? Reason = null);
 
 /// <summary>Append-only JSON-lines audit trail, one file per day.</summary>
-public sealed class AuditLog(string directory, TimeProvider clock)
+public sealed class AuditLog(string directory, TimeProvider clock, bool perServerFiles = false)
 {
     private readonly object _gate = new();
 
@@ -28,11 +28,12 @@ public sealed class AuditLog(string directory, TimeProvider clock)
             actor = e.Actor?.Name,
             actorSid = e.Actor?.Sid,
             reason = e.Reason,
+            server = Environment.MachineName,
         });
         lock (_gate)
         {
             Directory.CreateDirectory(directory);
-            File.AppendAllText(Path.Combine(directory, $"audit-{now:yyyyMMdd}.jsonl"), line + Environment.NewLine);
+            File.AppendAllText(Path.Combine(directory, perServerFiles ? $"audit-{now:yyyyMMdd}-{Environment.MachineName}.jsonl" : $"audit-{now:yyyyMMdd}.jsonl"), line + Environment.NewLine);
         }
     }
 }

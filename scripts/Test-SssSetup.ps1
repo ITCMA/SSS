@@ -188,11 +188,19 @@ foreach ($u in $urls) {
                 $st = Invoke-RestMethod -Uri "$base/api/helpdesk/status" -UseDefaultCredentials -TimeoutSec 60
                 foreach ($c in $st) {
                     if ($c.ok -eq $true) { Ok ("status: {0} ({1})" -f $c.id, $c.detail) }
+                    elseif ($c.ok -eq $false -and $c.id -eq 'monitor' -and $c.detail -match '404') {
+                        Bad ("status: {0} ({1})" -f $c.id, $c.detail) ('The Monitor service answers on http:// only (it listens on its own address, not in IIS). Either set Sss:Citrix:Monitor:UseHttps to false, or enable HTTPS in Citrix.Monitor.exe.Config (owin:baseAddress) on the controller, see "Monitor over HTTPS" in docs/MULTI-SERVER.md')
+                    }
                     elseif ($c.ok -eq $false) { Bad ("status: {0} ({1})" -f $c.id, $c.detail) 'See README, "Troubleshooting"' }
                     else { Warn ("status: {0} ({1})" -f $c.id, $c.detail) }
                 }
             } catch { Info "Status endpoint not readable: $($_.Exception.Message)" }
         } else { Info 'You are not a helpdesk member, so the detailed status check was skipped (the "Status" tab shows the same checks).' }
+        $probe = $u -replace '/api/me$', '/healthz'
+        try {
+            $h = Invoke-WebRequest -Uri $probe -UseBasicParsing -TimeoutSec 30
+            Ok "GET $probe without credentials -> $($h.StatusCode) (usable as load balancer probe)"
+        } catch { Info "GET $probe without credentials is not answered ($($_.Exception.Message)). A load balancer probe needs: install.ps1 -Update -HealthEndpoint" }
         break
     } catch { Bad "GET $u failed: $($_.Exception.Message)" 'Check the Windows event log (source "IIS AspNetCore Module V2") and the app pool identity' }
 }

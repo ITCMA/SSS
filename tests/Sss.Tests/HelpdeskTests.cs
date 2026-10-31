@@ -60,6 +60,14 @@ public class HelpdeskApiTests : IClassFixture<HelpdeskOnFactory>
     public HelpdeskApiTests(HelpdeskOnFactory f) { _f = f; _c = f.NewClient(); }
 
     [Fact]
+    public async Task Health_probe_answers_without_details()
+    {
+        var r = await _c.GetAsync("/healthz");
+        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        Assert.Equal("""{"status":"ok"}""", await r.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
     public async Task Me_reports_helpdesk_membership()
     {
         var me = await (await _c.GetAsync("/api/me")).Json();

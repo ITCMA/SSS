@@ -4,7 +4,7 @@
 
 A lightweight web portal that lets end users of a **Citrix Virtual Apps and Desktops** (CVAD) site see and log off **their own sessions** – and nobody else's.
 
-> **Status: early development.** Tested end to end on Citrix Virtual Apps and Desktops **2203, 2402, 2507 and 2607 (LTSR)** test sites (single Delivery Controller): sessions, history, quality and log-off through IIS. Multi-server setups are not verified yet. Built-in demo mode lets you try the UI without Citrix.
+> **Status: early development.** Tested end to end on Citrix Virtual Apps and Desktops **2203, 2402, 2507 and 2607 (LTSR)** test sites (single Delivery Controller): sessions, history, quality and log-off through IIS. Several Delivery Controllers and several web servers are implemented (see [docs/MULTI-SERVER.md](docs/MULTI-SERVER.md)) but not yet verified on a real site. Built-in demo mode lets you try the UI without Citrix.
 
 *Citrix is a trademark of Cloud Software Group, Inc. This project is independent and not affiliated with or endorsed by it.*
 
@@ -194,7 +194,7 @@ Everything a helpdesk user does is written to the audit log with the acting user
 - [x] Citrix provider: live sessions and log-off via Broker SDK (warm Windows PowerShell 5.1 workers), history via Monitor OData
 - [x] Verified on CVAD 2507 CU1 (single Delivery Controller)
 - [x] Tested on CVAD 2203, 2402, 2507 and 2607
-- [ ] Multi-server setups (separate Delivery Controllers, StoreFront, Web Studio)
+- [ ] Verify multi-controller and multi-server setups on a real site (separate Delivery Controllers, StoreFront, Web Studio)
 - [x] Helpdesk role (AD group): search, farm overview, log off with reason, audit (not yet verified on a real farm)
 - [x] IIS installer script (app pool, permissions, Windows authentication)
 - [x] Expert view with charts, support info, message to a session, StoreFront link, status page, setup check (the expert view's optional record sets, the message and the installer's `-Update` still need a run on a real farm)
@@ -205,6 +205,7 @@ Everything a helpdesk user does is written to the audit log with the acting user
 ## Documentation
 
 - [Permissions at a glance](docs/PERMISSIONS.md): who needs which right, where and why, with copy-and-paste commands
+- [Several controllers and servers](docs/MULTI-SERVER.md): failover, load balancer, Kerberos alias, shared key ring, audit, Monitor over HTTPS
 - [Data sources](docs/DATA-SOURCES.md): where session data and quality metrics come from and how they are rated
 - [Architecture](docs/ARCHITECTURE.md): components, request flows, configuration reference
 - [Contributing](CONTRIBUTING.md)

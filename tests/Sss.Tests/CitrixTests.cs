@@ -458,4 +458,38 @@ public class ConfigValidationTests
         o.Monitor.BaseUrl = "https://other/odata";
         Assert.Equal("https://other/odata/", ODataMonitorClient.BuildBaseAddress(o).ToString());
     }
+
+    [Fact]
+    public void One_monitor_address_per_controller_unless_configured()
+    {
+        var o = new CitrixOptions { Controllers = ["ddc1", "ddc2"] };
+        Assert.Equal(["https://ddc1/Citrix/Monitor/OData/v4/Data/", "https://ddc2/Citrix/Monitor/OData/v4/Data/"],
+            ODataMonitorClient.BuildBaseAddresses(o).Select(u => u.ToString()).ToArray());
+        o.Monitor.BaseUrls = ["https://a/odata", "https://b/odata/"];
+        Assert.Equal(["https://a/odata/", "https://b/odata/"], ODataMonitorClient.BuildBaseAddresses(o).Select(u => u.ToString()).ToArray());
+    }
+
+    [Fact]
+    public async Task Monitor_fails_over_to_the_next_controller_and_remembers_it()
+    {
+        var o = new CitrixOptions { Controllers = ["ddc1", "ddc2"], Monitor = new MonitorOptions { UseHttps = false } };
+        var seen = new List<string>();
+        var c = new ODataMonitorClient(new HttpClient(new HostHandler(seen, down: "ddc1")) { BaseAddress = ODataMonitorClient.BuildBaseAddress(o) }, o);
+
+        await c.PingAsync(default);
+        await c.PingAsync(default);
+
+        Assert.Equal(["ddc1", "ddc2", "ddc2"], seen);
+    }
+
+    private sealed class HostHandler(List<string> seen, string down) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage r, CancellationToken ct)
+        {
+            seen.Add(r.RequestUri!.Host);
+            return Task.FromResult(r.RequestUri.Host == down
+                ? new HttpResponseMessage(System.Net.HttpStatusCode.NotFound)
+                : new HttpResponseMessage { Content = new StringContent("""{"value":[]}""", System.Text.Encoding.UTF8, "application/json") });
+        }
+    }
 }

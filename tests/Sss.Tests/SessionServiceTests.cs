@@ -125,4 +125,19 @@ public class CsvWriterTests
     [InlineData("=1+1", "'=1+1")]
     [InlineData("@SUM(A1)", "'@SUM(A1)")]
     public void Escapes_values(string input, string expected) => Assert.Equal(expected, CsvWriter.Escape(input));
+
+    [Fact]
+    public void Audit_files_can_be_named_per_server_for_a_shared_folder()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "sss-audit-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            new AuditLog(dir, TimeProvider.System, perServerFiles: true)
+                .Write(new AuditEntry("logoff", new Sss.Web.Models.UserIdentity("CORP\\a", "S-1-5-21-1"), "1", "ok", null));
+            var file = Assert.Single(Directory.GetFiles(dir));
+            Assert.EndsWith($"-{Environment.MachineName}.jsonl", file);
+            Assert.Contains($"\"server\":\"{Environment.MachineName}\"", File.ReadAllText(file));
+        }
+        finally { if (Directory.Exists(dir)) Directory.Delete(dir, true); }
+    }
 }

@@ -31,6 +31,9 @@ public sealed class MonitorOptions
     /// <summary>Defaults to {scheme}://{first controller}/Citrix/Monitor/OData/v4/Data/ (see UseHttps).</summary>
     public string? BaseUrl { get; set; }
 
+    /// <summary>One Monitor address per Delivery Controller, tried in order (failover). Empty = derived from Controllers.</summary>
+    public string[] BaseUrls { get; set; } = [];
+
     /// <summary>Scheme of the default address when BaseUrl is empty. Set to false only for a controller without an HTTPS binding.</summary>
     public bool UseHttps { get; set; } = true;
 

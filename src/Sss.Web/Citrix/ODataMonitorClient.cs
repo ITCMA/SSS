@@ -55,9 +55,9 @@ public sealed partial class ODataMonitorClient(HttpClient http, CitrixOptions op
         foreach (var f in new[] { o.Monitor.MetricsDateField, o.Monitor.IcaRttField, o.Monitor.BandwidthField })
             if (!FieldRegex().IsMatch(f))
                 throw new InvalidOperationException($"Sss:Citrix:Monitor field name '{f}' is not a valid OData property name.");
-        var url = BuildBaseAddress(o);
-        if (url.Scheme is not ("http" or "https"))
-            throw new InvalidOperationException("Sss:Citrix:Monitor:BaseUrl must be an http:// or https:// address.");
+        foreach (var url in BuildBaseAddresses(o))
+            if (url.Scheme is not ("http" or "https"))
+                throw new InvalidOperationException("Sss:Citrix:Monitor:BaseUrl(s) must be http:// or https:// addresses.");
         return true;
     }
 
@@ -66,13 +66,17 @@ public sealed partial class ODataMonitorClient(HttpClient http, CitrixOptions op
 
     private readonly ConcurrentDictionary<string, (long? Id, DateTimeOffset Expires)> _userIds = new();
 
-    public static Uri BuildBaseAddress(CitrixOptions o)
+    /// <summary>One address per Delivery Controller (or the explicit BaseUrl / BaseUrls). The first is tried first.</summary>
+    public static IReadOnlyList<Uri> BuildBaseAddresses(CitrixOptions o)
     {
         var scheme = o.Monitor.UseHttps ? "https" : "http";
-        var url = o.Monitor.BaseUrl ?? $"{scheme}://{o.Controllers.FirstOrDefault() ?? "localhost"}/Citrix/Monitor/OData/v4/Data/";
-        if (!url.EndsWith('/')) url += "/";
-        return new Uri(url);
+        IEnumerable<string> urls = o.Monitor.BaseUrls is { Length: > 0 } list ? list
+            : o.Monitor.BaseUrl is { } one ? [one]
+            : (o.Controllers.Length > 0 ? o.Controllers : ["localhost"]).Select(c => $"{scheme}://{c}/Citrix/Monitor/OData/v4/Data/");
+        return urls.Select(u => new Uri(u.EndsWith('/') ? u : u + "/")).DistinctBy(u => u.AbsoluteUri).ToArray();
     }
+
+    public static Uri BuildBaseAddress(CitrixOptions o) => BuildBaseAddresses(o)[0];
 
     public async Task<IReadOnlyList<MonitorSession>> GetLiveAsync(string userSid, CancellationToken ct)
     {
@@ -134,23 +138,53 @@ public sealed partial class ODataMonitorClient(HttpClient http, CitrixOptions op
     private async Task<IReadOnlyList<MonitorSession>> PagedAsync(string firstRelative, CancellationToken ct)
     {
         var result = new List<MonitorSession>();
-        Uri? next = new Uri(http.BaseAddress!, firstRelative);
-        for (var page = 0; next is not null && page < options.Monitor.MaxPages; page++)
+        Uri? next = null;
+        Uri baseUri = http.BaseAddress!;
+        for (var page = 0; page == 0 || (next is not null && page < options.Monitor.MaxPages); page++)
         {
-            using var doc = await GetJsonAsync(next, ct);
+            JsonDocument doc;
+            if (next is null) (doc, baseUri) = await GetJsonWithBaseAsync(firstRelative, ct);
+            else doc = await GetJsonAsync(next, ct);
+            using var _doc = doc;
             if (doc.RootElement.TryGetProperty("value", out var arr) && arr.ValueKind == JsonValueKind.Array)
                 result.AddRange(arr.EnumerateArray().Select(Parse).Where(s => s is not null)!);
 
             next = null;
             if (doc.RootElement.TryGetProperty("@odata.nextLink", out var nl) && nl.GetString() is { } link
-                && Uri.TryCreate(http.BaseAddress, link, out var candidate)
-                && string.Equals(candidate.Host, http.BaseAddress!.Host, StringComparison.OrdinalIgnoreCase))   // never follow links to other hosts
-                next = new Uri(http.BaseAddress, candidate.PathAndQuery);   // keep scheme and port of the configured address (Monitor may advertise http://)
+                && Uri.TryCreate(baseUri, link, out var candidate)
+                && string.Equals(candidate.Host, baseUri.Host, StringComparison.OrdinalIgnoreCase))   // never follow links to other hosts
+                next = new Uri(baseUri, candidate.PathAndQuery);   // keep scheme and port of the configured address (Monitor may advertise http://)
         }
         return result;
     }
 
-    private Task<JsonDocument> GetJsonAsync(string relative, CancellationToken ct) => GetJsonAsync(new Uri(http.BaseAddress!, relative), ct);
+    private async Task<JsonDocument> GetJsonAsync(string relative, CancellationToken ct) => (await GetJsonWithBaseAsync(relative, ct)).Doc;
+
+    // Delivery Controllers are tried in order; the one that answered last goes first, like in the Broker worker.
+    private Uri[]? _bases;
+    private int _active;
+
+    private Uri[] Bases => _bases ??= (http.BaseAddress is { } b && !BuildBaseAddresses(options).Any(u => u == b)
+        ? [b, .. BuildBaseAddresses(options)]
+        : BuildBaseAddresses(options).ToArray());
+
+    private async Task<(JsonDocument Doc, Uri Base)> GetJsonWithBaseAsync(string relative, CancellationToken ct)
+    {
+        var bases = Bases;
+        ProviderUnavailableException? last = null;
+        for (var n = 0; n < bases.Length; n++)
+        {
+            var i = (Volatile.Read(ref _active) + n) % bases.Length;
+            try
+            {
+                var doc = await GetJsonAsync(new Uri(bases[i], relative), ct);
+                Volatile.Write(ref _active, i);
+                return (doc, bases[i]);
+            }
+            catch (ProviderUnavailableException ex) { last = ex; }
+        }
+        throw last!;
+    }
 
     private async Task<JsonDocument> GetJsonAsync(Uri uri, CancellationToken ct)
     {

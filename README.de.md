@@ -4,7 +4,7 @@
 
 Ein schlankes Web-Portal, mit dem Endanwender einer **Citrix Virtual Apps and Desktops**-Farm (CVAD) **ihre eigenen Sitzungen** sehen und abmelden können – und die von niemand anderem.
 
-> **Status: frühe Entwicklung.** Durchgängig getestet auf Testfarmen mit Citrix Virtual Apps and Desktops **2203, 2402, 2507 und 2607 (LTSR)** (jeweils ein Delivery Controller): Sitzungen, Verlauf, Qualität und Abmelden über den IIS. Andere Setups mit mehreren Servern sind noch nicht verifiziert. Mit dem eingebauten Demo-Modus lässt sich die Oberfläche ohne Citrix ausprobieren.
+> **Status: frühe Entwicklung.** Durchgängig getestet auf Testfarmen mit Citrix Virtual Apps and Desktops **2203, 2402, 2507 und 2607 (LTSR)** (jeweils ein Delivery Controller): Sitzungen, Verlauf, Qualität und Abmelden über den IIS. Mehrere Delivery Controller und mehrere Webserver sind umgesetzt (siehe [docs/MULTI-SERVER.de.md](docs/MULTI-SERVER.de.md)), aber noch nicht in einer echten Umgebung geprüft. Mit dem eingebauten Demo-Modus lässt sich die Oberfläche ohne Citrix ausprobieren.
 
 *Citrix ist eine Marke der Cloud Software Group, Inc. Dieses Projekt ist unabhängig und weder mit ihr verbunden noch von ihr unterstützt.*
 
@@ -194,7 +194,7 @@ Als erstes: den Reiter **Status** öffnen (Helpdesk) oder `Test-SssSetup.ps1` au
 - [x] Citrix-Provider: Live-Sitzungen und Abmelden über das Broker-SDK (vorgewärmte Windows-PowerShell-5.1-Worker), Verlauf über Monitor-OData
 - [x] Auf CVAD 2507 CU1 verifiziert (ein Delivery Controller)
 - [x] Auf CVAD 2203, 2402, 2507 und 2607 getestet
-- [ ] Multi-Server-Setups (getrennte Delivery Controller, StoreFront, Web Studio)
+- [ ] Setups mit mehreren Controllern und Servern in einer echten Umgebung prüfen (getrennte Delivery Controller, StoreFront, Web Studio)
 - [x] Helpdesk-Rolle (AD-Gruppe): Suche, Farm-Übersicht, Abmelden mit Grund, Audit (auf einer echten Farm noch nicht verifiziert)
 - [x] IIS-Installationsskript (App-Pool, Berechtigungen, Windows-Authentifizierung)
 - [x] Experten-Ansicht mit Diagrammen, Support-Info, Nachricht an eine Sitzung, StoreFront-Link, Statusseite, Setup-Prüfung (die optionalen Datensätze der Experten-Ansicht, die Nachricht und `-Update` des Installers brauchen noch einen Lauf auf einer echten Farm)
@@ -205,6 +205,7 @@ Als erstes: den Reiter **Status** öffnen (Helpdesk) oder `Test-SssSetup.ps1` au
 ## Dokumentation
 
 - [Berechtigungen auf einen Blick](docs/PERMISSIONS.de.md): wer braucht welches Recht, wo und warum, mit Befehlen zum Kopieren
+- [Mehrere Controller und Server](docs/MULTI-SERVER.de.md): Failover, Load Balancer, Kerberos-Alias, gemeinsamer Schlüsselring, Audit, Monitor über HTTPS
 - [Datenquellen](docs/DATA-SOURCES.de.md): woher Sitzungsdaten und Qualitätswerte kommen und wie sie bewertet werden
 - [Architektur](docs/ARCHITECTURE.de.md): Bausteine, Abläufe, Konfigurationsreferenz
 - [Sicherheit](SECURITY.md): Sicherheitsmodell, Betreiber-Checkliste, Meldewege

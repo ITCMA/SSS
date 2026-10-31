@@ -11,6 +11,8 @@ public sealed class SssOptions
     public string StoreFrontUrl { get; set; } = "";
     public AuthOptions Auth { get; set; } = new();
     public AuditOptions Audit { get; set; } = new();
+    public HealthOptions Health { get; set; } = new();
+    public DataProtectionOptions DataProtection { get; set; } = new();
     public RateLimitOptions RateLimit { get; set; } = new();
     public QualityThresholds Quality { get; set; } = new();
     public global::Sss.Web.Citrix.CitrixOptions Citrix { get; set; } = new();
@@ -33,6 +35,26 @@ public sealed class AuditOptions
 {
     /// <summary>Directory for audit-YYYYMMDD.jsonl files; relative paths are based on the app directory.</summary>
     public string Directory { get; set; } = "logs";
+
+    /// <summary>Name the files audit-YYYYMMDD-SERVER.jsonl so several servers can write into one shared folder.</summary>
+    public bool PerServerFiles { get; set; }
+}
+
+public sealed class HealthOptions
+{
+    /// <summary>Serves GET /healthz (no details, 200 or 503) for load balancers. IIS must allow anonymous access to that
+    /// path; scripts/install.ps1 -HealthEndpoint does that.</summary>
+    public bool Enabled { get; set; } = true;
+}
+
+public sealed class DataProtectionOptions
+{
+    /// <summary>Shared folder for the key ring when SSS runs on several servers (CSRF tokens then work on every server).
+    /// Empty = keys stay on this server (single server, or a load balancer with sticky sessions).</summary>
+    public string KeyDirectory { get; set; } = "";
+
+    /// <summary>Optional: encrypt the keys for this account or group SID (DPAPI-NG), e.g. the SID of the gMSA. Windows only.</summary>
+    public string ProtectToSid { get; set; } = "";
 }
 
 public sealed class RateLimitOptions

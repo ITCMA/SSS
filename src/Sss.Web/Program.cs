@@ -8,6 +8,7 @@ using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Antiforgery;
+using Microsoft.AspNetCore.DataProtection;
 using Sss.Web;
 using Sss.Web.Citrix;
 using Sss.Web.Models;
@@ -99,7 +100,7 @@ else
 
 builder.Services.AddSingleton(sp => new AuditLog(
     Path.GetFullPath(options.Audit.Directory, builder.Environment.ContentRootPath),
-    sp.GetRequiredService<TimeProvider>()));
+    sp.GetRequiredService<TimeProvider>(), options.Audit.PerServerFiles));
 builder.Services.AddSingleton<SessionService>();
 builder.Services.AddSingleton<DetailsService>();
 builder.Services.AddSingleton<StatusService>(sp => new StatusService(
@@ -110,6 +111,18 @@ builder.Services.AddSingleton<HelpdeskService>();
 
 builder.Services.ConfigureHttpJsonOptions(o =>
     o.SerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase)));
+
+// Several servers behind one name need the same key ring, otherwise a CSRF token issued by one server is rejected by another.
+var dp = builder.Services.AddDataProtection().SetApplicationName("SSS");
+if (options.DataProtection.KeyDirectory is { Length: > 0 } keyDir)
+{
+    dp.PersistKeysToFileSystem(new DirectoryInfo(keyDir));
+    if (options.DataProtection.ProtectToSid is { Length: > 0 } sid)
+    {
+        if (!OperatingSystem.IsWindows()) throw new InvalidOperationException("Sss:DataProtection:ProtectToSid needs Windows.");
+        dp.ProtectKeysWithDpapiNG($"SID={sid}", Microsoft.AspNetCore.DataProtection.XmlEncryption.DpapiNGProtectionDescriptorFlags.None);
+    }
+}
 
 // CSRF: the token travels in a header, the matching secret in a SameSite=Strict, HttpOnly cookie.
 builder.Services.AddAntiforgery(o =>
@@ -143,12 +156,14 @@ builder.Services.AddRateLimiter(rl =>
     };
     rl.AddPolicy("logoff", http => PerUserPerMinute(http, options, options.RateLimit.LogoffRequestsPerMinute));
     rl.AddPolicy("read", http => PerUserPerMinute(http, options, options.RateLimit.ReadRequestsPerMinute));
+    rl.AddPolicy("health", http => System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter("health",
+        _ => new System.Threading.RateLimiting.FixedWindowRateLimiterOptions { PermitLimit = 120, Window = TimeSpan.FromMinutes(1) }));
     rl.AddPolicy("helpdesk", http => PerUserPerMinute(http, options, options.RateLimit.HelpdeskRequestsPerMinute));
 });
 
 var app = builder.Build();
 
-if (!mockProvider && options.Citrix.Monitor.Enabled && ODataMonitorClient.BuildBaseAddress(options.Citrix).Scheme == Uri.UriSchemeHttp)
+if (!mockProvider && options.Citrix.Monitor.Enabled && ODataMonitorClient.BuildBaseAddresses(options.Citrix).Any(u => u.Scheme == Uri.UriSchemeHttp))
     app.Logger.LogWarning("Monitor OData is accessed over HTTP (Windows authentication without transport encryption). Remove Sss:Citrix:Monitor:UseHttps=false or set Sss:Citrix:Monitor:BaseUrl to an https:// address.");
 
 // ---------------------------------------------------------------------------------------------
@@ -213,6 +228,14 @@ app.UseStaticFiles(new StaticFileOptions
 // API. Every handler resolves the caller with ResolveUser (never from parameters).
 // ---------------------------------------------------------------------------------------------
 var uidPattern = new Regex("^[A-Za-z0-9_-]{1,64}$", RegexOptions.Compiled);
+
+// Load balancer probe: no details, no identity. 503 only when the Broker (needed to list and log off sessions) fails.
+if (options.Health.Enabled)
+    app.MapGet("/healthz", async (StatusService svc, CancellationToken ct) =>
+    {
+        var h = await svc.HealthAsync(ct);
+        return Results.Json(new { status = h.Status }, statusCode: h.Ok ? 200 : 503);
+    }).AllowAnonymous().RequireRateLimiting("health");
 
 var api = app.MapGroup("/api");
 

@@ -61,6 +61,9 @@ Das Broker-SDK gibt es nur als Windows-PowerShell-5.1-Snap-ins. Pro Anfrage Powe
 | `RefreshSeconds` | `30` | automatische Aktualisierung der Oberfläche |
 | `Auth:Mode` | `Iis` | `Dev` (fester Demo-Benutzer) wird nur in der Development-Umgebung akzeptiert |
 | `Audit:Directory` | `logs` | Ort des Audit-Logs (relativ zur App) |
+| `Audit:PerServerFiles` | `false` | `true` = `audit-YYYYMMDD-SERVER.jsonl`, für einen gemeinsamen Ordner mehrerer Server |
+| `Health:Enabled` | `true` | `GET /healthz` für Load Balancer (ohne Details) |
+| `DataProtection:KeyDirectory` / `ProtectToSid` | `""` | gemeinsamer Schlüsselring (und DPAPI-NG-Schutz) für mehrere Server |
 | `RateLimit:LogoffRequestsPerMinute` | `10` | pro Benutzer |
 | `RateLimit:ReadRequestsPerMinute` | `120` | pro Benutzer |
 | `RateLimit:HelpdeskRequestsPerMinute` | `60` | pro Helpdesk-Benutzer |
@@ -73,6 +76,7 @@ Das Broker-SDK gibt es nur als Windows-PowerShell-5.1-Snap-ins. Pro Anfrage Powe
 | `Citrix:RequestTimeoutSeconds` | `20` | pro Worker- oder Monitor-Anfrage |
 | `Citrix:Monitor:Enabled` | `true` | `false` = nur Live-Sitzungen und Abmelden |
 | `Citrix:Monitor:BaseUrl` | `https://{Controller}/Citrix/Monitor/OData/v4/Data/` | volle Adresse, hat Vorrang vor `UseHttps` |
+| `Citrix:Monitor:BaseUrls` | aus `Controllers` abgeleitet | je Controller eine Monitor-Adresse, der Reihe nach probiert |
 | `Citrix:Monitor:UseHttps` | `true` | `false` = Standardadresse mit `http://` (Controller ohne HTTPS-Bindung) |
 | `Citrix:Monitor:MetricsDateField` / `IcaRttField` / `BandwidthField` | `CollectedDate` / `IcaRttMS` / `OutputBandwidthAvailable` | Namen der Messwert-Felder (auf CVAD 2507 CU1 geprüft) |
 | `Citrix:Monitor:BandwidthDivisor` | `1000` | rechnet das Bandbreitenfeld (bit/s) in kbit/s um |

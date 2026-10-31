@@ -28,6 +28,10 @@
   Optional AD group (e.g. CORP\SSS-Helpdesk) whose members may find users and log off their sessions.
   Written to a new sss.config.json only; for an existing configuration edit Sss:Helpdesk:Group yourself.
 
+.PARAMETER HealthEndpoint
+  Opens GET <app>/healthz for anonymous access so a load balancer can probe it (answers only {"status":"ok"} or 503).
+  Works together with -Update.
+
 .EXAMPLE
   .\install.ps1 -Controllers ddc01.corp.local,ddc02.corp.local -ServiceAccount 'CORP\svc-sss$' -HelpdeskGroup 'CORP\SSS-Helpdesk'
 
@@ -55,7 +59,8 @@ param(
     [switch]$Interactive,
     [switch]$Update,
     [switch]$Uninstall,
-    [switch]$SkipSmokeTest
+    [switch]$SkipSmokeTest,
+    [switch]$HealthEndpoint
 )
 
 $ErrorActionPreference = 'Stop'
@@ -230,6 +235,18 @@ if ($PSCmdlet.ShouldProcess($PhysicalPath, "Grant $identity access")) {
 }
 
 }   # end of "if (-not $Update)"
+
+if ($HealthEndpoint -and -not $Uninstall) {
+    Step 'Load balancer probe'
+    # Only /healthz is opened for anonymous access; it answers {"status":"ok"} or 503 and reveals nothing else.
+    $healthLocation = "$SiteName/$AppPath/healthz"
+    $auth = '/system.webServer/security/authentication'
+    if ($PSCmdlet.ShouldProcess($healthLocation, 'Allow anonymous access to /healthz')) {
+        Set-WebConfigurationProperty -Filter "$auth/anonymousAuthentication" -Name enabled -Value $true -PSPath 'MACHINE/WEBROOT/APPHOST' -Location $healthLocation
+        Set-WebConfigurationProperty -Filter "$auth/windowsAuthentication" -Name enabled -Value $false -PSPath 'MACHINE/WEBROOT/APPHOST' -Location $healthLocation
+        Ok "GET /$AppPath/healthz is open without credentials"
+    }
+}
 
 $httpsBinding = Get-WebBinding -Name $SiteName -Protocol 'https' -ErrorAction SilentlyContinue
 if (-not $Update -and -not $httpsBinding) { Warn "Site '$SiteName' has no HTTPS binding. Publish SSS over HTTPS only (the CSRF cookie is Secure)." }
