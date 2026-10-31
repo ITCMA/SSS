@@ -13,7 +13,7 @@ Browser --> SSS (IIS) --> PowerShell-Worker --WinRM--> JEA-Endpunkt "SSS.Process
                           (Dienstkonto)                 Get-SssProcess / Stop-SssProcess
 ```
 
-- Der JEA-Endpunkt bietet genau **zwei Befehle**. Das Dienstkonto kann darüber nichts anderes auf dem VDA ausführen.
+- Der JEA-Endpunkt bietet genau **drei Befehle**: `Get-SssProcess` und `Stop-SssProcess` für diese Funktion sowie den nur lesenden `Get-SssProfile` für [Profiltyp und Größe](DATA-SOURCES.de.md#profiltyp-und-größe) in der Expertenansicht. Das Dienstkonto kann darüber nichts anderes auf dem VDA ausführen.
 - Er läuft als vorübergehender lokaler Administrator (ein *virtuelles Konto*, das nur für diesen Aufruf existiert); das Dienstkonto selbst braucht auf den VDAs keine Administratorrechte.
 - **Nur die eigenen Prozesse des Benutzers werden angefasst.** Beide Befehle erhalten die SID des Benutzers und vergleichen sie mit dem Besitzer jedes Prozesses; Systemprozesse, Prozesse anderer Benutzer und unbekannte IDs werden abgelehnt (`not-owned`, `not-found`). Die Citrix-Sitzungsprozesse `wfshell.exe`, `ctxgfx.exe` und `cmstart.exe` sind geschützt (`protected`).
 - **SSS prüft die Sitzung doppelt.** Die Webanwendung akzeptiert eine Sitzung nur, wenn sie eine Live-Sitzung des Ziels ist; der PowerShell-Worker sucht sie noch einmal im Broker und lehnt sie ab, wenn sie nicht diesem Benutzer gehört. Nur der Rechner dieser Sitzung wird kontaktiert.
@@ -58,6 +58,10 @@ Die **Expertenansicht** einschalten (Knopf im Kopf). Jede Live-Sitzung hat nun n
 
 Auf einem Multi-Session-Host (RDS-Server) zeigt die Liste die Prozesse des Benutzers dieses Rechners; hat er dort mehrere Sitzungen, erscheinen alle.
 
+## Endpunkt aktualisieren
+
+Neue SSS-Versionen können dem Endpunkt Befehle hinzufügen (Version 0.4 brachte `Get-SssProfile`). Nach einem solchen Update `Install-SssJea.ps1 -Principal ...` auf den VDAs erneut ausführen; es ersetzt die Registrierung. Bis dahin funktionieren die übrigen Funktionen weiter, und der Profil-Knopf weist darauf hin, dass der Endpunkt veraltet ist.
+
 ## Was schiefgehen kann
 
 | Meldung oder Ergebnis | Ursache |
@@ -72,7 +76,7 @@ Auf einem Multi-Session-Host (RDS-Server) zeigt die Liste die Prozesse des Benut
 
 ## Sicherheitshinweise
 
-- Diese Funktion gibt dem SSS-Dienstkonto einen Weg zu den VDAs. Beschränke ihn auf die beiden gelieferten Befehle; erweitere die Rollenfähigkeit nicht.
+- Diese Funktion gibt dem SSS-Dienstkonto einen Weg zu den VDAs. Beschränke ihn auf die drei gelieferten Befehle; erweitere die Rollenfähigkeit nicht.
 - Die JEA-Transkripte zeigen jeden Aufruf. Sammle sie mit euren üblichen Werkzeugen ein, wenn du neben der Audit-Datei von SSS einen zweiten Nachweis brauchst.
 - Die Zielgruppe `Helpdesk` nimmt die Funktion normalen Benutzern weg und lässt sie dem Support.
 - Prozessnamen und Fenstertitel eines Benutzers können Privates enthalten. Sie werden nur diesem Benutzer und dem Helpdesk gezeigt und nicht im Audit-Protokoll gespeichert (dort steht nur die Prozess-ID).

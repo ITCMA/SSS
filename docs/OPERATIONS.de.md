@@ -89,7 +89,7 @@ Jede Aktion, die etwas ändert oder fremde Daten ansieht, wird in eine JSON-Line
 | `helpdesk-logoff:...` | das Helpdesk Sitzungen eines Benutzers abmeldet |
 | `helpdesk-message` | das Helpdesk eine Nachricht an eine Sitzung sendet |
 | `helpdesk:search`, `helpdesk:list-all`, `helpdesk:view`, `helpdesk:details` | das Helpdesk sucht, die Farm auflistet, einen Benutzer oder die Expertenansicht öffnet (Ansichtseinträge höchstens einmal je 5 Minuten pro Ziel) |
-| `list-processes`, `end-process` | Prozesse einer Sitzung aufgelistet oder beendet werden, durch den Benutzer oder das Helpdesk |
+| `list-processes`, `end-process`, `profile-info` | Prozesse einer Sitzung aufgelistet oder beendet oder Profiltyp und Größe gelesen werden, durch den Benutzer oder das Helpdesk |
 
 Hinweise:
 

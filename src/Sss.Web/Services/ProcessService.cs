@@ -16,6 +16,17 @@ public sealed partial class ProcessService(IProcessProvider provider, SessionSer
             ? isHelpdesk || !options.Citrix.Processes.Audience.Equals("Helpdesk", StringComparison.OrdinalIgnoreCase)
             : false;
 
+    public bool ProfileAvailable(bool isHelpdesk) =>
+        Available(isHelpdesk) && (options.Citrix.Processes.ProfileInfo || options.Provider.Equals("Mock", StringComparison.OrdinalIgnoreCase));
+
+    public async Task<ProfileInfo?> ProfileAsync(UserIdentity target, string uid, UserIdentity? actor, string? ip, CancellationToken ct)
+    {
+        if (!await OwnsAsync(target, uid, ct)) return null;
+        var info = await provider.GetProfileAsync(target.Sid, uid, options.Citrix.Processes.ProfileScanSeconds, ct);
+        audit.Write(new AuditEntry("profile-info", target, uid, "success", ip, actor));
+        return info;
+    }
+
     public async Task<ProcessListResult?> ListAsync(UserIdentity target, string uid, UserIdentity? actor, string? ip, CancellationToken ct)
     {
         if (!await OwnsAsync(target, uid, ct)) return null;

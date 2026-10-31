@@ -79,6 +79,20 @@ public class HelpdeskApiTests : IClassFixture<HelpdeskOnFactory>
     }
 
     [Fact]
+    public async Task Profile_info_is_available_for_an_own_session_and_audited()
+    {
+        var sessions = await (await _c.GetAsync("/api/sessions?range=24h")).Json();
+        var uid = sessions.GetProperty("live").EnumerateArray().First().GetProperty("uid").GetString()!;
+
+        var p = await (await _c.GetAsync($"/api/sessions/{uid}/profile")).Json();
+
+        Assert.Equal("FSLogix", p.GetProperty("type").GetString());
+        Assert.True(p.GetProperty("sizeMb").GetInt32() > 0);
+        Assert.Contains("profile-info", string.Concat(Directory.GetFiles(_f.AuditDir).Select(File.ReadAllText)));
+        Assert.Equal(HttpStatusCode.NotFound, (await _c.GetAsync("/api/sessions/does-not-exist/profile")).StatusCode);
+    }
+
+    [Fact]
     public async Task Processes_of_a_foreign_session_are_not_found()
     {
         Assert.Equal(HttpStatusCode.NotFound, (await _c.GetAsync("/api/sessions/does-not-exist/processes")).StatusCode);

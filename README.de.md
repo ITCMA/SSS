@@ -21,6 +21,7 @@ Ein schlankes Web-Portal, mit dem Endanwender einer **Citrix Virtual Apps and De
 - **Abmelden** mit Bestätigung, dazu die Sammelaktionen „Alle getrennten abmelden“ (nur sichtbar, wenn es welche gibt) und „Alle abmelden“. Einen „Trennen“-Knopf gibt es bewusst nicht
 - App/Desktop, Bereitstellungsgruppe, Maschine, Startzeit, Dauer, Inaktivität, Client-Name und -IP
 - **Sitzungsqualität** mit Ampel, getrennt nach *Ihr Gerät & Netzwerk* (Latenz, Bandbreite) und *Rechenzentrum & VDA* (Anmeldezeit, Serverlast) – Schwellwerte sind konfigurierbar
+- **Anmelde-Wasserfall** und **Profiltyp und Größe** in der Expertenansicht: wohin die Anmeldezeit geht (Brokering, HDX, Gruppenrichtlinien, Skripte, Profil laden, Shell) und ob das Profil lokal, servergespeichert, Citrix UPM oder FSLogix ist, wie groß es ist und welche Ordner am größten sind
 - **Anwendungen und Prozesse** einer Sitzung: ansehen und eine hängende Anwendung schließen oder beenden, für Benutzer (eigene Sitzungen) und Helpdesk, über einen eingeschränkten JEA-Endpunkt auf den VDAs (standardmäßig aus, siehe [docs/PROCESSES.de.md](docs/PROCESSES.de.md))
 - Filter, Sortierung, CSV-Export (mit Schutz vor Formel-Injection in Tabellenkalkulationen)
 - Audit-Log (wer hat wann von wo welche Sitzung abgemeldet) als JSON-Lines

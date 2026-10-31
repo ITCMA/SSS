@@ -38,6 +38,12 @@ public sealed class ProcessOptions
 
     /// <summary>Connecting to a VDA takes longer than a Broker call, so process requests get their own time limit.</summary>
     public int TimeoutSeconds { get; set; } = 60;
+
+    /// <summary>Shows the profile type and size in the expert view (the "Get-SssProfile" command of the JEA endpoint).</summary>
+    public bool ProfileInfo { get; set; } = true;
+
+    /// <summary>Time limit of the profile folder scan on the VDA; 0 = type only, no size.</summary>
+    public int ProfileScanSeconds { get; set; } = 20;
 }
 
 public sealed class MonitorOptions

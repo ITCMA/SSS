@@ -91,6 +91,9 @@ public sealed class CitrixSessionProvider(
             list.Processes.Select(p => new ProcessEntry(p.Id, p.Name, p.Started, p.MemoryMb, p.Window)).ToList());
     }
 
+    public Task<ProfileInfo> GetProfileAsync(string userSid, string uid, int scanSeconds, CancellationToken ct) =>
+        broker.ProfileAsync(userSid, uid, scanSeconds, ct);
+
     public Task<string> EndProcessAsync(string userSid, string uid, int processId, bool force, CancellationToken ct) =>
         broker.EndProcessAsync(userSid, uid, processId, force, ct);
 

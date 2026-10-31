@@ -65,7 +65,7 @@ Every option with default and meaning: [CONFIGURATION.md](CONFIGURATION.md). Req
 
 ## Applications and processes
 
-`GET api/sessions/{uid}/processes`, `POST api/sessions/{uid}/processes/{pid}/end` (own sessions) and the matching `api/helpdesk/sessions/{uid}/processes` endpoints (helpdesk, with `sid`) go through `ProcessService`, which accepts only live sessions of the target user and audits every attempt. The worker operations `processes` and `endprocess` look the session up again in the Broker, connect to the machine of that session with `New-PSSession -ConfigurationName` and use implicit remoting (`Import-PSSession`) to call the two commands of the JEA endpoint that `scripts/Install-SssJea.ps1` registers on the VDAs. Details, setup and security notes: [PROCESSES.md](PROCESSES.md).
+`GET api/sessions/{uid}/processes`, `POST api/sessions/{uid}/processes/{pid}/end` (own sessions) and the matching `api/helpdesk/sessions/{uid}/processes` endpoints (helpdesk, with `sid`) go through `ProcessService`, which accepts only live sessions of the target user and audits every attempt. The worker operations `processes` and `endprocess` look the session up again in the Broker, connect to the machine of that session with `New-PSSession -ConfigurationName` and use implicit remoting (`Import-PSSession`) to call the three commands of the JEA endpoint (the third, `Get-SssProfile`, reads the profile type and size for `GET api/sessions/{uid}/profile`) that `scripts/Install-SssJea.ps1` registers on the VDAs. Details, setup and security notes: [PROCESSES.md](PROCESSES.md).
 
 Operations (health probe, status page, audit format, troubleshooting): [OPERATIONS.md](OPERATIONS.md).
 

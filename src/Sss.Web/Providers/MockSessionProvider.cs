@@ -145,6 +145,17 @@ public sealed class MockSessionProvider : ISessionProvider, IHelpdeskProvider, I
         }
     }
 
+    public Task<ProfileInfo> GetProfileAsync(string userSid, string uid, int scanSeconds, CancellationToken ct)
+    {
+        lock (_gate)
+        {
+            if (!_items.Any(e => e.OwnerSid == userSid && e.Info.Uid == uid && e.Info.State != SessionState.Ended)) throw new InvalidOperationException("Session not found.");
+            return Task.FromResult(new ProfileInfo("demo-vda.demo.local", "FSLogix", true, "C:\\Users\\demo.user", null, "\\\\fileserver\\profiles\\demo.user_S-1-5-21\\Profile_demo.user.vhdx", 9120,
+                false, false, false, 6480, false, 4,
+                ["Status=0"], [new("AppData", 4210), new("Documents", 1360), new("Desktop", 540), new("Downloads", 260)]));
+        }
+    }
+
     public Task<string> EndProcessAsync(string userSid, string uid, int processId, bool force, CancellationToken ct)
     {
         lock (_gate)
@@ -205,7 +216,15 @@ public sealed class MockSessionProvider : ISessionProvider, IHelpdeskProvider, I
             new("OutputBandwidthAvailable", "kbit/s", bw),
             new("DcLatency", "ms", dc),
         ];
-        return Task.FromResult<SessionDetails?>(new SessionDetails(sessionKey, groups, series, [], []));
+        // Demo logon: the profile load is the slow part, like in many real sites.
+        var logonMs = (i0.Quality.LogonSeconds ?? 20) * 1000.0;
+        var steps = new List<LogonStep>
+        {
+            new("Brokering", 0, 850, true), new("Hdx", 850, 1900, false), new("Authentication", 2750, 1400, true), new("Gpo", 2750, 2300, false),
+            new("LogOnScripts", 5050, 1100, false), new("ProfileLoad", 6150, 4200 + (rnd.Next(0, 3) * 4000), false), new("Interactive", 10350 + (rnd.Next(0, 3) * 4000), 3200, false),
+        };
+        var total = steps.Max(s => s.StartMs + s.DurationMs);
+        return Task.FromResult<SessionDetails?>(new SessionDetails(sessionKey, groups, series, [], [], new LogonWaterfall(Math.Max(total, logonMs), steps)));
     }
 
     public Task<IReadOnlyList<string>> LogoffAsync(UserIdentity user, IReadOnlyCollection<string> uids, CancellationToken ct)

@@ -34,6 +34,29 @@ Broker- und Monitor-Sitzungen werden über den **SessionKey** verbunden. Fällt 
 
 Die drei optionalen Datensätze der Experten-Ansicht gibt es nicht auf jeder Umgebung. SSS meldet einen fehlenden Satz als „von dieser Umgebung nicht geliefert“ und zeigt den Rest. `Test-SssCitrix.ps1` zeigt, welche deine Umgebung hat.
 
+### Anmelde-Wasserfall
+
+Die Expertenansicht zeichnet die Anmeldung als Balken auf einer gemeinsamen Zeitachse, damit der Schritt auffällt, der die Zeit frisst. Die Schritte stammen aus den Eigenschaften der `Connection`-Datensätze, die der Monitor zur Sitzung führt (bevorzugt die ursprüngliche Anmeldung, nicht ein späteres Wiederverbinden):
+
+- jedes Paar `<Schritt>StartDate` / `<Schritt>EndDate` wird ein Balken mit gemessener Lage, zum Beispiel `Hdx`, `Gpo` (Gruppenrichtlinien), `LogOnScripts`, `ProfileLoad`, `Interactive` (Shell und Desktop);
+- jede `<Schritt>Duration` ohne solches Paar (etwa `BrokeringDuration`, `AuthenticationDuration`) wird ein Balken mit bekannter Länge, aber **geschätzter Lage** (gestrichelt): Brokering endet dort, wo die Anmeldung beginnt, andere Schritte folgen der HDX-Verbindung;
+- das Gesamtfenster `LogOnStartDate`/`LogOnEndDate` und die `LogOnDuration` der Sitzung sind der Rahmen, keine Schritte.
+
+SSS legt über dieses Muster hinaus keine Feldnamen fest, neue Citrix-Versionen erscheinen also von selbst. Liefert eine Site keine Schrittdaten, erscheint kein Wasserfall; `Test-SssCitrix.ps1` listet die `Connection`-Eigenschaften und nennt, welche Schritte deine Site liefert. Der längste gemessene Schritt wird mit seinem Anteil an der Anmeldung hervorgehoben.
+
+### Profiltyp und Größe
+
+Der Monitor weiß nicht, welche Art Profil ein Benutzer hat und wie groß es ist. SSS liest das deshalb **auf dem VDA**, auf Anforderung, mit dem lesenden Befehl `Get-SssProfile` des JEA-Endpunkts (derselbe Endpunkt wie für [Prozesse](PROCESSES.de.md); `Install-SssJea.ps1` auf den VDAs einmal erneut ausführen, um ihn zu ergänzen). Der VDA meldet:
+
+| Erkannt | Woran |
+|---|---|
+| Microsoft FSLogix | ein Sitzungseintrag unter `HKLM\SOFTWARE\FSLogix\Profiles\Sessions\<SID>` (mit dem VHD/VHDX-Pfad und, wenn lesbar, dessen Dateigröße) oder die Volumebezeichnung des FSLogix-Profils |
+| Citrix Profile Management (UPM) | der Dienst `ctxProfile` läuft; der Benutzerspeicher aus der Richtlinie `PathToUserStore` |
+| Servergespeichertes Profil (Windows) | `Win32_UserProfile` meldet ein konfiguriertes Roaming; der Roaming-Pfad |
+| Lokales Profil | nichts davon; temporäre und verbindliche Profile werden gekennzeichnet |
+
+Die Größe des Profilordners wird mit Zeitlimit gezählt (`Processes:ProfileScanSeconds`, Standard 20 s; das Ergebnis sagt dann „Teilergebnis“), Reparse-Punkte werden nicht verfolgt, die größten Ordner werden aufgelistet. Alles geschieht nur lesend. Welche Technik erkannt wird, ist eine Näherung anhand der üblichen Merkmale; eine ungewöhnliche Einrichtung kann bei einem Container-Profil „Lokales Profil“ anzeigen.
+
 ## Ampeln
 
 | Ampel | Messwert | Quelle | Grün / Gelb / Rot (Standard) |

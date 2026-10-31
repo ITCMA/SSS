@@ -7,7 +7,7 @@
   It registers the session configuration "SSS.Processes". The endpoint
     - can be used only by the SSS service account (-Principal),
     - runs as a temporary local administrator (virtual account) that exists only for the duration of one call,
-    - offers exactly two commands, Get-SssProcess and Stop-SssProcess, and nothing else,
+    - offers exactly three commands, Get-SssProcess, Stop-SssProcess and Get-SssProfile (read only), and nothing else,
     - touches only processes whose owner is the user SID that SSS passes in, never system or other users' processes,
     - never ends the Citrix session processes wfshell.exe, ctxgfx.exe and cmstart.exe,
     - writes a transcript of every call to the folder given by -TranscriptDirectory.
@@ -87,6 +87,73 @@ if ($PSCmdlet.ShouldProcess($work, 'Write role capability and session configurat
                 }
             }
         } },
+        @{ Name = 'Get-SssProfile'; ScriptBlock = {
+            [CmdletBinding()]
+            param(
+                [Parameter(Mandatory = $true)][ValidatePattern('^S-1-\d+(-\d+)+$')][string]$UserSid,
+                [ValidateRange(0, 120)][int]$ScanSeconds = 20)
+            $r = [ordered]@{ Type = 'Local'; Loaded = $false; LocalPath = $null; StorePath = $null; Container = $null; ContainerMb = $null
+                Roaming = $false; Temporary = $false; Mandatory = $false; SizeMb = $null; SizePartial = $false; ScanSeconds = 0; Notes = @(); Top = @() }
+            $p = Get-CimInstance -ClassName Win32_UserProfile -Filter "SID='$UserSid'" -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($p) {
+                $r.LocalPath = [string]$p.LocalPath; $r.Loaded = [bool]$p.Loaded
+                $r.Roaming = [bool]$p.RoamingConfigured
+                if ($p.RoamingPath) { $r.StorePath = [string]$p.RoamingPath }
+                $st = [int]$p.Status
+                $r.Temporary = [bool]($st -band 1); $r.Mandatory = [bool]($st -band 4)
+                if ($st -band 8) { $r.Notes += 'corrupted' }
+            } else { $r.Notes += 'no-profile-record' }
+
+            # Which technology holds the profile?
+            $fsRoot = 'HKLM:\SOFTWARE\FSLogix\Profiles'
+            $fsSession = Join-Path "$fsRoot\Sessions" $UserSid
+            $vol = Get-CimInstance -ClassName Win32_Volume -Filter "Label LIKE 'Profile-%'" -ErrorAction SilentlyContinue | Select-Object -First 1
+            if (Test-Path $fsSession) {
+                $r.Type = 'FSLogix'
+                $props = Get-ItemProperty -Path $fsSession -ErrorAction SilentlyContinue
+                foreach ($n in ($props.PSObject.Properties | Where-Object { $_.Name -notlike 'PS*' })) {
+                    $v = [string]$n.Value
+                    if ($v -match '\.vhdx?$') { $r.Container = $v }
+                    elseif ($n.Name -match '^(Status|Reason|ProfileState|ErrorCode)$') { $r.Notes += ('{0}={1}' -f $n.Name, $v) }
+                }
+            } elseif ($vol -and (Get-ItemProperty -Path $fsRoot -Name Enabled -ErrorAction SilentlyContinue).Enabled -eq 1) {
+                $r.Type = 'FSLogix'; $r.Notes += 'detected-by-volume'
+            } elseif ((Get-Service -Name 'ctxProfile' -ErrorAction SilentlyContinue).Status -eq 'Running') {
+                $r.Type = 'Citrix UPM'
+                $store = (Get-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Citrix\UserProfileManager' -Name PathToUserStore -ErrorAction SilentlyContinue).PathToUserStore
+                if ($store) { $r.StorePath = [string]$store }
+            } elseif ($r.Roaming) { $r.Type = 'Roaming' }
+            if ($r.Mandatory) { $r.Notes += 'mandatory' }
+            if ($r.Temporary) { $r.Notes += 'temporary' }
+
+            # Size of the VHD(X) container, when it can be read
+            if ($r.Container) { try { $r.ContainerMb = [int]((Get-Item -LiteralPath $r.Container -ErrorAction Stop).Length / 1MB) } catch { } }
+
+            # Size of the profile folder (time boxed, reparse points are not followed)
+            if ($ScanSeconds -gt 0 -and $r.LocalPath -and (Test-Path -LiteralPath $r.LocalPath)) {
+                $sw = [System.Diagnostics.Stopwatch]::StartNew()
+                $total = [int64]0
+                $tops = @{}
+                $stack = New-Object System.Collections.Stack
+                $stack.Push(@($r.LocalPath, ''))
+                while ($stack.Count -gt 0) {
+                    if ($sw.Elapsed.TotalSeconds -gt $ScanSeconds) { $r.SizePartial = $true; break }
+                    $item = $stack.Pop(); $dir = $item[0]; $top = $item[1]
+                    try {
+                        $di = New-Object System.IO.DirectoryInfo($dir)
+                        foreach ($f in $di.EnumerateFiles()) { $total += $f.Length; $k = if ($top) { $top } else { '(files)' }; $tops[$k] = [int64]$tops[$k] + $f.Length }
+                        foreach ($d in $di.EnumerateDirectories()) {
+                            if ($d.Attributes -band [System.IO.FileAttributes]::ReparsePoint) { continue }
+                            $stack.Push(@($d.FullName, $(if ($top) { $top } else { $d.Name })))
+                        }
+                    } catch { }
+                }
+                $r.ScanSeconds = [int][math]::Ceiling($sw.Elapsed.TotalSeconds)
+                $r.SizeMb = [int]($total / 1MB)
+                $r.Top = @($tops.GetEnumerator() | Sort-Object Value -Descending | Select-Object -First 6 | ForEach-Object { [pscustomobject]@{ Name = [string]$_.Key; Mb = [int]($_.Value / 1MB) } })
+            }
+            [pscustomobject]$r
+        } },
         @{ Name = 'Stop-SssProcess'; ScriptBlock = {
             [CmdletBinding()]
             param(
@@ -106,7 +173,7 @@ if ($PSCmdlet.ShouldProcess($work, 'Write role capability and session configurat
         } }
     )
     $psrc = Join-Path $capDir 'SssProcesses.psrc'
-    New-PSRoleCapabilityFile -Path $psrc -VisibleFunctions 'Get-SssProcess', 'Stop-SssProcess' -FunctionDefinitions $functions
+    New-PSRoleCapabilityFile -Path $psrc -VisibleFunctions 'Get-SssProcess', 'Get-SssProfile', 'Stop-SssProcess' -FunctionDefinitions $functions
     # a module manifest next to the role capability folder makes the capability discoverable by name
     New-ModuleManifest -Path (Join-Path $moduleDir 'SssProcesses.psd1') -RootModule '' -ModuleVersion '1.0.0' -Description 'SSS process endpoint role capability'
 

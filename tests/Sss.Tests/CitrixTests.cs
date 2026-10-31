@@ -28,6 +28,7 @@ public class CitrixSessionProviderTests
         }
         public Task<BrokerProcessList> ProcessesAsync(string sid, string uid, CancellationToken ct) => Task.FromResult(new BrokerProcessList("vdi-01", [new BrokerProcess(1, "calc", 2, null, 5, "Calculator")]));
         public Task<string> EndProcessAsync(string sid, string uid, int processId, bool force, CancellationToken ct) => Task.FromResult("closed");
+        public Task<ProfileInfo> ProfileAsync(string sid, string uid, int scanSeconds, CancellationToken ct) => Task.FromResult(new ProfileInfo("vdi-01", "Local", true, null, null, null, null, false, false, false, null, false, 0, [], []));
         public Task PingAsync(CancellationToken ct) => Task.CompletedTask;
         public Task<BrokerLogoffResult> LogoffAsync(string sid, IReadOnlyCollection<string> uids, CancellationToken ct)
         {
@@ -406,6 +407,23 @@ public class BrokerWorkerPoolTests
     }
 
     [Fact]
+    public async Task Profile_info_comes_from_the_jea_endpoint_of_the_users_own_session()
+    {
+        if (!PwshAvailable()) return;
+        using var pool = Pool();
+
+        var p = await pool.ProfileAsync(Alice, "101", 20, default);
+
+        Assert.Equal("FSLogix", p.Type);
+        Assert.Equal(6480, p.SizeMb);
+        Assert.Equal(9120, p.ContainerMb);
+        Assert.False(p.SizePartial);
+        Assert.Equal(["AppData", "Documents"], p.TopFolders.Select(f => f.Name).ToArray());
+        await Assert.ThrowsAsync<ProviderUnavailableException>(() => pool.ProfileAsync(Alice, "201", 20, default));
+        await Assert.ThrowsAsync<ArgumentException>(() => pool.ProfileAsync(Alice, "1; calc", 20, default));
+    }
+
+    [Fact]
     public async Task Process_requests_are_validated_before_they_reach_the_worker()
     {
         using var pool = Pool();
@@ -539,5 +557,40 @@ public class ConfigValidationTests
                 ? new HttpResponseMessage(System.Net.HttpStatusCode.NotFound)
                 : new HttpResponseMessage { Content = new StringContent("""{"value":[]}""", System.Text.Encoding.UTF8, "application/json") });
         }
+    }
+
+    private static Dictionary<string, object?> Conn(string json) => LogonWaterfallBuilder.Flatten(System.Text.Json.JsonDocument.Parse(json).RootElement.Clone());
+
+    [Fact]
+    public void Logon_waterfall_is_built_from_start_end_pairs_and_durations()
+    {
+        var c = Conn("""
+            {"IsReconnect":false,"LogOnStartDate":"2026-10-30T08:00:00Z","LogOnEndDate":"2026-10-30T08:00:30Z","BrokeringDuration":1500,"AuthenticationDuration":2000,
+             "HdxStartDate":"2026-10-30T08:00:00Z","HdxEndDate":"2026-10-30T08:00:03Z","GpoStartDate":"2026-10-30T08:00:03Z","GpoEndDate":"2026-10-30T08:00:09Z",
+             "ProfileLoadStartDate":"2026-10-30T08:00:09Z","ProfileLoadEndDate":"2026-10-30T08:00:24Z","InteractiveStartDate":"2026-10-30T08:00:24Z","InteractiveEndDate":"2026-10-30T08:00:30Z"}
+            """);
+
+        var w = LogonWaterfallBuilder.Build([c], 31000)!;
+
+        Assert.Equal(["Brokering", "Hdx", "Authentication", "Gpo", "ProfileLoad", "Interactive"], w.Steps.Select(s => s.Id).ToArray());
+        var profile = w.Steps.Single(s => s.Id == "ProfileLoad");
+        Assert.Equal(15000, profile.DurationMs);
+        Assert.False(profile.Estimated);
+        Assert.True(w.Steps.Single(s => s.Id == "Brokering").Estimated);
+        Assert.Equal(0, w.Steps[0].StartMs);                 // brokering comes first, the axis starts there
+        Assert.Equal(31500, w.TotalMs);   // axis length: brokering (1.5 s) plus the 30 s logon window, larger than the reported 31 s
+        Assert.Equal(1500 + 3000, w.Steps.Single(s => s.Id == "Gpo").StartMs);   // 3 s after the logon start, shifted by the 1.5 s of brokering before it
+    }
+
+    [Fact]
+    public void Logon_waterfall_prefers_the_original_logon_over_a_reconnect_and_is_null_without_steps()
+    {
+        var reconnect = Conn("""{"IsReconnect":true,"LogOnStartDate":"2026-10-31T19:34:00Z","LogOnEndDate":"2026-10-31T19:34:02Z","ProfileLoadStartDate":"2026-10-31T19:34:00Z","ProfileLoadEndDate":"2026-10-31T19:34:01Z"}""");
+        var original = Conn("""{"IsReconnect":false,"LogOnStartDate":"2026-10-31T07:59:00Z","LogOnEndDate":"2026-10-31T07:59:20Z","ProfileLoadStartDate":"2026-10-31T07:59:05Z","ProfileLoadEndDate":"2026-10-31T07:59:15Z"}""");
+
+        var w = LogonWaterfallBuilder.Build([reconnect, original], null)!;
+
+        Assert.Equal(10000, w.Steps.Single(s => s.Id == "ProfileLoad").DurationMs);
+        Assert.Null(LogonWaterfallBuilder.Build([Conn("""{"IsReconnect":true,"LogOnStartDate":"2026-10-31T19:34:00Z","LogOnEndDate":"2026-10-31T19:34:02Z"}""")], 2000));
     }
 }

@@ -34,6 +34,29 @@ Broker and Monitor sessions are joined by the **SessionKey**. If Monitor fails, 
 
 The three optional record sets of the expert view may not exist on every site. SSS reports a missing set as "not delivered by this site" and shows the rest. `Test-SssCitrix.ps1` tells you which ones your site has.
 
+### Logon waterfall
+
+The expert view draws the logon as bars on one time axis, so the step that eats the time stands out. The steps come from the properties of the `Connection` records Monitor keeps for the session (the original logon is preferred over a later reconnect):
+
+- every `<Step>StartDate` / `<Step>EndDate` pair becomes a bar with a measured position, for example `Hdx`, `Gpo` (group policies), `LogOnScripts`, `ProfileLoad`, `Interactive` (shell and desktop);
+- every `<Step>Duration` without such a pair (for example `BrokeringDuration`, `AuthenticationDuration`) becomes a bar with a known length but an **estimated position** (dashed): brokering ends where the logon starts, other steps follow the HDX connection;
+- the overall window `LogOnStartDate`/`LogOnEndDate` and the session's `LogOnDuration` are the frame, not steps.
+
+SSS does not hard-code the field names beyond this pattern, so new Citrix versions appear automatically. A site that delivers no step data shows no waterfall; `Test-SssCitrix.ps1` lists the `Connection` properties and tells you which steps your site provides. The longest measured step is highlighted with its share of the logon.
+
+### Profile type and size
+
+Monitor does not know what kind of profile a user has or how large it is. SSS therefore reads it **on the VDA**, on demand, through the read-only command `Get-SssProfile` of the JEA endpoint (the same endpoint as for [processes](PROCESSES.md); re-run `Install-SssJea.ps1` on the VDAs once to add it). The VDA reports:
+
+| Detected | How |
+|---|---|
+| Microsoft FSLogix | a session entry under `HKLM\SOFTWARE\FSLogix\Profiles\Sessions\<SID>` (with the VHD/VHDX path and its file size when readable), or the FSLogix profile volume label |
+| Citrix Profile Management (UPM) | the service `ctxProfile` is running; the user store from the `PathToUserStore` policy |
+| Roaming profile (Windows) | `Win32_UserProfile` says roaming is configured; the roaming path |
+| Local profile | none of the above; temporary and mandatory profiles are flagged |
+
+The size of the profile folder is counted with a time limit (`Processes:ProfileScanSeconds`, default 20 s; the result then says "partial"), reparse points are not followed, and the largest folders are listed. All of this is read only. Which technology is detected is a best effort based on the usual markers; a site with an unusual setup may show "Local profile" for a container profile.
+
 ## Traffic lights
 
 | Light | Metric | Source | Green / yellow / red (defaults) |

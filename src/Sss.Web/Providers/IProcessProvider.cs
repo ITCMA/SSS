@@ -8,6 +8,8 @@ public interface IProcessProvider
 {
     Task<ProcessListResult> ListProcessesAsync(string userSid, string uid, CancellationToken ct);
 
+    Task<ProfileInfo> GetProfileAsync(string userSid, string uid, int scanSeconds, CancellationToken ct);
+
     /// <summary>closed, killed, no-window, not-closed, not-owned, not-found or protected.</summary>
     Task<string> EndProcessAsync(string userSid, string uid, int processId, bool force, CancellationToken ct);
 }

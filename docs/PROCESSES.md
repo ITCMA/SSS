@@ -13,7 +13,7 @@ Browser --> SSS (IIS) --> PowerShell worker --WinRM--> JEA endpoint "SSS.Process
                           (service account)             Get-SssProcess / Stop-SssProcess
 ```
 
-- The JEA endpoint offers exactly **two commands**. The service account cannot run anything else on the VDA through it.
+- The JEA endpoint offers exactly **three commands**: `Get-SssProcess` and `Stop-SssProcess` for this feature, and the read-only `Get-SssProfile` for the [profile type and size](DATA-SOURCES.md#profile-type-and-size) in the expert view. The service account cannot run anything else on the VDA through it.
 - It runs as a temporary local administrator (a *virtual account* that exists only for that call), so the service account itself needs no administrator rights on the VDAs.
 - **Only the user's own processes are touched.** Both commands take the user's SID and compare it with the owner of every process; system processes, other users' processes and unknown ids are refused (`not-owned`, `not-found`). The Citrix session processes `wfshell.exe`, `ctxgfx.exe` and `cmstart.exe` are protected (`protected`).
 - **SSS checks the session twice.** The web application accepts a session only when it is one of the target's live sessions; the PowerShell worker looks it up again in the Broker and refuses it unless the session belongs to that user. Only the machine of that session is contacted.
@@ -58,6 +58,10 @@ Switch on the **expert view** (button in the header). Every live session now has
 
 On a multi-session host (RDS server) the list shows the user's processes of that machine; if the user has more than one session on it, they are all listed.
 
+## Updating the endpoint
+
+New SSS releases can add commands to the endpoint (version 0.4 added `Get-SssProfile`). Run `Install-SssJea.ps1 -Principal ...` again on the VDAs after such an update; it replaces the registration. Until then the other features keep working and the profile button explains that the endpoint is out of date.
+
 ## What can go wrong
 
 | Message or result | Cause |
@@ -72,7 +76,7 @@ On a multi-session host (RDS server) the list shows the user's processes of that
 
 ## Security notes
 
-- This feature gives the SSS service account a path to the VDAs. Keep it limited to the two commands as shipped; do not widen the role capability.
+- This feature gives the SSS service account a path to the VDAs. Keep it limited to the three commands as shipped; do not widen the role capability.
 - JEA transcripts show every call. Collect them with your usual tools if you need a second trail next to SSS's audit file.
 - Audience `Helpdesk` removes the feature for ordinary users and keeps it for support staff.
 - The process names and window titles of a user can contain private information. They are shown only to that user and to the helpdesk, and are not written to the audit trail (only the process id).

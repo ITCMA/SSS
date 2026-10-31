@@ -284,6 +284,7 @@ api.MapGet("/me", (HttpContext http, HelpdeskAccess helpdesk, ProcessService pro
             rttWarnMs = options.Quality.RttWarnMs,
             loadWarn = options.Quality.LoadWarn,
             processes = processes.Available(helpdesk.IsHelpdesk(http)),
+            profile = processes.ProfileAvailable(helpdesk.IsHelpdesk(http)),
         });
 });
 
@@ -324,6 +325,15 @@ api.MapGet("/sessions/{uid}/processes", async (HttpContext http, string uid, Pro
     if (!svc.Available(false)) return Results.NotFound();
     if (!uidPattern.IsMatch(uid)) return Results.BadRequest("Invalid session id.");
     return await svc.ListAsync(user, uid, null, RemoteIp(http), ct) is { } list ? Results.Ok(list) : Results.NotFound();
+}).RequireRateLimiting("read");
+
+api.MapGet("/sessions/{uid}/profile", async (HttpContext http, string uid, ProcessService svc, CancellationToken ct) =>
+{
+    var user = ResolveUser(http, options);
+    if (user is null) return Results.Unauthorized();
+    if (!svc.ProfileAvailable(false)) return Results.NotFound();
+    if (!uidPattern.IsMatch(uid)) return Results.BadRequest("Invalid session id.");
+    return await svc.ProfileAsync(user, uid, null, RemoteIp(http), ct) is { } info ? Results.Ok(info) : Results.NotFound();
 }).RequireRateLimiting("read");
 
 api.MapPost("/sessions/{uid}/processes/{pid:int}/end", async (HttpContext http, string uid, int pid, EndProcessRequest? body, ProcessService svc, CancellationToken ct) =>
@@ -417,6 +427,15 @@ hd.MapGet("/sessions/{uid}/processes", async (HttpContext http, string uid, stri
     if (sid is null || !HelpdeskService.SidRegex().IsMatch(sid) || sid.Length > 184) return Results.BadRequest("Invalid user.");
     if (!uidPattern.IsMatch(uid)) return Results.BadRequest("Invalid session id.");
     return await svc.ListAsync(new UserIdentity(sid, directory.NameOf(sid)), uid, actor, RemoteIp(http), ct) is { } list ? Results.Ok(list) : Results.NotFound();
+});
+hd.MapGet("/sessions/{uid}/profile", async (HttpContext http, string uid, string? sid, ProcessService svc, IUserDirectory directory, CancellationToken ct) =>
+{
+    var actor = ResolveUser(http, options);
+    if (actor is null) return Results.Unauthorized();
+    if (!svc.ProfileAvailable(true)) return Results.NotFound();
+    if (sid is null || !HelpdeskService.SidRegex().IsMatch(sid) || sid.Length > 184) return Results.BadRequest("Invalid user.");
+    if (!uidPattern.IsMatch(uid)) return Results.BadRequest("Invalid session id.");
+    return await svc.ProfileAsync(new UserIdentity(sid, directory.NameOf(sid)), uid, actor, RemoteIp(http), ct) is { } info ? Results.Ok(info) : Results.NotFound();
 });
 hd.MapPost("/sessions/{uid}/processes/{pid:int}/end", async (HttpContext http, string uid, int pid, HelpdeskEndProcessRequest body, ProcessService svc, IUserDirectory directory, CancellationToken ct) =>
 {

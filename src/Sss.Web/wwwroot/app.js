@@ -513,6 +513,35 @@ function chart(title, series) {
   return fig;
 }
 
+// Logon waterfall: one bar per step on a common time axis, so the step that eats the time stands out.
+function buildWaterfall(w) {
+  if (!w || !w.steps.length) return el('div');
+  const L = 150, R = 70, rowH = 26, T = 8, B = 26, W = 720;
+  const H = T + w.steps.length * rowH + B;
+  const unit = w.totalMs >= 20000 ? 5000 : w.totalMs >= 8000 ? 2000 : w.totalMs >= 3000 ? 1000 : 500;
+  const sx = (ms) => L + (ms / w.totalMs) * (W - L - R);
+  const svg = svgEl('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': t('waterfallTitle') });
+  const text = (txt, x, y, anchor, cls) => { const e = svgEl('text', { x, y, 'text-anchor': anchor, ...(cls ? { class: cls } : {}) }); e.textContent = txt; return e; };
+  for (let ms = 0; ms <= w.totalMs; ms += unit) {
+    svg.append(svgEl('line', { class: 'grid', x1: sx(ms), y1: T, x2: sx(ms), y2: H - B }), text(`${ms / 1000} s`, sx(ms), H - 8, ms === 0 ? 'start' : 'middle'));
+  }
+  const sec = new Intl.NumberFormat(state.lang, { maximumFractionDigits: 1 });
+  const measured = w.steps.filter((s) => !s.estimated);
+  const slowest = (measured.length ? measured : w.steps).reduce((a, b) => (b.durationMs > a.durationMs ? b : a));
+  w.steps.forEach((s, i) => {
+    const y = T + i * rowH, name = t(`step${s.id}`) === `step${s.id}` ? fieldLabel(s.id) : t(`step${s.id}`);
+    const pct = Math.round((s.durationMs / w.totalMs) * 100);
+    const bar = svgEl('rect', { class: `wbar${s.estimated ? ' est' : ''}${s === slowest ? ' slow' : ''}`, x: sx(s.startMs), y: y + 4, width: Math.max(2, sx(s.durationMs) - sx(0)), height: rowH - 10, rx: 3 });
+    const tip = svgEl('title'); tip.textContent = `${name}: ${sec.format(s.durationMs / 1000)} s (${pct} %)${s.estimated ? ` – ${t('waterfallEstimated')}` : ''}`;
+    bar.append(tip);
+    svg.append(text(name, L - 8, y + rowH / 2 + 4, 'end'), bar, text(`${sec.format(s.durationMs / 1000)} s`, sx(s.startMs + s.durationMs) + 5, y + rowH / 2 + 4, 'start', 'wval'));
+  });
+  const slowName = t(`step${slowest.id}`) === `step${slowest.id}` ? fieldLabel(slowest.id) : t(`step${slowest.id}`);
+  return el('figure', { class: 'chart waterfall' }, el('h3', { text: t('waterfallTitle') }), svg,
+    el('p', { class: 'muted', text: t('waterfallSlowest', { name: slowName, s: sec.format(slowest.durationMs / 1000), p: Math.round((slowest.durationMs / w.totalMs) * 100) }) }),
+    w.steps.some((s) => s.estimated) ? el('p', { class: 'muted', text: t('waterfallEstimated') }) : el('span'));
+}
+
 function buildCharts(series) {
   const is = (re) => (s) => re.test(s.name);
   const bw = series.filter(is(/Bandwidth/i));
@@ -540,7 +569,46 @@ function detailTable(tb) {
   return el('section', {}, el('h3', { text: t(TABLE_TITLE[tb.id] ?? tb.id) }), el('div', { class: 'table-wrap' }, table));
 }
 
-function supportText(s, d) {
+// ---------- profile type and size (read on the VDA, on demand) ----------
+const fmtMb = (mb) => mb == null ? '–' : mb >= 1024 ? `${new Intl.NumberFormat(state.lang, { maximumFractionDigits: 1 }).format(mb / 1024)} GB` : `${mb} MB`;
+const PROFILE_TYPE = { Local: 'profileTypeLocal', Roaming: 'profileTypeRoaming', 'Citrix UPM': 'profileTypeUpm', FSLogix: 'profileTypeFslogix' };
+
+function profileRows(p) {
+  const rows = [[t('profileType'), t(PROFILE_TYPE[p.type] ?? 'profileTypeLocal')], [t('profileLoaded'), t(p.loaded ? 'yes' : 'no')]];
+  if (p.localPath) rows.push([t('profilePath'), p.localPath]);
+  if (p.storePath) rows.push([t('profileStore'), p.storePath]);
+  if (p.container) rows.push([t('profileContainer'), p.container]);
+  if (p.containerMb != null) rows.push([t('profileContainerSize'), fmtMb(p.containerMb)]);
+  if (p.sizeMb != null) rows.push([t('profileSize'), `${fmtMb(p.sizeMb)}${p.sizePartial ? ` ${t('profilePartial')}` : ''}`]);
+  if (p.topFolders.length) rows.push([t('profileTop'), p.topFolders.map((f) => `${f.name} ${fmtMb(f.mb)}`).join(', ')]);
+  const flags = [p.temporary && t('profileTemporary'), p.mandatory && t('profileMandatory')].filter(Boolean);
+  if (flags.length) rows.push([t('profileNotes'), flags.join('; ')]);
+  return rows;
+}
+
+function buildProfileSection(ctx) {
+  const out = el('div'), btn = el('button', { type: 'button', text: t('profileScan') });
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    out.replaceChildren(el('p', { class: 'muted', text: t('profileScanning') }));
+    try {
+      const hd = state.view === 'hduser';
+      const r = await fetch(hd ? `api/helpdesk/sessions/${encodeURIComponent(ctx.s.uid)}/profile?sid=${encodeURIComponent(state.target.sid)}` : `api/sessions/${encodeURIComponent(ctx.s.uid)}/profile`,
+        { credentials: 'same-origin' });
+      if (state.detailsCtx !== ctx) return;
+      if (r.status === 429) { out.replaceChildren(el('p', { class: 'muted', text: t('rateLimited') })); return; }
+      if (!r.ok) { out.replaceChildren(el('p', { class: 'muted', text: t(r.status === 503 ? 'profileUnavailable' : 'error') })); return; }
+      ctx.profile = await r.json();
+      const dl = el('dl');
+      for (const [k, v] of profileRows(ctx.profile)) dl.append(el('dt', { text: k }), el('dd', { text: v }));
+      out.replaceChildren(dl);
+    } catch { out.replaceChildren(el('p', { class: 'muted', text: t('error') })); }
+    finally { btn.disabled = false; }
+  });
+  return el('section', { class: 'group profile' }, el('h3', { text: t('profileTitle') }), el('p', { class: 'muted', text: t('profileHint') }), btn, out);
+}
+
+function supportText(s, d, profile) {
   const q = s.quality;
   const lines = [
     `SSS ${new Date().toISOString()}`,
@@ -554,6 +622,8 @@ function supportText(s, d) {
     `SessionKey: ${s.sessionKey}`,
   ];
   if (d) for (const g of d.groups) if (g.id !== 'technical') for (const i of g.items) lines.push(`${i.key}: ${fmtItem(i)}`);
+  if (d?.waterfall) lines.push(`${t('waterfallTitle')}: ${d.waterfall.steps.map((x) => `${x.id} ${Math.round(x.durationMs)} ms${x.estimated ? '*' : ''}`).join(', ')}`);
+  if (profile) for (const [k, v] of profileRows(profile)) lines.push(`${k}: ${v}`);
   return lines.filter(Boolean).join('\n');
 }
 
@@ -654,6 +724,8 @@ async function openDetails(s) {
     $('details-msg').textContent = d.unavailable.length
       ? t('detailsPartial', { parts: d.unavailable.map((p) => t(TABLE_TITLE[p] ?? p)).join(', ') }) : '';
     $('details-body').replaceChildren(
+      ...(state.profile && ctx.s.uid && ctx.s.state !== 'ended' ? [buildProfileSection(ctx)] : []),
+      buildWaterfall(d.waterfall),
       buildCharts(d.series),
       el('div', { class: 'groups' }, ...d.groups.map(groupBox)),
       ...d.tables.map(detailTable));
@@ -665,7 +737,7 @@ async function openDetails(s) {
 async function copySupport() {
   const ctx = state.detailsCtx;
   if (!ctx) return;
-  const text = supportText(ctx.s, ctx.d);
+  const text = supportText(ctx.s, ctx.d, ctx.profile);
   try {
     await navigator.clipboard.writeText(text);
     $('details-msg').textContent = t('copied');
@@ -833,6 +905,7 @@ async function init() {
     state.helpdesk = !!me.helpdesk;
     state.reasonRequired = !!me.reasonRequired;
     state.processes = !!me.processes;
+    state.profile = !!me.profile;
     $('tabs').hidden = !state.helpdesk;
     refreshSeconds = me.refreshSeconds || 30;
   } catch {

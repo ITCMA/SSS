@@ -318,6 +318,8 @@ public sealed partial class ODataMonitorClient(HttpClient http, CitrixOptions op
 
         var tables = new List<DetailTable>();
         var unavailable = new List<string>();
+        var connectionRecords = new List<Dictionary<string, object?>>();
+        if (TryGet(s, "CurrentConnection", out var curConn)) connectionRecords.Add(LogonWaterfallBuilder.Flatten(curConn));
         foreach (var (id, set) in OptionalParts)
         {
             try
@@ -326,7 +328,10 @@ public sealed partial class ODataMonitorClient(HttpClient http, CitrixOptions op
                 var rows = new List<IReadOnlyList<DetailItem>>();
                 if (part.RootElement.TryGetProperty("value", out var pv) && pv.ValueKind == JsonValueKind.Array)
                     foreach (var r in pv.EnumerateArray())
+                    {
+                        if (id == "connections") connectionRecords.Add(LogonWaterfallBuilder.Flatten(r));
                         rows.Add(Props(r).Select(p => Format(p.Name, p.Value)).OfType<DetailItem>().ToList());
+                    }
                 if (rows.Count > 0) tables.Add(new DetailTable(id, rows));
             }
             catch (ProviderUnavailableException) { unavailable.Add(id); }
@@ -334,7 +339,8 @@ public sealed partial class ODataMonitorClient(HttpClient http, CitrixOptions op
 
         string[] order = ["session", "logon", "client", "network", "machine", "technical"];
         var groups = order.Where(buckets.ContainsKey).Select(id => new DetailGroup(id, buckets[id])).ToList();
-        return new SessionDetails(key, groups, series, tables, unavailable);
+        double? logOnMs = TryGet(s, "LogOnDuration", out var lod) && lod.ValueKind == JsonValueKind.Number ? lod.GetDouble() : null;
+        return new SessionDetails(key, groups, series, tables, unavailable, LogonWaterfallBuilder.Build(connectionRecords, logOnMs));
     }
 
     private static IEnumerable<JsonProperty> Props(JsonElement e) =>

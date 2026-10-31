@@ -89,7 +89,7 @@ Every action that changes something or looks at someone else's data is written t
 | `helpdesk-logoff:...` | the helpdesk logs off a user's sessions |
 | `helpdesk-message` | the helpdesk sends a message to a session |
 | `helpdesk:search`, `helpdesk:list-all`, `helpdesk:view`, `helpdesk:details` | the helpdesk searches, lists the farm, opens a user or the expert view (view entries at most once per 5 minutes per target) |
-| `list-processes`, `end-process` | processes of a session are listed or ended, by the user or the helpdesk |
+| `list-processes`, `end-process`, `profile-info` | processes of a session are listed or ended, or the profile type and size are read, by the user or the helpdesk |
 
 Notes:
 

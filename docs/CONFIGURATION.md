@@ -75,7 +75,7 @@ The field names are verified on CVAD 2203, 2402, 2507 and 2607 with `Test-SssCit
 
 ### Processes (`Sss:Citrix:Processes`)
 
-Listing and ending the applications and processes of a session. Off by default. Needs the JEA endpoint on the VDAs; see [Ending applications and processes](PROCESSES.md).
+Listing and ending the applications and processes of a session, and reading the profile type and size. Off by default. Needs the JEA endpoint on the VDAs; see [Ending applications and processes](PROCESSES.md).
 
 | Key | Default | Meaning |
 |---|---|---|
@@ -83,6 +83,8 @@ Listing and ending the applications and processes of a session. Off by default. 
 | `Configuration` | `SSS.Processes` | Name of the JEA session configuration on the VDAs (`Install-SssJea.ps1 -ConfigurationName`). |
 | `Audience` | `All` | `All` = users for their own sessions and the helpdesk; `Helpdesk` = helpdesk only. |
 | `TimeoutSeconds` | `60` | Time limit of a process request (connecting to the VDA is slower than a Broker call). |
+| `ProfileInfo` | `true` | Shows profile type and size in the expert view (button "Check profile type and size"). Uses the same JEA endpoint, so it needs `Enabled = true`. |
+| `ProfileScanSeconds` | `20` | Time limit of the profile folder scan on the VDA; `0` = type only, no size. |
 
 ## Quality thresholds (`Sss:Quality`)
 

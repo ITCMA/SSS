@@ -65,7 +65,7 @@ Jede Option mit Standardwert und Bedeutung: [CONFIGURATION.de.md](CONFIGURATION.
 
 ## Anwendungen und Prozesse
 
-`GET api/sessions/{uid}/processes`, `POST api/sessions/{uid}/processes/{pid}/end` (eigene Sitzungen) und die entsprechenden Endpunkte `api/helpdesk/sessions/{uid}/processes` (Helpdesk, mit `sid`) laufen über `ProcessService`, der nur Live-Sitzungen des Zielbenutzers akzeptiert und jeden Versuch protokolliert. Die Worker-Operationen `processes` und `endprocess` suchen die Sitzung erneut im Broker, verbinden sich mit `New-PSSession -ConfigurationName` zum Rechner dieser Sitzung und rufen per implizitem Remoting (`Import-PSSession`) die zwei Befehle des JEA-Endpunkts auf, den `scripts/Install-SssJea.ps1` auf den VDAs registriert. Details, Einrichtung und Sicherheitshinweise: [PROCESSES.de.md](PROCESSES.de.md).
+`GET api/sessions/{uid}/processes`, `POST api/sessions/{uid}/processes/{pid}/end` (eigene Sitzungen) und die entsprechenden Endpunkte `api/helpdesk/sessions/{uid}/processes` (Helpdesk, mit `sid`) laufen über `ProcessService`, der nur Live-Sitzungen des Zielbenutzers akzeptiert und jeden Versuch protokolliert. Die Worker-Operationen `processes` und `endprocess` suchen die Sitzung erneut im Broker, verbinden sich mit `New-PSSession -ConfigurationName` zum Rechner dieser Sitzung und rufen per implizitem Remoting (`Import-PSSession`) die drei Befehle des JEA-Endpunkts auf (der dritte, `Get-SssProfile`, liest Profiltyp und Größe für `GET api/sessions/{uid}/profile`), den `scripts/Install-SssJea.ps1` auf den VDAs registriert. Details, Einrichtung und Sicherheitshinweise: [PROCESSES.de.md](PROCESSES.de.md).
 
 Betrieb (Health-Probe, Status-Seite, Audit-Format, Fehlersuche): [OPERATIONS.de.md](OPERATIONS.de.md).
 

@@ -73,7 +73,14 @@ public sealed record SessionDetails(
     IReadOnlyList<DetailGroup> Groups,
     IReadOnlyList<DetailSeries> Series,
     IReadOnlyList<DetailTable> Tables,
-    IReadOnlyList<string> Unavailable);
+    IReadOnlyList<string> Unavailable,
+    LogonWaterfall? Waterfall = null);
+
+/// <summary>One step of the logon (brokering, HDX, authentication, GPO, scripts, profile, shell) on a time axis in
+/// milliseconds. <c>Estimated</c> = the length is known but the position was derived.</summary>
+public sealed record LogonStep(string Id, double StartMs, double DurationMs, bool Estimated);
+
+public sealed record LogonWaterfall(double TotalMs, IReadOnlyList<LogonStep> Steps);
 
 /// <summary>One health check of the status page.</summary>
 public sealed record StatusCheck(string Id, bool? Ok, string Detail);
@@ -83,3 +90,12 @@ public sealed record ProcessEntry(int Id, string Name, DateTimeOffset? Started, 
 public sealed record ProcessListResult(string? Machine, IReadOnlyList<ProcessEntry> Processes);
 
 public sealed record EndProcessResult(string Result);
+
+public sealed record ProfileFolder(string Name, int Mb);
+
+/// <summary>What the VDA reports about the profile of a session's user. <c>Type</c> is Local, Roaming, Citrix UPM or FSLogix.
+/// Sizes are in MB; <c>SizePartial</c> means the folder scan hit its time limit.</summary>
+public sealed record ProfileInfo(
+    string? Machine, string Type, bool Loaded, string? LocalPath, string? StorePath, string? Container, int? ContainerMb,
+    bool Roaming, bool Temporary, bool Mandatory, int? SizeMb, bool SizePartial, int ScanSeconds,
+    IReadOnlyList<string> Notes, IReadOnlyList<ProfileFolder> TopFolders);

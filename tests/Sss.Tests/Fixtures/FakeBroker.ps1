@@ -58,3 +58,10 @@ function Stop-SssProcess {
     if ($ProcessId -eq 4120) { return 'not-owned' }
     if ($Force) { 'killed' } else { 'closed' }
 }
+function Get-SssProfile {
+    [CmdletBinding()]
+    param([string]$UserSid, [int]$ScanSeconds)
+    [pscustomobject]@{ Type = 'FSLogix'; Loaded = $true; LocalPath = 'C:\Users\alice'; StorePath = $null; Container = '\\files\profiles\alice\Profile.vhdx'; ContainerMb = 9120
+        Roaming = $false; Temporary = $false; Mandatory = $false; SizeMb = 6480; SizePartial = ($ScanSeconds -lt 10); ScanSeconds = 3; Notes = @('Status=0')
+        Top = @([pscustomobject]@{ Name = 'AppData'; Mb = 4210 }, [pscustomobject]@{ Name = 'Documents'; Mb = 1360 }) }
+}

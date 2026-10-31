@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text.Json;
+using Sss.Web.Models;
 using System.Text.RegularExpressions;
 using Sss.Web.Providers;
 
@@ -129,6 +130,24 @@ public sealed partial class BrokerWorkerPool : IBrokerClient, IHostedService, ID
                     p.TryGetProperty("memoryMb", out var mem) ? mem.GetInt32() : 0,
                     Str(p, "window") is { Length: > 0 } w ? w : null));
         return new BrokerProcessList(Str(res, "machine"), list);
+    }
+
+    public async Task<ProfileInfo> ProfileAsync(string userSid, string uid, int scanSeconds, CancellationToken ct)
+    {
+        if (!SidRegex().IsMatch(userSid)) throw new ArgumentException("Invalid SID.", nameof(userSid));
+        if (!UidRegex().IsMatch(uid)) throw new ArgumentException("Invalid session id.", nameof(uid));
+        scanSeconds = Math.Clamp(scanSeconds, 0, 120);
+        var res = await RunAsync(new() { ["op"] = "profile", ["sid"] = userSid, ["uid"] = uid, ["scanSeconds"] = scanSeconds }, ct,
+            Math.Max(_options.RequestTimeoutSeconds, _options.Processes.TimeoutSeconds) + scanSeconds);
+        int? Mb(string name) => res.TryGetProperty(name, out var p) && p.ValueKind == JsonValueKind.Number ? p.GetInt32() : null;
+        bool Flag(string name) => res.TryGetProperty(name, out var p) && p.ValueKind == JsonValueKind.True;
+        string? Text(string name) => Str(res, name) is { Length: > 0 } s ? s : null;
+        var top = new List<ProfileFolder>();
+        if (res.TryGetProperty("top", out var arr) && arr.ValueKind == JsonValueKind.Array)
+            foreach (var t in arr.EnumerateArray())
+                top.Add(new ProfileFolder(Str(t, "name") ?? "", t.TryGetProperty("mb", out var mb) && mb.ValueKind == JsonValueKind.Number ? mb.GetInt32() : 0));
+        return new ProfileInfo(Text("machine"), Text("type") ?? "Local", Flag("loaded"), Text("localPath"), Text("storePath"), Text("container"), Mb("containerMb"),
+            Flag("roaming"), Flag("temporary"), Flag("mandatory"), Mb("sizeMb"), Flag("sizePartial"), Mb("scanSeconds") ?? 0, Strings(res, "notes"), top);
     }
 
     public async Task<string> EndProcessAsync(string userSid, string uid, int processId, bool force, CancellationToken ct)

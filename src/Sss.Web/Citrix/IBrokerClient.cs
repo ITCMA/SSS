@@ -1,3 +1,5 @@
+using Sss.Web.Models;
+
 namespace Sss.Web.Citrix;
 
 public sealed record BrokerSession(
@@ -45,6 +47,9 @@ public interface IBrokerClient
     /// <summary>Ends one process of that session: closes its main window, or kills it with <paramref name="force"/>.
     /// Returns closed, killed, no-window, not-closed, not-owned, not-found or protected.</summary>
     Task<string> EndProcessAsync(string userSid, string uid, int processId, bool force, CancellationToken ct);
+
+    /// <summary>Profile type and size of the user on the machine of the given session (JEA command Get-SssProfile).</summary>
+    Task<ProfileInfo> ProfileAsync(string userSid, string uid, int scanSeconds, CancellationToken ct);
 
     /// <summary>Round trip to a worker (status page).</summary>
     Task PingAsync(CancellationToken ct);

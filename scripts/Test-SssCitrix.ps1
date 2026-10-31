@@ -168,6 +168,15 @@ try {
             Info ("Expert view: '{0}' not available or without SessionKey; the expert view omits this part." -f $set)
         }
     }
+    $conn = $xml.SelectSingleNode("//edm:EntityType[@Name='Connection']", $ns)
+    if ($conn) {
+        $names = @($conn.Property | ForEach-Object { $_.Name })
+        Info ('Connection properties: ' + ($names -join ', '))
+        $steps = @($names | Where-Object { $_ -match 'StartDate$' -and $names -contains ($_ -replace 'StartDate$', 'EndDate') -and $_ -ne 'LogOnStartDate' } | ForEach-Object { $_ -replace 'StartDate$', '' })
+        $lengths = @($names | Where-Object { $_ -match 'Duration$' } | ForEach-Object { $_ -replace 'Duration$', '' })
+        if ($steps.Count + $lengths.Count -gt 0) { Ok ("Logon waterfall: steps found: {0}; durations: {1}" -f ($steps -join ', '), ($lengths -join ', ')) }
+        else { Info 'Logon waterfall: this site delivers no per-step logon times (Start/End dates or durations) in Connection; the expert view then shows no waterfall.' }
+    }
     $session = $xml.SelectSingleNode("//edm:EntityType[@Name='Session']", $ns)
     if ($session) { Info ('Session properties: ' + (($session.Property | ForEach-Object { $_.Name }) -join ', ')) }
 } catch { Bad ("Monitor OData `$metadata: {0}" -f $_.Exception.Message) }
@@ -216,11 +225,15 @@ if ($Vda) {
         try {
             $session = New-PSSession -ComputerName $Vda -ConfigurationName $JeaConfiguration -ErrorAction Stop
             Ok "Connected to the endpoint '$JeaConfiguration' on $Vda as $([Security.Principal.WindowsIdentity]::GetCurrent().Name)"
-            Import-PSSession -Session $session -CommandName 'Get-SssProcess', 'Stop-SssProcess' -AllowClobber -DisableNameChecking -ErrorAction Stop | Out-Null
-            Ok 'Get-SssProcess and Stop-SssProcess are offered'
+            Import-PSSession -Session $session -CommandName 'Get-SssProcess', 'Stop-SssProcess', 'Get-SssProfile' -AllowClobber -DisableNameChecking -ErrorAction SilentlyContinue | Out-Null
+            Ok 'Process commands are offered'
             $procs = @(Get-SssProcess -UserSid $sid)
             Ok ("Get-SssProcess returned {0} process(es) of the user" -f $procs.Count)
             foreach ($p in ($procs | Where-Object { $_.Window } | Select-Object -First 5)) { Info ("Application: {0} (PID {1}) '{2}'" -f $p.Name, $p.Id, $p.Window) }
+            if (Get-Command Get-SssProfile -ErrorAction SilentlyContinue) {
+                $prof = Get-SssProfile -UserSid $sid -ScanSeconds 5
+                Ok ("Get-SssProfile: type {0}, size {1} MB{2}" -f $prof.Type, $prof.SizeMb, $(if ($prof.SizePartial) { ' (partial)' } else { '' }))
+            } else { Info 'Get-SssProfile is not offered: run Install-SssJea.ps1 again on this VDA to add the profile command.' }
             $other = Stop-SssProcess -UserSid $sid -ProcessId 2147483647
             if ($other -eq 'not-found' -or $other -eq 'not-owned') { Ok "Safety check: a process id that does not exist is refused ($other)" }
             else { Bad "Safety check failed: Stop-SssProcess answered '$other' for a process id that does not exist" }

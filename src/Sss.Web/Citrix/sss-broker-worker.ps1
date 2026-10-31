@@ -1,7 +1,7 @@
 <#
   SSS broker worker: a long-running Windows PowerShell 5.1 process that talks to the Citrix Broker SDK.
   Protocol: one JSON request per line on stdin, one JSON response per line on stdout.
-  Only a few operations exist (ping, list, listall, logoff, message, processes, endprocess) and every value is validated before it reaches a cmdlet.
+  Only a few operations exist (ping, list, listall, logoff, message, processes, endprocess, profile) and every value is validated before it reaches a cmdlet.
   Keep this file compatible with Windows PowerShell 5.1 (no ternary, no ?? operators).
 #>
 [CmdletBinding()]
@@ -133,26 +133,35 @@ function Get-OwnedSession([string]$sid, [string]$uid) {
     return $machine
 }
 
-function Use-Jea([string]$machine, [scriptblock]$Action) {
+function Use-Jea([string]$machine, [string[]]$Commands, [scriptblock]$Action) {
     $s = New-PSSession -ComputerName $machine -ConfigurationName $JeaConfiguration -ErrorAction Stop
     try {
-        Import-PSSession -Session $s -CommandName 'Get-SssProcess', 'Stop-SssProcess' -AllowClobber -DisableNameChecking -ErrorAction Stop | Out-Null
+        Import-PSSession -Session $s -CommandName $Commands -AllowClobber -DisableNameChecking -ErrorAction Stop | Out-Null
         return (& $Action)
     } finally { Remove-PSSession $s -ErrorAction SilentlyContinue }
 }
 
 function Get-SessionProcesses([string]$sid, [string]$uid) {
     $machine = Get-OwnedSession $sid $uid
-    $list = Use-Jea $machine { @(Get-SssProcess -UserSid $sid) }
+    $list = Use-Jea $machine @('Get-SssProcess') { @(Get-SssProcess -UserSid $sid) }
     $rows = @($list | Where-Object { $_ } | ForEach-Object {
         @{ id = [int]$_.Id; name = [string]$_.Name; sessionId = [int]$_.SessionId; started = [string]$_.Started; memoryMb = [int]$_.MemoryMb; window = [string]$_.Window }
     })
     return @{ machine = $machine; processes = $rows }
 }
 
+function Get-SessionProfile([string]$sid, [string]$uid, [int]$scanSeconds) {
+    $machine = Get-OwnedSession $sid $uid
+    $p = Use-Jea $machine @('Get-SssProfile') { Get-SssProfile -UserSid $sid -ScanSeconds $scanSeconds }
+    $top = @(@($p.Top) | Where-Object { $_ } | ForEach-Object { @{ name = [string]$_.Name; mb = [int]$_.Mb } })
+    return @{ machine = $machine; type = [string]$p.Type; loaded = [bool]$p.Loaded; localPath = [string]$p.LocalPath; storePath = [string]$p.StorePath
+        container = [string]$p.Container; containerMb = $p.ContainerMb; roaming = [bool]$p.Roaming; temporary = [bool]$p.Temporary; mandatory = [bool]$p.Mandatory
+        sizeMb = $p.SizeMb; sizePartial = [bool]$p.SizePartial; scanSeconds = [int]$p.ScanSeconds; notes = @(@($p.Notes) | Where-Object { $_ } | ForEach-Object { [string]$_ }); top = $top }
+}
+
 function Stop-SessionProcess([string]$sid, [string]$uid, [int]$procId, [bool]$force) {
     $machine = Get-OwnedSession $sid $uid
-    $result = Use-Jea $machine {
+    $result = Use-Jea $machine @('Stop-SssProcess') {
         if ($force) { Stop-SssProcess -UserSid $sid -ProcessId $procId -Force } else { Stop-SssProcess -UserSid $sid -ProcessId $procId }
     }
     return [string]@($result)[0]
@@ -207,6 +216,15 @@ while ($true) {
                 if ($sid -notmatch $SidPattern) { throw 'Invalid SID.' }
                 $res = Get-SessionProcesses $sid ([string]$req.uid)
                 Send @{ id = $id; ok = $true; machine = $res.machine; processes = @($res.processes) }
+            }
+            'profile' {
+                $sid = [string]$req.sid
+                if ($sid -notmatch $SidPattern) { throw 'Invalid SID.' }
+                $scan = [int]$req.scanSeconds
+                if ($scan -lt 0 -or $scan -gt 120) { throw 'Invalid scan time.' }
+                $res = Get-SessionProfile $sid ([string]$req.uid) $scan
+                $res.id = $id; $res.ok = $true
+                Send $res
             }
             'endprocess' {
                 $sid = [string]$req.sid

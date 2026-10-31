@@ -122,3 +122,10 @@ textarea { font: inherit; color: var(--text); background: var(--surface); border
 .smalltable { font-size: .8rem; margin: 6px 0 12px; }
 
 label.check { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
+
+.waterfall { grid-column: 1 / -1; margin: 12px 0; }
+.chart .wbar { fill: var(--accent); }
+.chart .wbar.slow { fill: var(--crit); }
+.chart .wbar.est { fill-opacity: .45; stroke: var(--accent); stroke-dasharray: 4 3; }
+.chart .wbar.slow.est { stroke: var(--crit); }
+.chart text.wval { font-size: 11px; }

@@ -75,7 +75,7 @@ Die Feldnamen sind auf CVAD 2203, 2402, 2507 und 2607 mit `Test-SssCitrix.ps1` g
 
 ### Prozesse (`Sss:Citrix:Processes`)
 
-Anwendungen und Prozesse einer Sitzung anzeigen und beenden. Standardmäßig aus. Braucht den JEA-Endpunkt auf den VDAs; siehe [Anwendungen und Prozesse beenden](PROCESSES.de.md).
+Anwendungen und Prozesse einer Sitzung anzeigen und beenden sowie Profiltyp und Größe lesen. Standardmäßig aus. Braucht den JEA-Endpunkt auf den VDAs; siehe [Anwendungen und Prozesse beenden](PROCESSES.de.md).
 
 | Schlüssel | Standard | Bedeutung |
 |---|---|---|
@@ -83,6 +83,8 @@ Anwendungen und Prozesse einer Sitzung anzeigen und beenden. Standardmäßig aus
 | `Configuration` | `SSS.Processes` | Name der JEA-Sitzungskonfiguration auf den VDAs (`Install-SssJea.ps1 -ConfigurationName`). |
 | `Audience` | `All` | `All` = Benutzer für die eigenen Sitzungen und das Helpdesk; `Helpdesk` = nur Helpdesk. |
 | `TimeoutSeconds` | `60` | Zeitlimit einer Prozessanfrage (die Verbindung zum VDA ist langsamer als ein Broker-Aufruf). |
+| `ProfileInfo` | `true` | Zeigt Profiltyp und Größe in der Expertenansicht (Knopf „Profiltyp und Größe ermitteln“). Nutzt denselben JEA-Endpunkt, braucht also `Enabled = true`. |
+| `ProfileScanSeconds` | `20` | Zeitlimit des Profilordner-Scans auf dem VDA; `0` = nur Typ, keine Größe. |
 
 ## Qualitätsschwellen (`Sss:Quality`)
 
