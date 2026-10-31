@@ -275,6 +275,27 @@ public class ODataMonitorClientTests
     }
 
     [Fact]
+    public async Task Five_thousand_sessions_in_one_monitor_page_are_parsed_quickly()
+    {
+        var rows = Enumerable.Range(1, 5000).Select(n => new Dictionary<string, object?>
+        {
+            ["SessionKey"] = Guid.CreateVersion7(), ["StartDate"] = "2026-10-29T08:00:00Z", ["EndDate"] = null, ["LogOnDuration"] = 38000, ["SessionType"] = 0,
+            ["Machine"] = new { DnsName = $"vdi-{n % 200}.demo.local", DesktopGroup = new { Name = "DG" } },
+            ["CurrentConnection"] = new { ClientName = $"PC-{n}", ClientAddress = $"10.0.{n % 250}.5" },
+            ["SessionMetrics"] = new[] { new { CollectedDate = "2026-10-29T09:30:00Z", IcaRttMS = 42, OutputBandwidthAvailable = 105379594 } },
+        }).ToList();
+        var page = System.Text.Json.JsonSerializer.Serialize(new { value = rows });
+        var (c, _) = Make(r => r.RequestUri!.AbsolutePath.EndsWith("/Users") ? """{"value":[{"Id":1}]}""" : page);
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var list = await c.GetLiveAsync(Sid, default);
+        sw.Stop();
+
+        Assert.Equal(5000, list.Count);
+        Assert.True(sw.ElapsedMilliseconds < 5000, $"parsing took {sw.ElapsedMilliseconds} ms");
+    }
+
+    [Fact]
     public async Task Follows_next_link_only_on_the_same_host()
     {
         var page = 0;

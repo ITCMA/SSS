@@ -215,6 +215,8 @@ Als erstes: den Reiter **Status** öffnen (Helpdesk) oder `Test-SssSetup.ps1` au
 - [Voraussetzungen](docs/REQUIREMENTS.de.md): Software, Konten, Citrix, Ports
 - [Betrieb](docs/OPERATIONS.de.md): Update, Health-Probe, Status-Seite, Audit-Protokoll, Fehlersuche
 - [Anwendungen und Prozesse](docs/PROCESSES.de.md): JEA-Endpunkt, Einrichtung, Sicherheit
+- [Versionierung und Kompatibilität](docs/COMPATIBILITY.de.md): was stabil ist, wie du aktualisierst; [Changelog](CHANGELOG.md)
+- [Bedrohungsanalyse](docs/THREAT-MODEL.de.md): was SSS schützt, wer es angreifen könnte, was ihn aufhält
 - [Mehrere Controller und Server](docs/MULTI-SERVER.de.md): Failover, Load Balancer, Kerberos-Alias, gemeinsamer Schlüsselring, Audit, Monitor über HTTPS
 - [Datenquellen](docs/DATA-SOURCES.de.md): woher Sitzungsdaten und Qualitätswerte kommen und wie sie bewertet werden
 - [Architektur](docs/ARCHITECTURE.de.md): Bausteine, Abläufe, Konfigurationsreferenz

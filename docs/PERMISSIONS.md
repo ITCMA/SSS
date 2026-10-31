@@ -52,6 +52,16 @@ Add-AdminRight -Administrator 'CORP\svc-sss$' -Role 'Help Desk Administrator' -A
 
 It is the smallest built-in role that covers what SSS does: list sessions, log them off, send messages, read Monitor data. It can do more than that (for example machine power actions). In production, create a custom role with only the permissions SSS needs and assign it instead. A compromised SSS process can do whatever the service account can do, so the role matters.
 
+## Narrowing the role (open item before 1.0)
+
+*Help Desk Administrator* is broader than SSS needs. A custom role with only the permissions SSS uses is the goal; it has **not been derived and tested on a real site yet**, so no list is given here. To derive it on a test site:
+
+1. Create a copy of the role: in Studio (Delegated Administration, Roles) or with `New-AdminRole` and `Add-AdminPermission` from the `Citrix.DelegatedAdmin.Admin.V1` snap-in. `Get-AdminRole -Name 'Help Desk Administrator'` shows its permissions.
+2. Assign the copy to the SSS service account instead of *Help Desk Administrator*.
+3. Remove permissions one at a time, restart the app pool and run the checks below after each step. Put a permission back when one check fails.
+4. Checks: `Test-SssCitrix.ps1` (all green); in the web interface: list own sessions, history, log off a test session, helpdesk search and farm overview, send a message, expert view of a session.
+5. Send the resulting permission list (without site specific names) in an issue, so it can be documented and tested for the next release.
+
 ## Ending applications and processes (optional)
 
 Off by default. It needs one more right, on the **VDAs** instead of the controller: the service account may connect to a restricted PowerShell endpoint (JEA, `SSS.Processes`) that offers only "list the processes of this user" and "end one process of this user". `scripts/Install-SssJea.ps1 -Principal 'CORP\svc-sss$'` sets it up on a VDA, no other right is granted and the account gets no general access to the machine. Details: [Ending applications and processes](PROCESSES.md).

@@ -9,6 +9,22 @@ permissions:
   contents: read
 
 jobs:
+  # The scripts and the JEA commands only mean something on Windows: run them there, in Windows PowerShell 5.1 and in PowerShell 7.
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+      - name: Script checks (Windows PowerShell 5.1)
+        shell: powershell
+        run: .\tests\scripts\Check-Scripts.ps1
+      - name: Script checks (PowerShell 7)
+        shell: pwsh
+        run: .\tests\scripts\Check-Scripts.ps1
+      - run: dotnet test --configuration Release
+
   build-test:
     runs-on: ubuntu-latest
     steps:
@@ -20,7 +36,7 @@ jobs:
         shell: pwsh
         run: |
           $bad = 0
-          foreach ($f in Get-ChildItem scripts, src/Sss.Web/Citrix -Filter *.ps1 -Recurse) {
+          foreach ($f in Get-ChildItem scripts, src/Sss.Web/Citrix, tests -Filter *.ps1 -Recurse) {
             $errors = $null
             [void][System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$null, [ref]$errors)
             if ($errors) { $errors | ForEach-Object { Write-Error "$($f.Name): $($_.Message)" }; $bad++ }

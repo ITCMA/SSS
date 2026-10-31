@@ -52,6 +52,16 @@ Add-AdminRight -Administrator 'CORP\svc-sss$' -Role 'Help Desk Administrator' -A
 
 Es ist die kleinste eingebaute Rolle, die abdeckt, was SSS tut: Sitzungen auflisten, abmelden, Nachrichten senden, Monitor-Daten lesen. Sie kann mehr (zum Beispiel Maschinen ein- und ausschalten). Im Produktivbetrieb eine eigene Rolle mit genau den nötigen Berechtigungen anlegen und stattdessen zuweisen. Ein kompromittierter SSS-Prozess darf alles, was das Dienstkonto darf, deshalb zählt die Rolle.
 
+## Die Rolle enger fassen (offen vor 1.0)
+
+*Help Desk Administrator* ist weiter gefasst, als SSS braucht. Ziel ist eine eigene Rolle mit nur den Berechtigungen, die SSS verwendet. Sie ist auf einer echten Umgebung **noch nicht abgeleitet und getestet**, deshalb steht hier keine Liste. So leitest du sie auf einer Testumgebung her:
+
+1. Eine Kopie der Rolle anlegen: in Studio (Delegierte Administration, Rollen) oder mit `New-AdminRole` und `Add-AdminPermission` aus dem Snap-in `Citrix.DelegatedAdmin.Admin.V1`. `Get-AdminRole -Name 'Help Desk Administrator'` zeigt deren Berechtigungen.
+2. Die Kopie dem SSS-Dienstkonto statt *Help Desk Administrator* zuweisen.
+3. Berechtigungen einzeln entfernen, den App-Pool neu starten und nach jedem Schritt die Prüfungen unten ausführen. Schlägt eine fehl, die Berechtigung wieder hinzufügen.
+4. Prüfungen: `Test-SssCitrix.ps1` (alles grün); in der Weboberfläche: eigene Sitzungen, Verlauf, eine Testsitzung abmelden, Helpdesk-Suche und Farm-Übersicht, eine Nachricht senden, Expertenansicht einer Sitzung.
+5. Die entstandene Berechtigungsliste (ohne umgebungsspezifische Namen) in einem Issue schicken, damit sie dokumentiert und für das nächste Release getestet werden kann.
+
 ## Anwendungen und Prozesse beenden (optional)
 
 Standardmäßig aus. Es braucht ein weiteres Recht, und zwar auf den **VDAs** statt auf dem Controller: Das Dienstkonto darf sich mit einem eingeschränkten PowerShell-Endpunkt (JEA, `SSS.Processes`) verbinden, der nur „Prozesse dieses Benutzers auflisten“ und „einen Prozess dieses Benutzers beenden“ anbietet. `scripts/Install-SssJea.ps1 -Principal 'CORP\svc-sss$'` richtet ihn auf einem VDA ein; weitere Rechte werden nicht vergeben und das Konto erhält keinen allgemeinen Zugriff auf den Rechner. Details: [Anwendungen und Prozesse beenden](PROCESSES.de.md).

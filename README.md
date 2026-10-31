@@ -215,6 +215,8 @@ Everything a helpdesk user does is written to the audit log with the acting user
 - [Requirements](docs/REQUIREMENTS.md): software, accounts, Citrix, ports
 - [Operations](docs/OPERATIONS.md): update, health probe, status page, audit trail, troubleshooting
 - [Applications and processes](docs/PROCESSES.md): JEA endpoint, setup, security
+- [Versioning and compatibility](docs/COMPATIBILITY.md): what is stable, how to update; [changelog](CHANGELOG.md)
+- [Threat model](docs/THREAT-MODEL.md): what SSS protects, who could attack, what stops them
 - [Several controllers and servers](docs/MULTI-SERVER.md): failover, load balancer, Kerberos alias, shared key ring, audit, Monitor over HTTPS
 - [Data sources](docs/DATA-SOURCES.md): where session data and quality metrics come from and how they are rated
 - [Architecture](docs/ARCHITECTURE.md): components, request flows, configuration reference

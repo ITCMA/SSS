@@ -19,6 +19,10 @@ ASPNETCORE_ENVIRONMENT=Development ASPNETCORE_URLS=http://localhost:5080 dotnet 
 
 Development mode uses a fixed demo user and sample data, so no Citrix is needed. Set `Sss__Auth__DevIsHelpdesk=true` to see the helpdesk features.
 
+## Script checks
+
+`tests/scripts/Check-Scripts.ps1` checks the PowerShell scripts without a Citrix site and, on Windows, runs the code of the JEA commands for the current user. CI runs it on `windows-latest` in Windows PowerShell 5.1 and PowerShell 7. On a Mac or Linux machine run `pwsh -File tests/scripts/Check-Scripts.ps1` (the Windows part is skipped).
+
 ## Screenshots
 
 README screenshots come only from the built-in demo mode, never from a real site. With the development server running (`ASPNETCORE_ENVIRONMENT=Development`), headless Chrome reproduces them: `?lang=en&theme=light` for the overview and `&shot=details`, `&shot=profile` or `&shot=processes` for the expert dialogs (these parameters work in demo mode only). Look at every image before committing: it must show demo data (`DEMO\demo.user`, `10.20.x.x`, `*.demo.local`) and nothing else.
