@@ -1,0 +1,20 @@
+# .NET
+bin/
+obj/
+publish/
+*.user
+.vs/
+# Node / frontend
+node_modules/
+dist/
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+# Local config & secrets
+appsettings.Local.json
+sss.local.*
+*.pfx
+# Logs
+logs/
+*.log

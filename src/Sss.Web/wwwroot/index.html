@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>SSS – Session Self Service</title>
+  <link rel="stylesheet" href="app.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#main" data-i18n="skip">Skip to content</a>
+
+  <header class="top">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">SSS</span>
+      <div>
+        <h1 data-i18n="title">Session Self Service</h1>
+        <p class="muted" id="user" aria-live="polite"></p>
+      </div>
+    </div>
+    <div class="prefs">
+      <a id="storefront" class="btn" hidden target="_blank" rel="noopener noreferrer" data-i18n="storefront">Open StoreFront</a>
+      <button type="button" id="expert" aria-pressed="false" data-i18n="expert">Expert view</button>
+      <label><span class="sr" data-i18n="language">Language</span>
+        <select id="lang">
+          <option value="en">English</option>
+          <option value="de">Deutsch</option>
+          <option value="fr">Français</option>
+          <option value="es">Español</option>
+          <option value="zh">中文</option>
+        </select>
+      </label>
+      <label><span class="sr" data-i18n="theme">Theme</span>
+        <select id="theme">
+          <option value="auto" data-i18n="themeAuto">Auto</option>
+          <option value="light" data-i18n="themeLight">Light</option>
+          <option value="dark" data-i18n="themeDark">Dark</option>
+        </select>
+      </label>
+    </div>
+  </header>
+
+  <div id="demo" class="banner" role="note" hidden data-i18n="demo"></div>
+
+  <nav id="tabs" class="tabs" hidden aria-label="Views">
+    <button type="button" id="tab-mine" aria-pressed="true" data-i18n="tabMine">My sessions</button>
+    <button type="button" id="tab-hd" aria-pressed="false" data-i18n="tabHelpdesk">Helpdesk</button>
+    <button type="button" id="tab-sys" aria-pressed="false" data-i18n="tabStatus">Status</button>
+  </nav>
+
+  <main id="main">
+    <p id="status" class="status" role="status" aria-live="polite"></p>
+
+    <!-- Helpdesk: find a user or pick one from all sessions of the farm -->
+    <section id="hd" hidden aria-labelledby="hd-h">
+      <h2 id="hd-h" data-i18n="hdTitle">Helpdesk</h2>
+      <form id="hd-search" class="toolbar">
+        <label class="grow">
+          <span data-i18n="hdSearchLabel">Find a user</span>
+          <input id="hd-q" type="search" minlength="2" maxlength="64" autocomplete="off" data-i18n-ph="hdSearchPlaceholder">
+        </label>
+        <button type="submit" data-i18n="hdSearch">Search</button>
+      </form>
+      <ul id="hd-users" class="userlist" aria-live="polite"></ul>
+      <p id="hd-nousers" class="muted" hidden data-i18n="hdNoUsers">No user found.</p>
+
+      <div class="section-head">
+        <h3 data-i18n="hdAllTitle">All live sessions</h3>
+        <label class="inline">
+          <span class="sr" data-i18n="filter">Filter</span>
+          <input id="hd-filter" type="search" autocomplete="off" data-i18n-ph="filterPlaceholder">
+        </label>
+      </div>
+      <p id="hd-trunc" class="muted" hidden data-i18n="hdTruncated">Only the first sessions are shown. Narrow the search.</p>
+      <div class="table-wrap"><table id="hd-live"><caption class="sr" data-i18n="hdAllTitle"></caption><thead></thead><tbody></tbody></table></div>
+      <p id="hd-live-empty" class="muted" hidden data-i18n="noLive">No active or disconnected sessions.</p>
+    </section>
+
+    <!-- Health checks (helpdesk) -->
+    <section id="sys" hidden aria-labelledby="sys-h">
+      <div class="section-head">
+        <h2 id="sys-h" data-i18n="statusTitle">System status</h2>
+        <button type="button" id="sys-refresh" data-i18n="refresh">Refresh</button>
+      </div>
+      <div class="table-wrap"><table id="sys-table"><caption class="sr" data-i18n="statusTitle"></caption><thead></thead><tbody></tbody></table></div>
+    </section>
+
+    <!-- Sessions of one user: the own sessions, or (helpdesk) those of the chosen user -->
+    <div id="panel">
+      <div id="target" class="target" hidden>
+        <p><strong id="target-name"></strong></p>
+        <button type="button" id="target-back" data-i18n="hdBack">Back to search</button>
+        <label class="grow">
+          <span data-i18n="hdReason">Reason</span>
+          <input id="reason" type="text" maxlength="200" autocomplete="off" data-i18n-ph="hdReasonPlaceholder">
+        </label>
+      </div>
+
+      <section class="toolbar" aria-label="Controls">
+        <label>
+          <span data-i18n="range">History</span>
+          <select id="range">
+            <option value="1h" data-i18n="r1h">Last hour</option>
+            <option value="24h" data-i18n="r24h" selected>Last 24 hours</option>
+            <option value="7d" data-i18n="r7d">Last 7 days</option>
+            <option value="30d" data-i18n="r30d">Last 30 days</option>
+          </select>
+        </label>
+        <label class="grow">
+          <span data-i18n="filter">Filter</span>
+          <input id="filter" type="search" autocomplete="off" data-i18n-ph="filterPlaceholder">
+        </label>
+        <button type="button" id="refresh" data-i18n="refresh">Refresh</button>
+        <a id="export" class="btn" href="#" data-i18n="exportCsv">Export CSV</a>
+      </section>
+
+      <section aria-labelledby="live-h">
+        <div class="section-head">
+          <h2 id="live-h" data-i18n="liveTitle">Your sessions</h2>
+          <div class="bulk">
+            <button type="button" id="logoff-disc" class="danger-outline" hidden data-i18n="logoffDisconnected">Log off all disconnected</button>
+            <button type="button" id="logoff-all" class="danger-outline" hidden data-i18n="logoffAll">Log off all</button>
+          </div>
+        </div>
+        <div class="table-wrap"><table id="live"><caption class="sr" data-i18n="liveTitle"></caption><thead></thead><tbody></tbody></table></div>
+        <p id="live-empty" class="muted" hidden data-i18n="noLive">No active or disconnected sessions.</p>
+      </section>
+
+      <section aria-labelledby="hist-h">
+        <h2 id="hist-h" data-i18n="historyTitle">History</h2>
+        <div class="table-wrap"><table id="hist"><caption class="sr" data-i18n="historyTitle"></caption><thead></thead><tbody></tbody></table></div>
+        <p id="hist-empty" class="muted" hidden data-i18n="noHistory">No sessions in this period.</p>
+      </section>
+    </div>
+  </main>
+
+  <footer class="muted"><span id="updated"></span>SSS – Session Self Service</footer>
+
+  <dialog id="details" class="wide" aria-labelledby="details-h">
+    <div class="section-head">
+      <h2 id="details-h" data-i18n="detailsTitle">Session details</h2>
+      <div class="bulk">
+        <button type="button" id="details-copy" data-i18n="copySupport">Copy support info</button>
+        <button type="button" id="details-close" data-i18n="close">Close</button>
+      </div>
+    </div>
+    <p id="details-sub" class="muted"></p>
+    <p id="details-msg" class="status" role="status" aria-live="polite"></p>
+    <textarea id="details-text" class="supporttext" readonly hidden rows="8"></textarea>
+    <div id="details-body"></div>
+  </dialog>
+
+  <dialog id="message" aria-labelledby="message-h">
+    <form method="dialog" id="message-form">
+      <h2 id="message-h" data-i18n="hdMessageTitle">Send a message to the session</h2>
+      <p id="message-target" class="muted"></p>
+      <textarea id="message-text" rows="4" maxlength="300" required data-i18n-ph="hdMessagePlaceholder"></textarea>
+      <div class="actions">
+        <button value="cancel" formnovalidate data-i18n="cancel">Cancel</button>
+        <button value="ok" id="message-ok" data-i18n="hdSend">Send</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="confirm" aria-labelledby="confirm-text">
+    <form method="dialog">
+      <p id="confirm-text"></p>
+      <div class="actions">
+        <button value="cancel" data-i18n="cancel">Cancel</button>
+        <button value="ok" class="danger" id="confirm-ok" data-i18n="confirm">Log off</button>
+      </div>
+    </form>
+  </dialog>
+</body>
+</html>
