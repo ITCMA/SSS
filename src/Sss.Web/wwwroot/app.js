@@ -494,7 +494,7 @@ function supportText(s, d) {
 
 async function openDetails(s) {
   const dlg = $('details');
-  state.detailsCtx = { s, d: null };
+  const ctx = state.detailsCtx = { s, d: null };   // a slower, older response must not overwrite a newer dialog
   $('details-sub').textContent = `${s.resourceName} · ${s.machine}`;
   $('details-msg').textContent = t('detailsLoading');
   $('details-text').hidden = true;
@@ -510,7 +510,8 @@ async function openDetails(s) {
     if (r.status === 503) { $('details-msg').textContent = t('unavailable'); return; }
     if (!r.ok) throw new Error(String(r.status));
     const d = await r.json();
-    state.detailsCtx.d = d;
+    if (state.detailsCtx !== ctx) return;
+    ctx.d = d;
     $('details-msg').textContent = d.unavailable.length
       ? t('detailsPartial', { parts: d.unavailable.map((p) => t(TABLE_TITLE[p] ?? p)).join(', ') }) : '';
     $('details-body').replaceChildren(
@@ -649,7 +650,7 @@ function applyTheme(v) {
 
 async function init() {
   state.fallback = await loadDict('en');
-  applyTheme(QUERY.get('theme') || store.get('sss.theme') || 'auto');
+  applyTheme(['light', 'dark', 'auto'].includes(QUERY.get('theme')) ? QUERY.get('theme') : (store.get('sss.theme') || 'auto'));
   $('theme').addEventListener('change', (e) => applyTheme(e.target.value));
   $('lang').addEventListener('change', (e) => setLang(e.target.value));
   $('range').addEventListener('change', (e) => { state.range = e.target.value; load(); });
