@@ -249,6 +249,8 @@ if ($HealthEndpoint -and -not $Uninstall) {
     if ($PSCmdlet.ShouldProcess($healthLocation, 'Allow anonymous access to /healthz')) {
         Set-WebConfigurationProperty -Filter "$auth/anonymousAuthentication" -Name enabled -Value $true -PSPath 'MACHINE/WEBROOT/APPHOST' -Location $healthLocation
         Set-WebConfigurationProperty -Filter "$auth/windowsAuthentication" -Name enabled -Value $false -PSPath 'MACHINE/WEBROOT/APPHOST' -Location $healthLocation
+        # anonymous requests run as the app pool identity (empty user name) instead of IUSR, which has no access to the application folder
+        Set-WebConfigurationProperty -Filter "$auth/anonymousAuthentication" -Name userName -Value '' -PSPath 'MACHINE/WEBROOT/APPHOST' -Location $healthLocation
         Ok "GET /$AppPath/healthz is open without credentials"
     }
     if (-not $SkipSmokeTest -and -not $WhatIfPreference) {

@@ -179,7 +179,7 @@ if ($PSCmdlet.ShouldProcess($work, 'Write role capability and session configurat
 
     $pssc = Join-Path $work "$ConfigurationName.pssc"
     New-PSSessionConfigurationFile -Path $pssc -SessionType RestrictedRemoteServer -RunAsVirtualAccount `
-        -TranscriptDirectory $TranscriptDirectory -ModulesToImport @() `
+        -TranscriptDirectory $TranscriptDirectory `
         -RoleDefinitions @{ $Principal = @{ RoleCapabilities = 'SssProcesses' } }
 
     # make the role capability findable: JEA looks in <module>\RoleCapabilities of modules on PSModulePath
