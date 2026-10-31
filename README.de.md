@@ -2,226 +2,114 @@
 
 [English version](README.md)
 
-Ein schlankes Web-Portal, mit dem Endanwender einer **Citrix Virtual Apps and Desktops**-Farm (CVAD) **ihre eigenen Sitzungen** sehen und abmelden können – und die von niemand anderem.
+**Deine Benutzer lösen ihre Citrix-Probleme selbst, in Sekunden. Dein Helpdesk sieht mit einem Klick, *warum* eine Sitzung langsam ist.**
 
-> **Status: Beta.** Durchgängig getestet auf Testfarmen mit Citrix Virtual Apps and Desktops **2203, 2402, 2507 und 2607 (LTSR)** (jeweils ein Delivery Controller): Sitzungen, Verlauf, Qualität, Abmelden, Helpdesk-Nachrichten, die Experten-Ansicht mit Anmelde-Wasserfall, die Profilanalyse und das Beenden von Prozessen (über den JEA-Endpunkt) auf einer Testfarm. Mehrere Delivery Controller und mehrere Webserver sind umgesetzt (siehe [docs/MULTI-SERVER.de.md](docs/MULTI-SERVER.de.md)), aber noch nicht in einer echten Umgebung geprüft. Mit dem eingebauten Demo-Modus lässt sich die Oberfläche ohne Citrix ausprobieren.
-
-*Citrix ist eine Marke der Cloud Software Group, Inc. Dieses Projekt ist unabhängig und weder mit ihr verbunden noch von ihr unterstützt.*
+SSS ist ein kleines, schnelles Web-Portal für **Citrix Virtual Apps and Desktops (CVAD)**. Benutzer melden sich mit ihrem Windows-Konto an und sehen **nur ihre eigenen Sitzungen**: wie gut jede ist (Ampeln), was vorher lief (Verlauf) und einen **Abmelden**-Knopf, der funktioniert. Der Helpdesk bekommt obendrauf die Tiefenansicht: Anmelde-Wasserfall, Leistungsdiagramme, Profilanalyse mit Empfehlungen und Zugriff auf Prozesse. Kein Agent, keine Datenbank, keine Software auf den Clients, eine einzige IIS-Anwendung.
 
 <p align="center">
-  <img src="docs/img/overview-light.png" alt="Bildschirmfotos: Übersicht" width="49%">
-  <img src="docs/img/overview-dark.png" alt="Bildschirmfotos: Dunkelmodus" width="49%">
+  <img src="docs/img/overview-light.png" alt="Selbstbedienung: Übersicht mit Qualitäts-Ampeln" width="49%">
+  <img src="docs/img/overview-dark.png" alt="Dunkelmodus" width="49%">
 </p>
-<p align="center"><img src="docs/img/expert-light.png" alt="Bildschirmfotos: Experten-Ansicht mit Anmelde-Wasserfall" width="49%">
-  <img src="docs/img/profile-light.png" alt="Bildschirmfotos: Profiltyp, Größe und Befunde" width="49%"></p>
-<p align="center"><img src="docs/img/processes-light.png" alt="Bildschirmfotos: Anwendungen und Prozesse einer Sitzung" width="70%"></p>
-<p align="center"><em>Demo-Modus, hell und dunkel; Experten-Ansicht einer Sitzung</em></p>
+<p align="center"><em>Demodaten, heller und dunkler Modus</em></p>
 
-## Funktionen
+> **Status: Beta.** Durchgängig getestet auf Testfarmen mit Citrix Virtual Apps and Desktops **2203, 2402, 2507 und 2607 (LTSR)** (jeweils ein Delivery Controller). Mehrere Delivery Controller und mehrere Webserver sind umgesetzt ([Doku](docs/MULTI-SERVER.de.md)), aber noch nicht in einer echten Umgebung geprüft. Ausprobieren geht ohne Citrix: Der eingebaute Demo-Modus braucht nur das .NET SDK.
 
-- Zeigt alle **aktiven und getrennten** Sitzungen des angemeldeten Benutzers sowie den **Verlauf** (1 h / 24 h / 7 d / 30 d)
-- **Abmelden** mit Bestätigung, dazu die Sammelaktionen „Alle getrennten abmelden“ (nur sichtbar, wenn es welche gibt) und „Alle abmelden“. Einen „Trennen“-Knopf gibt es bewusst nicht
-- App/Desktop, Bereitstellungsgruppe, Maschine, Startzeit, Dauer, Inaktivität, Client-Name und -IP
-- **Sitzungsqualität** mit Ampel, getrennt nach *Ihr Gerät & Netzwerk* (Latenz, Bandbreite) und *Rechenzentrum & VDA* (Anmeldezeit, Serverlast) – Schwellwerte sind konfigurierbar
-- **Anmelde-Wasserfall** und **Profiltyp und Größe** in der Expertenansicht: wohin die Anmeldezeit geht (Brokering, HDX, Gruppenrichtlinien, Skripte, Profil laden, Shell) und ob das Profil lokal, servergespeichert, Citrix UPM oder FSLogix ist, wie groß es ist und welche Ordner am größten sind
-- **Anwendungen und Prozesse** einer Sitzung: ansehen und eine hängende Anwendung schließen oder beenden, für Benutzer (eigene Sitzungen) und Helpdesk, über einen eingeschränkten JEA-Endpunkt auf den VDAs (standardmäßig aus, siehe [docs/PROCESSES.de.md](docs/PROCESSES.de.md))
-- Filter, Sortierung, CSV-Export (mit Schutz vor Formel-Injection in Tabellenkalkulationen)
-- Audit-Log (wer hat wann von wo welche Sitzung abgemeldet) als JSON-Lines
-- **Helpdesk** für eine AD-Gruppe: Benutzer finden, alle aktiven Sitzungen der Farm sehen, fremde Sitzungen mit Grund abmelden, **Nachricht an eine Sitzung senden**, die Experten-Ansicht jeder Sitzung öffnen, lückenlos protokolliert
-- **Statusseite** für den Helpdesk: Live-Prüfungen (Broker, Monitor, Dienstkonto, Audit-Ordner, HTTPS) statt Suche in der Ereignisanzeige
-- Optionaler **StoreFront-Link** (`Sss:StoreFrontUrl`), um Sitzungen zu starten oder wiederzuverbinden
-- **Experten-Ansicht** (Schalter im Kopf): alles, was Citrix zu einer Sitzung gesammelt hat, ähnlich den Detailseiten des Directors, gruppiert in Sitzung, Anmeldung (mit den einzelnen Anmeldeschritten), Client & Verbindung, letzte Messung, Server (VDA) und technische IDs; **Diagramme im Zeitverlauf** für ICA-Round-Trip-Zeit, Bandbreite und Rechenzentrums-Latenz; Verbindungsverlauf und Fehler-/Trennungsgründe; ein Knopf **„Support-Info kopieren“** legt die wichtigsten Fakten für ein Ticket in die Zwischenablage. Die Standard-Ansicht bleibt kurz: die zwei Ampeln plus ein Hinweis, wenn etwas auffällt
-- Responsive, Dark Mode, bedienbar per Tastatur und Screenreader (Ampeln verlassen sich nie nur auf Farbe)
-- Sprachen: English, Deutsch, Français, Español, 中文
+## Für deine Benutzer: sich selbst helfen, mit einem Klick
 
-## Sicherheitsmodell
+Eine hängende Anwendung, ein zäher Desktop, eine Sitzung, die auf einem anderen Rechner offen blieb: Heute ist das ein Ticket. Mit SSS öffnet der Benutzer eine Seite und sieht, was los ist.
 
-- Die Benutzeridentität stammt **ausschließlich** aus der Windows-Authentifizierung des IIS. Sie wird nie aus Request-Parametern gelesen.
-- Jedes Abmelden wird serverseitig gegen die eigenen aktiven Sitzungen des Aufrufers geprüft, bevor etwas an Citrix geht. Fremde oder unbekannte Sitzungs-IDs werden abgelehnt und protokolliert.
-- Anti-Forgery-Token bei allen POST-Anfragen, Rate-Limiting pro Benutzer bei Abmeldungen, strenge CSP und weitere Security-Header, keine Inline-Skripte, kein `innerHTML`.
-- Der „Dev“-Authentifizierungsmodus startet nur mit `ASPNETCORE_ENVIRONMENT=Development`.
-- Details und Meldewege: [SECURITY.md](SECURITY.md)
+- **Alle eigenen Sitzungen auf einen Blick**: Desktops und Apps, aktiv oder getrennt, wo sie laufen, seit wann, von welchem Gerät.
+- **Sitzungsqualität mit Ampeln**, getrennt nach *Ihr Gerät & Netzwerk* (Latenz, Bandbreite) und *Rechenzentrum & VDA* (Anmeldezeit, Serverlast), mit einem Tipp in einfacher Sprache („Hohe Latenz: WLAN, VPN oder Entfernung zum Rechenzentrum prüfen“). Farben haben immer ein Symbol und ein Wort dabei.
+- **Verlauf** der letzten Stunde, des Tages, der Woche oder des Monats: was lief, wie lange, wie gut.
+- **Abmelden** einer hängenden Sitzung, aller getrennten oder aller, jeweils mit Bestätigung. Einen „Trennen“-Knopf gibt es bewusst nicht.
+- **Nur eigene Sitzungen**, auf dem Server abgesichert (siehe Sicherheit). Filter, Sortierung, CSV-Export, heller und dunkler Modus, handytauglich, per Tastatur und Screenreader bedienbar, auf Deutsch, English, Français, Español und 中文.
+- Optionaler Link zu StoreFront, um den Desktop neu zu starten.
 
-## Architektur
+## Für deinen Helpdesk: die Diagnose in einem Dialog
 
-```
-Browser (statische SPA) → IIS (Windows-Auth) → ASP.NET Core (In-Process)
-                                                 └─ ISessionProvider
-                                                      ├─ MockSessionProvider      (Demo, Tests)
-                                                      └─ CitrixSessionProvider: Broker-SDK (PowerShell-Worker) + Monitor-OData
-```
+Mitglieder einer AD-Gruppe bekommen einen **Helpdesk**-Reiter und eine **Experten-Ansicht** mit allem, was Citrix weiß, ohne Director und ohne Fernzugriff auf die Sitzung.
 
-ASP.NET Core auf .NET 10, In-Process im IIS gehostet (kein zusätzlicher Prozess, kein Kaltstart mit *AlwaysRunning* und ohne Idle-Timeout), self-contained veröffentlicht, sodass auf dem Server keine Runtime installiert sein muss.
+<p align="center">
+  <img src="docs/img/expert-light.png" alt="Experten-Ansicht mit Anmelde-Wasserfall und Leistungsdiagrammen" width="49%">
+  <img src="docs/img/profile-light.png" alt="Profilanalyse mit Befunden und Ordnerbaum" width="49%">
+</p>
+<p align="center"><em>Anmelde-Wasserfall und Leistungsdiagramme; Profiltyp, Größe, Ordnerbaum und Befunde</em></p>
 
-## Lokal ausprobieren (macOS, Linux, Windows)
+- **Benutzer finden** oder **alle Live-Sitzungen der Farm** auflisten; Sitzungen und Verlauf jedes Benutzers öffnen.
+- Sitzungen **abmelden** (mit Pflicht- oder optionalem Grund) und eine **Nachricht an eine Sitzung** senden („bitte Arbeit speichern, der Server startet neu“).
+- **Leistungsdaten und Diagramme** im Zeitverlauf: ICA-Laufzeit, verfügbare Bandbreite, Rechenzentrums-Latenz, mit Werten beim Überfahren, dazu Verbindungsverlauf sowie Fehler- und Trennungsgründe.
+- **Anmelde-Wasserfall**: wohin die Anmeldezeit geht (Vermittlung, HDX-Verbindung, Authentifizierung, Gruppenrichtlinien, Anmeldeskripte, Profil laden, Shell). Der langsamste Schritt ist hervorgehoben, Zeit, die Citrix nicht aufschlüsselt, wird als solche gezeigt.
+- **Profilanalyse, auf dem VDA gelesen**: lokal, servergespeichert, Citrix Profile Management oder **FSLogix**; Container- und Ordnergröße; ein **Ordnerbaum** wie bei TreeSize und die **größten Dateien**; Ordnerumleitung; FSLogix- und UPM-Einstellungen samt Ausschlüssen; dazu **Befunde mit Empfehlung** (Container fast voll, Outlook- oder Teams-Caches, persönliche Daten im Profil, fehlende Ausschlüsse, alte lokale Profile, ...).
+- **Anwendungen und Prozesse beenden** einer Sitzung über einen eingeschränkten Endpunkt auf den VDAs (standardmäßig aus).
+- **„Support-Info kopieren“** legt die wichtigsten Fakten einer Sitzung für ein Ticket in die Zwischenablage.
+- **Statusseite** mit Live-Prüfungen statt Suche in der Ereignisanzeige; **Audit-Protokoll** für jede Suche, Ansicht, Abmeldung, Nachricht und Prozessaktion.
 
-Voraussetzung: [.NET 10 SDK](https://dotnet.microsoft.com/download).
+<p align="center"><img src="docs/img/processes-light.png" alt="Anwendungen und Prozesse einer Sitzung" width="60%"></p>
+
+## Warum SSS
+
+| | |
+|---|---|
+| **Leicht und schnell** | ASP.NET Core direkt im IIS. Keine Datenbank, kein Agent, nichts auf den Clients zu installieren, keine Cloud. Vorgewärmte PowerShell-Worker halten das Citrix-SDK geladen. Läuft neben Web Studio auf demselben Server. |
+| **Sicher gebaut** | Die Identität kommt nur aus der Windows-Authentifizierung des IIS. Jede Aktion wird auf dem Server und noch einmal im Worker geprüft, ein Benutzer kann also keine fremde Sitzung anfassen. CSRF-Schutz, strenge Content-Security-Policy, Ratenbegrenzung, **keine Pakete von Drittanbietern**. [Bedrohungsanalyse](docs/THREAT-MODEL.de.md). |
+| **Einfach zu betreiben** | Ein Dienstkonto (gMSA), ein Skript: `install.ps1`. `Test-SssSetup.ps1` prüft die Verdrahtung und nennt zu jedem Befund die Abhilfe. Updates rollen von selbst zurück, wenn die neue Version nicht antwortet. |
+| **Bereit für größere Umgebungen** | Mehrere Delivery Controller mit Failover, mehrere Webserver hinter einem Load Balancer (Health-Probe, gemeinsamer Schlüsselring), Audit-Protokoll, Versionsregel, Dokumentation auf Deutsch und Englisch. |
+
+## Loslegen
+
+**Demo ausprobieren (etwa zwei Minuten, ohne Citrix):**
 
 ```bash
+git clone https://github.com/ITCMA/SSS.git && cd SSS
 ASPNETCORE_ENVIRONMENT=Development ASPNETCORE_URLS=http://localhost:5080 dotnet run --project src/Sss.Web
 ```
 
-<http://localhost:5080> öffnen. In der Entwicklung werden ein fester Demo-Benutzer und Beispieldaten verwendet.
+<http://localhost:5080> öffnen und an die Adresse `?shot=profile` oder `?shot=processes` hängen, um die Experten-Dialoge zu sehen. Braucht das [.NET 10 SDK](https://dotnet.microsoft.com/download).
 
-```bash
-dotnet test
-```
+**In deiner Citrix-Umgebung installieren:** das Zip von den [Releases](https://github.com/ITCMA/SSS/releases) laden und der **[Einrichtungsanleitung](docs/SETUP.de.md)** folgen: Dienstkonto vorbereiten, `install.ps1` ausführen, mit `Test-SssSetup.ps1` und `Test-SssCitrix.ps1` prüfen. Was der Server braucht, steht in den [Voraussetzungen](docs/REQUIREMENTS.de.md).
 
-## Dienstkonto vorbereiten (gMSA)
+## Sicherheit in Kürze
 
-SSS sollte unter einem **Group Managed Service Account (gMSA)** laufen: einem Active-Directory-Konto für Dienste, dessen Passwort Windows selbst erzeugt und regelmäßig wechselt. Niemand kennt oder tippt es, man kann sich damit nicht interaktiv anmelden, und es läuft nie ab. Erkennbar ist es am `$` am Ende, zum Beispiel `CORP\svc-sss$`. Mit diesem Konto spricht SSS mit dem Delivery Controller, es braucht also genau die Citrix-Rechte, die SSS benötigt, und nicht mehr.
+- Die Benutzeridentität kommt **ausschließlich** aus der Windows-Authentifizierung des IIS, nie aus Anfrageparametern.
+- Jede Abmeldung, Nachricht und Prozessaktion wird serverseitig noch einmal gegen die eigenen Live-Sitzungen des Aufrufers geprüft, bevor etwas an Citrix geht; fremde oder unbekannte IDs werden abgelehnt und protokolliert.
+- Anti-Forgery-Token, Ratenbegrenzung pro Benutzer, strenge CSP und Sicherheits-Header, keine Inline-Skripte, kein `innerHTML`.
+- Der Helpdesk sind getrennte Endpunkte hinter einer AD-Gruppe; alles, was er tut, wird protokolliert.
+- Die Prozesssteuerung nutzt einen eingeschränkten JEA-Endpunkt mit drei Befehlen und zeigt genau, was er kann und was nicht ([Doku](docs/PROCESSES.de.md#was-das-freigibt-und-was-nicht)).
+- Details und Meldeweg: [SECURITY.md](SECURITY.md), [Bedrohungsanalyse](docs/THREAT-MODEL.de.md).
 
-**1. gMSA anlegen** (Domain-Admin; AD-PowerShell-Modul):
+## Dokumentation
 
-```powershell
-# einmal pro Domäne, nur falls noch kein KDS-Root-Key existiert (im Lab sofort wirksam):
-Add-KdsRootKey -EffectiveTime ((Get-Date).AddHours(-10))
-
-# 'IIS-SERVER$' = Computerkonto des Servers, auf dem SSS läuft (oder eine Sicherheitsgruppe solcher Server)
-New-ADServiceAccount -Name svc-sss -DNSHostName svc-sss.corp.local `
-  -PrincipalsAllowedToRetrieveManagedPassword 'IIS-SERVER$'
-```
-
-**2. Auf dem IIS-Server installieren und testen** (PowerShell als Administrator; braucht das AD-Modul / RSAT):
-
-```powershell
-Install-ADServiceAccount svc-sss
-Test-ADServiceAccount svc-sss      # muss True liefern
-```
-
-**3. Citrix-Rolle zuweisen.** Der Kontenauswahldialog von Citrix Studio listet gMSAs meist nicht auf. Lege den Administrator deshalb per PowerShell auf einem Delivery Controller an (PowerShell als Administrator). Das ist der empfohlene Weg:
-
-```powershell
-Add-PSSnapin Citrix.DelegatedAdmin.Admin.V1
-New-AdminAdministrator -Name 'CORP\svc-sss$' -Enabled $true
-Add-AdminRight -Administrator 'CORP\svc-sss$' -Role 'Help Desk Administrator' -All
-Get-AdminAdministrator | Select-Object Name, Enabled, @{n='Rights';e={ @($_.Rights).Count }}   # Rights muss 1 oder mehr sein
-```
-
-`New-AdminAdministrator` allein legt einen Administrator **ohne Rechte** an (`Rights : {}`) – `Add-AdminRight` ist nötig. Die eingebaute Rolle **Help Desk Administrator** darf Sitzungen lesen, abmelden und Monitor-Daten lesen; lege eine engere eigene Rolle an, sobald du weißt, was du brauchst (siehe [SECURITY.md](SECURITY.md)). Danach den App-Pool von SSS neu starten.
-
-*Alternative über eine AD-Gruppe:* `svc-sss$` in eine Sicherheitsgruppe aufnehmen und diese Gruppe in Studio hinzufügen. Das funktioniert, aber ein laufender App-Pool behält das Token, mit dem er gestartet wurde. Eine Änderung der Gruppenmitgliedschaft wirkt daher eventuell erst nach einem vollständigen Neustart des App-Pools (manchmal erst nach einem Neustart des Servers). Der direkte Eintrag oben vermeidet das Problem.
-
-**4. Dem Installer übergeben** mit `-ServiceAccount 'CORP\svc-sss$'` (einfache Anführungszeichen, sonst expandiert PowerShell das `$`). Der Installer setzt es als Identität des App-Pools und gibt ihm Leserechte auf die Anwendung und Schreibrechte auf den Audit-Log-Ordner.
-
-Ohne `-ServiceAccount` läuft der App-Pool als `ApplicationPoolIdentity`. Das meldet sich an anderen Servern als Computerkonto an und hat keine Citrix-Rechte – genug, um die Oberfläche anzusehen, aber nicht für den echten Betrieb. Der Installer unterstützt nur gMSAs (er setzt ein leeres App-Pool-Passwort).
-
-## Installation auf dem IIS (Windows Server)
-
-Voraussetzungen auf dem Server: IIS mit dem [.NET Hosting Bundle](https://dotnet.microsoft.com/download/dotnet) (für das ASP.NET Core Module; SSS selbst ist self-contained), die Citrix-PowerShell-Snap-ins (oder das Remote PowerShell SDK) und ein [Group Managed Service Account](#dienstkonto-vorbereiten-gmsa) mit einer Citrix-Rolle.
-
-1. `sss-<version>-win-x64.zip` von den [Releases](../../releases) laden und auf dem Server entpacken (bei privatem Repository auf einem angemeldeten Rechner mit `gh release download` laden und hinüberkopieren).
-2. In einer Windows PowerShell mit Administratorrechten:
-
-```powershell
-.\install.ps1 -Interactive            # fragt Controller, Dienstkonto und Helpdesk-Gruppe ab
-.\install.ps1 -Controllers ddc01.corp.local,ddc02.corp.local -ServiceAccount 'CORP\svc-sss$'
-```
-
-3. Verdrahtung prüfen: `.\Test-SssSetup.ps1`. Das Skript ist schreibgeschützt und nennt zu jedem Befund den genauen Befehl zur Behebung (IIS, App-Pool, gMSA, Citrix-Administratoreintrag, Helpdesk-Gruppe, Berechtigungen, die Anwendung selbst). Welches Konto welches Recht braucht, steht in [Berechtigungen auf einen Blick](docs/PERMISSIONS.de.md).
-
-
-Standardmäßig wird SSS zur Anwendung `Default Web Site/sss` und liegt auf einem Web-Studio-Server damit neben Studio. Mit `-SiteName`, `-AppPath` und `-PhysicalPath` lässt sich das ändern, mit `-WhatIf` eine Vorschau anzeigen. Das Skript legt einen eigenen App-Pool an (kein Managed Code, *AlwaysRunning*, kein Idle-Timeout, kein periodisches Recycling), aktiviert die Windows-Authentifizierung, deaktiviert den anonymen Zugriff, setzt Berechtigungen, schreibt eine Start-`sss.config.json` (wird bei Updates behalten) und führt einen Smoke-Test aus. Ein Update geht mit `.\install.ps1 -Update`: Es werden nur die Dateien ersetzt (Konfiguration, App-Pool und Berechtigungen bleiben), die vorige Version bleibt in `<Installationsordner>.previous` erhalten und wird bei einem fehlgeschlagenen Smoke-Test automatisch wiederhergestellt. Die Seite ist kurz über `app_offline.htm` offline. `-Uninstall` entfernt Anwendung und App-Pool, behält aber Dateien, Konfiguration und Audit-Logs.
-
-Release-Builds entstehen durch einen Tag wie `v0.1.0`; das Zip enthält eine Prüfsummen-Datei (`.sha256`).
-
-## Konfiguration
-
-Die Standardwerte stehen in `src/Sss.Web/appsettings.json`. Überschreiben lassen sie sich in einer Datei `sss.config.json` neben der Anwendung (Abschnitt `Sss`), zum Beispiel:
-
-```json
-{
-  "Sss": {
-    "RefreshSeconds": 30,
-    "RateLimit": { "LogoffRequestsPerMinute": 10 },
-    "Quality": { "RttWarnMs": 80, "RttCritMs": 150 }
-  }
-}
-```
-
-Nach Änderungen ist ein Neustart (Recycling des App-Pools) nötig.
-
-## Anbindung an eine echte Citrix-Farm
-
-`Sss:Provider` in der `sss.config.json` auf `Citrix` setzen:
-
-```json
-{
-  "Sss": {
-    "Provider": "Citrix",
-    "Citrix": {
-      "Controllers": [ "ddc01.corp.local", "ddc02.corp.local" ],
-      "Workers": 2,
-      "Monitor": { "BaseUrl": "https://ddc01.corp.local/Citrix/Monitor/OData/v4/Data/" }
-    }
-  }
-}
-```
-
-- **Live-Sitzungen und Abmelden** laufen über das Broker-SDK in vorgewärmten Windows-PowerShell-5.1-Workern. Der Server braucht die Citrix-PowerShell-Snap-ins (kommen mit Studio/Web Studio) oder das *Remote PowerShell SDK*, wenn SSS auf einem separaten Server läuft.
-- **Verlauf und Qualität** kommen aus der Monitor-OData-API. Ist sie nicht erreichbar, zeigt die Oberfläche einen Hinweis und alles andere funktioniert weiter.
-- Die Identität des App-Pools (am besten ein gMSA) braucht eine delegierte Citrix-Administratorrolle, die Sitzungen lesen, abmelden und Monitor-Daten lesen darf (z. B. eine eigene Rolle auf Basis von *Help Desk Administrator*).
-- Vor dem ersten Einsatz auf dem Server `scripts/Test-SssCitrix.ps1` ausführen. Es liest nur und prüft Erreichbarkeit und die genauen OData-Feldnamen. Aufruf: `.\Test-SssCitrix.ps1 -Controller ddc01 -UserName CORP\alice` (der Benutzername muss `DOMAIN\username` lauten), während der Benutzer eine Sitzung hat. Auf CVAD 2507 CU1 geprüft: Alle von SSS verwendeten Monitor-Felder existieren; die Bandbreite wird aus `SessionMetrics.OutputBandwidthAvailable` (bit/s) bewertet. Der Monitor wird standardmäßig über `https://` angesprochen; für einen Controller ohne HTTPS-Bindung `Citrix:Monitor:UseHttps` auf `false` setzen oder die volle Adresse in `Citrix:Monitor:BaseUrl` angeben. Vor dem Posten der Ausgabe von `Test-SssSetup.ps1` oder `Test-SssCitrix.ps1` in einem öffentlichen Issue `-Redact` anhängen: Es ersetzt Benutzer, Domäne, Hostnamen, SIDs, IP-Adressen und GUIDs (`-Mask wort1,wort2` ergänzt weitere).
-- „Abmelden“ startet den Vorgang (`Stop-BrokerSession` arbeitet asynchron); die Sitzung verschwindet nach wenigen Sekunden aus der Liste.
-
-## Helpdesk
-
-Mitglieder einer AD-Gruppe können Benutzer finden und **deren** Sitzungen sehen und abmelden. Alle anderen bekommen bei allen Helpdesk-Endpunkten HTTP 403 und sehen den Reiter nie.
-
-1. Eine Sicherheitsgruppe anlegen, z. B. `SSS-Helpdesk`, und die Helpdesk-Mitarbeiter aufnehmen: `New-ADGroup -Name SSS-Helpdesk -GroupScope Global -GroupCategory Security`.
-2. Die Gruppe in die `sss.config.json` eintragen (oder bei einer Neuinstallation `-HelpdeskGroup 'CORP\SSS-Helpdesk'` an `install.ps1` übergeben) und den App-Pool recyceln:
-
-```json
-{ "Sss": { "Helpdesk": { "Group": "CORP\\SSS-Helpdesk", "ReasonRequired": false, "MaxSessions": 1000 } } }
-```
-
-3. Helpdesk-Mitarbeiter müssen sich nach der Aufnahme in die Gruppe neu anmelden, weil Gruppenmitgliedschaften im Windows-Anmeldetoken stehen.
-
-Im Reiter **Helpdesk** suchst du nach einem Namensteil (Benutzer mit aktiver Sitzung aus dem Broker, Benutzer nur mit Verlauf aus Monitor) oder wählst einen Benutzer aus der Liste **aller aktiven Sitzungen** der Farm (filterbar, begrenzt auf `MaxSessions`). Beim Öffnen eines Benutzers siehst du dieselben Tabellen wie er selbst, mit denselben Abmelden-Knöpfen und einem optionalen **Grund**. Mit `ReasonRequired` wird der Grund zur Pflicht.
-
-Alles, was der Helpdesk tut, steht im Audit-Log mit handelndem Benutzer, betroffenem Benutzer und Grund: Suchen, das Öffnen eines Benutzers (höchstens einmal pro 5 Minuten und Benutzer), die Farm-Übersicht und jedes Abmelden. Helpdesk-Anfragen sind ratenbegrenzt (60/min). Der Helpdesk nutzt dasselbe Dienstkonto und dieselbe Citrix-Rolle wie das Self-Service, es sind keine zusätzlichen Citrix-Rechte nötig. Wer Zugriff auf den Helpdesk hat, sieht die Sitzungen aller Benutzer: Die Gruppe klein halten.
-
-## Fehlersuche
-
-Als erstes: den Reiter **Status** öffnen (Helpdesk) oder `Test-SssSetup.ps1` ausführen. Beide prüfen dasselbe und nennen die fehlschlagende Stelle.
-
-| Symptom | Ursache und Lösung |
+| | |
 |---|---|
-| Seite lädt, zeigt aber „Der Dienst ist vorübergehend nicht verfügbar“ (HTTP 503) | In die Windows-Ereignisanzeige schauen (*Anwendung*, Quelle `.NET Runtime`, Text `An unhandled exception has occurred`). `Insufficient administrative privilege` bedeutet: Die Identität des App-Pools ist kein Citrix-Administrator, oder Rolle/Bereich erlauben das Lesen von Sitzungen nicht. Das gMSA in Studio unter *Administratoren* mit z. B. der Rolle *Help Desk Administrator* und dem Bereich *Alle* anlegen. |
-| `Insufficient administrative privilege`, obwohl das Recht existiert (läuft als geplanter Task unter dem gMSA, scheitert im IIS) | Der laufende App-Pool hat noch ein altes Token, typischerweise nach einer Änderung der Gruppenmitgliedschaft. Das gMSA direkt als Citrix-Administrator mit Rolle eintragen (siehe Schritt 3) und den App-Pool vollständig neu starten. |
-| „Something went wrong“ direkt nach dem Laden | Der Browser erreicht die API nicht. Die Seite über die exakte URL mit `/sss/` am Ende öffnen und im Netzwerk-Tab nachsehen. |
-| Verlauf oder Qualität fehlen, Hinweis wird angezeigt | Der Monitor-OData-Dienst ist nicht erreichbar oder das Konto darf ihn nicht lesen; `Test-SssCitrix.ps1` ausführen. |
-| `Test-SssCitrix.ps1` meldet „UserName must be in the format DOMAIN\username“ | Den Benutzer als `CORP\alice` übergeben. |
+| [Einrichtungsanleitung](docs/SETUP.de.md) | von null zu einem laufenden SSS: Dienstkonto, Installation, Anbindung, Helpdesk |
+| [Voraussetzungen](docs/REQUIREMENTS.de.md) | Software, Konten, Citrix, Ports |
+| [Konfigurationsreferenz](docs/CONFIGURATION.de.md) | jede Option mit Standardwert und Bedeutung |
+| [Berechtigungen auf einen Blick](docs/PERMISSIONS.de.md) | wer braucht welches Recht, wo und warum |
+| [Betrieb](docs/OPERATIONS.de.md) | Update, Health-Probe, Statusseite, Audit-Protokoll, Fehlersuche |
+| [Anwendungen, Prozesse und Profile](docs/PROCESSES.de.md) | der JEA-Endpunkt auf den VDAs, Einrichtung, Sicherheit |
+| [Mehrere Controller und Server](docs/MULTI-SERVER.de.md) | Failover, Load Balancer, Kerberos-Alias, Monitor über HTTPS |
+| [Datenquellen](docs/DATA-SOURCES.de.md) | woher die Daten kommen und wie die Qualität bewertet wird |
+| [Architektur](docs/ARCHITECTURE.de.md) | Bausteine und Abläufe |
+| [Versionierung und Kompatibilität](docs/COMPATIBILITY.de.md), [Changelog](CHANGELOG.md) | was stabil ist, wie du aktualisierst |
+| [Bedrohungsanalyse](docs/THREAT-MODEL.de.md), [Sicherheitsrichtlinie](SECURITY.md) | was SSS schützt und wie du Probleme meldest |
+| [Mitwirken](CONTRIBUTING.md) | Entwicklung, Tests, Bildschirmfotos |
 
 ## Roadmap
 
 - [x] Citrix-Provider: Live-Sitzungen und Abmelden über das Broker-SDK (vorgewärmte Windows-PowerShell-5.1-Worker), Verlauf über Monitor-OData
-- [x] Auf CVAD 2507 CU1 verifiziert (ein Delivery Controller)
-- [x] Auf CVAD 2203, 2402, 2507 und 2607 getestet
-- [ ] Setups mit mehreren Controllern und Servern in einer echten Umgebung prüfen (getrennte Delivery Controller, StoreFront, Web Studio)
+- [x] Getestet auf CVAD 2203, 2402, 2507 und 2607 (ein Delivery Controller)
 - [x] Helpdesk-Rolle (AD-Gruppe): Suche, Farm-Übersicht, Abmelden mit Grund, Nachricht an eine Sitzung, Audit
-- [x] IIS-Installationsskript (App-Pool, Berechtigungen, Windows-Authentifizierung)
 - [x] Experten-Ansicht mit Diagrammen, Anmelde-Wasserfall, Profilanalyse, Support-Info, StoreFront-Link, Statusseite, Setup-Prüfung
 - [x] Einzelne Prozesse einer Sitzung beenden (JEA-Endpunkt auf den VDAs)
+- [x] IIS-Installer mit automatischem Rückfall, Release-Builds über GitHub Actions
+- [ ] Mehrere Controller und mehrere Webserver in einer echten Umgebung prüfen
 - [ ] Freundliches „Schließen“ einer Anwendung (braucht einen Helfer in der Sitzung des Benutzers)
-- [ ] Engere eigene Citrix-Rolle für das Dienstkonto
+- [ ] Engere eigene Citrix-Rolle für das Dienstkonto ([so leitest du sie her](docs/PERMISSIONS.de.md#die-rolle-enger-fassen-offen-vor-10))
 - [ ] Citrix-Cloud-Backend (DaaS)
-- [x] Release-Builds über GitHub Actions
-
-## Dokumentation
-
-- [Berechtigungen auf einen Blick](docs/PERMISSIONS.de.md): wer braucht welches Recht, wo und warum, mit Befehlen zum Kopieren
-- [Konfigurationsreferenz](docs/CONFIGURATION.de.md): jede Option mit Standardwert und Bedeutung
-- [Voraussetzungen](docs/REQUIREMENTS.de.md): Software, Konten, Citrix, Ports
-- [Betrieb](docs/OPERATIONS.de.md): Update, Health-Probe, Status-Seite, Audit-Protokoll, Fehlersuche
-- [Anwendungen und Prozesse](docs/PROCESSES.de.md): JEA-Endpunkt, Einrichtung, Sicherheit
-- [Versionierung und Kompatibilität](docs/COMPATIBILITY.de.md): was stabil ist, wie du aktualisierst; [Changelog](CHANGELOG.md)
-- [Bedrohungsanalyse](docs/THREAT-MODEL.de.md): was SSS schützt, wer es angreifen könnte, was ihn aufhält
-- [Mehrere Controller und Server](docs/MULTI-SERVER.de.md): Failover, Load Balancer, Kerberos-Alias, gemeinsamer Schlüsselring, Audit, Monitor über HTTPS
-- [Datenquellen](docs/DATA-SOURCES.de.md): woher Sitzungsdaten und Qualitätswerte kommen und wie sie bewertet werden
-- [Architektur](docs/ARCHITECTURE.de.md): Bausteine, Abläufe, Konfigurationsreferenz
-- [Sicherheit](SECURITY.md): Sicherheitsmodell, Betreiber-Checkliste, Meldewege
+- [ ] 1.0 nach einer öffentlichen Beta-Phase
 
 ## Lizenz
 
 [Apache License 2.0](LICENSE)
+
+*Citrix ist eine Marke der Cloud Software Group, Inc. Dieses Projekt ist unabhängig und weder mit ihr verbunden noch von ihr unterstützt.*

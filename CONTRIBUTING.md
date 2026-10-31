@@ -19,6 +19,10 @@ ASPNETCORE_ENVIRONMENT=Development ASPNETCORE_URLS=http://localhost:5080 dotnet 
 
 Development mode uses a fixed demo user and sample data, so no Citrix is needed. Set `Sss__Auth__DevIsHelpdesk=true` to see the helpdesk features.
 
+## Releases
+
+A release is created by pushing a tag `vMAJOR.MINOR.PATCH` (`git tag -a v0.5.0 -m "SSS 0.5.0" && git push origin v0.5.0`). The `Release` workflow builds the self-contained win-x64 package, writes the `.sha256` file and publishes both. Tags with a suffix, such as `v0.5.0-rc1`, become pre-releases. Update `CHANGELOG.md` first and follow the [versioning policy](docs/COMPATIBILITY.md).
+
 ## Script checks
 
 `tests/scripts/Check-Scripts.ps1` checks the PowerShell scripts without a Citrix site and, on Windows, runs the code of the JEA commands for the current user. CI runs it on `windows-latest` in Windows PowerShell 5.1 and PowerShell 7. On a Mac or Linux machine run `pwsh -File tests/scripts/Check-Scripts.ps1` (the Windows part is skipped).

@@ -90,7 +90,7 @@ else { Bad 'ASP.NET Core Module V2 missing' 'Install the ".NET Hosting Bundle" (
 
 $appIisPath = "IIS:\Sites\$SiteName\$AppPath"
 if (Test-Path $appIisPath) { Ok "IIS application $SiteName/$AppPath exists" }
-else { Bad "IIS application $SiteName/$AppPath not found" '.\install.ps1 (see README, "Install")'; return }
+else { Bad "IIS application $SiteName/$AppPath not found" '.\install.ps1 (see docs/SETUP.md, "Install on IIS")'; return }
 
 $loc = "$SiteName/$AppPath"
 $auth = '/system.webServer/security/authentication'
@@ -123,7 +123,7 @@ if ($identity -and $identity -match '\$$') {
         else { Bad "gMSA '$identity' is not usable on this server" "Install-ADServiceAccount $sam ; and allow this server in PrincipalsAllowedToRetrieveManagedPassword" }
     } else { Info 'ActiveDirectory module not installed; skipped Test-ADServiceAccount' }
 } elseif ($identity) {
-    Warn "App pool does not run as a group-managed service account ($identity)" 'Create a gMSA and pass it to install.ps1 with -ServiceAccount (see README, "Prepare the service account")'
+    Warn "App pool does not run as a group-managed service account ($identity)" 'Create a gMSA and pass it to install.ps1 with -ServiceAccount (see docs/SETUP.md, "Prepare the service account")'
 }
 
 # 4. Configuration --------------------------------------------------------------------------------
@@ -191,7 +191,7 @@ foreach ($u in $urls) {
                     elseif ($c.ok -eq $false -and $c.id -eq 'monitor' -and $c.detail -match '404') {
                         Bad ("status: {0} ({1})" -f $c.id, $c.detail) ('The Monitor service answers on http:// only (it listens on its own address, not in IIS). Either set Sss:Citrix:Monitor:UseHttps to false, or enable HTTPS in Citrix.Monitor.exe.Config (owin:baseAddress) on the controller, see "Monitor over HTTPS" in docs/MULTI-SERVER.md')
                     }
-                    elseif ($c.ok -eq $false) { Bad ("status: {0} ({1})" -f $c.id, $c.detail) 'See README, "Troubleshooting"' }
+                    elseif ($c.ok -eq $false) { Bad ("status: {0} ({1})" -f $c.id, $c.detail) 'See docs/OPERATIONS.md, "Logs and troubleshooting"' }
                     else { Warn ("status: {0} ({1})" -f $c.id, $c.detail) }
                 }
             } catch { Info "Status endpoint not readable: $($_.Exception.Message)" }

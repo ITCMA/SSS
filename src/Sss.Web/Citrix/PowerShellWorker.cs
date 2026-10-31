@@ -59,7 +59,7 @@ internal sealed class PowerShellWorker(CitrixOptions options, string scriptPath,
             if (root.TryGetProperty("ok", out var ok) && ok.ValueKind == JsonValueKind.True) return root.Clone();
             var msg = root.TryGetProperty("error", out var e) ? e.GetString() : "unknown error";
             if (msg?.Contains("administrative privilege", StringComparison.OrdinalIgnoreCase) == true)
-                msg += " (the app pool identity is not a Citrix administrator, or its role/scope does not allow reading sessions; see the README, section 'Prepare the service account')";
+                msg += " (the app pool identity is not a Citrix administrator, or its role/scope does not allow reading sessions; see docs/SETUP.md, section 'Prepare the service account')";
             throw new ProviderUnavailableException("Citrix worker reported: " + msg);
         }
     }
