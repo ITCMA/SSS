@@ -24,6 +24,8 @@ param(
     [Parameter(Mandatory = $true)][string]$Controller,
     [Parameter(Mandatory = $true)][string]$UserName,
     [switch]$UseHttp,
+    [string]$Vda = '',
+    [string]$JeaConfiguration = 'SSS.Processes',
     [switch]$Redact,
     [string[]]$Mask = @(),
     [string]$MonitorBaseUrl = $(if ($UseHttp) { "http://$Controller/Citrix/Monitor/OData/v4/Data/" } else { "https://$Controller/Citrix/Monitor/OData/v4/Data/" }),
@@ -201,6 +203,31 @@ if ($sid) {
     } catch { Bad ("Monitor queries: {0}" -f $_.Exception.Message) }
 } else {
     Info 'Skipping Monitor user queries because the user could not be resolved to a SID.'
+}
+
+# 4. Process control on a VDA (optional): the JEA endpoint from Install-SssJea.ps1 ---------------------------
+if ($Vda) {
+    Write-Host ''
+    Write-Host "== Process control on $Vda ==" -ForegroundColor Cyan
+    if ($Vda -notmatch '^[A-Za-z0-9._-]{1,253}$') { Bad "-Vda must be a host name, not '$Vda'" }
+    elseif (-not $sid) { Bad 'Process control needs the user SID (see the check above)' }
+    else {
+        $session = $null
+        try {
+            $session = New-PSSession -ComputerName $Vda -ConfigurationName $JeaConfiguration -ErrorAction Stop
+            Ok "Connected to the endpoint '$JeaConfiguration' on $Vda as $([Security.Principal.WindowsIdentity]::GetCurrent().Name)"
+            Import-PSSession -Session $session -CommandName 'Get-SssProcess', 'Stop-SssProcess' -AllowClobber -DisableNameChecking -ErrorAction Stop | Out-Null
+            Ok 'Get-SssProcess and Stop-SssProcess are offered'
+            $procs = @(Get-SssProcess -UserSid $sid)
+            Ok ("Get-SssProcess returned {0} process(es) of the user" -f $procs.Count)
+            foreach ($p in ($procs | Where-Object { $_.Window } | Select-Object -First 5)) { Info ("Application: {0} (PID {1}) '{2}'" -f $p.Name, $p.Id, $p.Window) }
+            $other = Stop-SssProcess -UserSid $sid -ProcessId 2147483647
+            if ($other -eq 'not-found' -or $other -eq 'not-owned') { Ok "Safety check: a process id that does not exist is refused ($other)" }
+            else { Bad "Safety check failed: Stop-SssProcess answered '$other' for a process id that does not exist" }
+        } catch { Bad ("JEA endpoint: {0}" -f $_.Exception.Message) }
+        finally { if ($session) { Remove-PSSession $session -ErrorAction SilentlyContinue } }
+        Info 'Nothing was ended. Test ending with a harmless process (for example notepad) in the web interface.'
+    }
 }
 
 Write-Host ''

@@ -21,6 +21,23 @@ public sealed class CitrixOptions
     public int RequestTimeoutSeconds { get; set; } = 20;
 
     public MonitorOptions Monitor { get; set; } = new();
+
+    public ProcessOptions Processes { get; set; } = new();
+}
+
+/// <summary>Listing and ending the processes of a session. Needs the JEA endpoint on the VDAs (scripts/Install-SssJea.ps1).</summary>
+public sealed class ProcessOptions
+{
+    public bool Enabled { get; set; }
+
+    /// <summary>Name of the JEA session configuration on the VDAs.</summary>
+    public string Configuration { get; set; } = "SSS.Processes";
+
+    /// <summary>"All" = users for their own sessions and the helpdesk; "Helpdesk" = helpdesk only.</summary>
+    public string Audience { get; set; } = "All";
+
+    /// <summary>Connecting to a VDA takes longer than a Broker call, so process requests get their own time limit.</summary>
+    public int TimeoutSeconds { get; set; } = 60;
 }
 
 public sealed class MonitorOptions

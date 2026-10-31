@@ -194,6 +194,11 @@ function sorted(list, cols, so) {
 function actions(s, logoffBtn) {
   const box = el('div', { class: 'rowactions' });
   if (logoffBtn) box.append(logoffBtn);
+  if (state.expert && state.processes && s.state !== 'ended' && s.uid && logoffBtn) {
+    const p = el('button', { type: 'button', text: t('procButton'), 'aria-label': `${t('procButton')}: ${s.resourceName} (${s.machine})` });
+    p.addEventListener('click', () => openProcesses(s));
+    box.append(p);
+  }
   if (state.expert && s.sessionKey) {
     const b = el('button', { type: 'button', text: t('details'), 'aria-label': `${t('details')}: ${s.resourceName} (${s.machine})` });
     b.addEventListener('click', () => openDetails(s));
@@ -552,6 +557,80 @@ function supportText(s, d) {
   return lines.filter(Boolean).join('\n');
 }
 
+// ---------- applications and processes of a session ----------
+const PROC_RESULT = { closed: 'procClosed', killed: 'procKilled', 'no-window': 'procNoWindow', 'not-closed': 'procNotClosed',
+  protected: 'procProtected', 'not-owned': 'procGone', 'not-found': 'procGone' };
+
+async function openProcesses(s) {
+  const dlg = $('procs');
+  const ctx = state.procsCtx = { s, items: [] };
+  $('procs-sub').textContent = `${s.resourceName} · ${s.machine}`;
+  $('procs-msg').textContent = t('detailsLoading');
+  $('procs-table').replaceChildren();
+  if (!dlg.open) dlg.showModal();
+  await loadProcesses(ctx);
+}
+
+const procsBase = (ctx) => state.view === 'hduser'
+  ? `api/helpdesk/sessions/${encodeURIComponent(ctx.s.uid)}/processes`
+  : `api/sessions/${encodeURIComponent(ctx.s.uid)}/processes`;
+
+async function loadProcesses(ctx) {
+  try {
+    const url = state.view === 'hduser' ? `${procsBase(ctx)}?sid=${encodeURIComponent(state.target.sid)}` : procsBase(ctx);
+    const r = await fetch(url, { credentials: 'same-origin' });
+    if (state.procsCtx !== ctx) return;
+    if (r.status === 404) { $('procs-msg').textContent = t('detailsNone'); return; }
+    if (r.status === 429) { $('procs-msg').textContent = t('rateLimited'); return; }
+    if (r.status === 503) { $('procs-msg').textContent = t('procUnavailable'); return; }
+    if (!r.ok) throw new Error(String(r.status));
+    ctx.items = (await r.json()).processes;
+    renderProcesses(ctx);
+  } catch {
+    $('procs-msg').textContent = t('error');
+  }
+}
+
+function renderProcesses(ctx) {
+  const onlyWindows = $('procs-windows').checked;
+  const rows = ctx.items.filter((p) => !onlyWindows || p.window).sort((a, b) => (b.window ? 1 : 0) - (a.window ? 1 : 0) || a.name.localeCompare(b.name));
+  $('procs-msg').textContent = rows.length ? '' : t('procNone');
+  const head = el('tr', {}, ...['colProcess', 'colWindow', 'colPid', 'colStarted', 'colMemory', 'colAction'].map((k) => el('th', { scope: 'col', text: t(k) })));
+  $('procs-table').replaceChildren(el('thead', {}, head), el('tbody', {}, ...rows.map((p) => {
+    const close = el('button', { type: 'button', text: t('procClose') });
+    const kill = el('button', { type: 'button', class: 'danger-outline', text: t('procKill') });
+    close.addEventListener('click', () => endProcess(ctx, p, false));
+    kill.addEventListener('click', () => endProcess(ctx, p, true));
+    return el('tr', {},
+      el('td', { 'data-label': t('colProcess'), text: p.name }), el('td', { 'data-label': t('colWindow'), text: p.window ?? '' }),
+      el('td', { 'data-label': t('colPid'), text: String(p.id) }), el('td', { 'data-label': t('colStarted'), text: fmtDate(p.started) }),
+      el('td', { 'data-label': t('colMemory'), text: `${p.memoryMb} MB` }),
+      el('td', { 'data-label': t('colAction') }, el('div', { class: 'rowactions' }, close, kill)));
+  })));
+}
+
+async function endProcess(ctx, p, force) {
+  if (!(await confirmDialog(t(force ? 'procConfirmKill' : 'procConfirmClose', { name: p.name }), force ? 'procKill' : 'procClose'))) return;
+  $('procs-msg').textContent = '…';
+  try {
+    const hd = state.view === 'hduser';
+    const r = await fetch(`${procsBase(ctx)}/${p.id}/end`, {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'X-CSRF-TOKEN': await csrf(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(hd ? { sid: state.target.sid, force } : { force }),
+    });
+    if (r.status === 429) { $('procs-msg').textContent = t('rateLimited'); return; }
+    if (r.status === 503) { $('procs-msg').textContent = t('procUnavailable'); return; }
+    if (!r.ok) throw new Error(String(r.status));
+    const res = (await r.json()).result;
+    await loadProcesses(ctx);
+    if (state.procsCtx === ctx) $('procs-msg').textContent = t(PROC_RESULT[res] ?? 'error', { name: p.name });
+  } catch {
+    state.csrf = null;
+    $('procs-msg').textContent = t('error');
+  }
+}
+
 async function openDetails(s) {
   const dlg = $('details');
   const ctx = state.detailsCtx = { s, d: null };   // a slower, older response must not overwrite a newer dialog
@@ -674,9 +753,10 @@ async function csrf() {
   return state.csrf;
 }
 
-function confirmDialog(text) {
+function confirmDialog(text, okKey = 'confirm') {
   const d = $('confirm');
   $('confirm-text').textContent = text;
+  $('confirm-ok').textContent = t(okKey);
   return new Promise((resolve) => {
     d.addEventListener('close', () => resolve(d.returnValue === 'ok'), { once: true });
     d.returnValue = 'cancel';
@@ -724,6 +804,9 @@ async function init() {
     : logoff('api/sessions/logoff-all', t('confirmAll')));
   $('expert').addEventListener('click', () => setExpert(!state.expert));
   $('details-close').addEventListener('click', () => $('details').close());
+  $('procs-close').addEventListener('click', () => $('procs').close());
+  $('procs-reload').addEventListener('click', () => state.procsCtx && loadProcesses(state.procsCtx));
+  $('procs-windows').addEventListener('change', () => state.procsCtx && renderProcesses(state.procsCtx));
   $('details-copy').addEventListener('click', copySupport);
   $('sys-refresh').addEventListener('click', load);
   $('tab-sys').addEventListener('click', () => showView('sys'));
@@ -749,6 +832,7 @@ async function init() {
     if (me.storeFrontUrl) { $('storefront').href = me.storeFrontUrl; $('storefront').hidden = false; }
     state.helpdesk = !!me.helpdesk;
     state.reasonRequired = !!me.reasonRequired;
+    state.processes = !!me.processes;
     $('tabs').hidden = !state.helpdesk;
     refreshSeconds = me.refreshSeconds || 30;
   } catch {

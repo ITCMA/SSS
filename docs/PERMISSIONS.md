@@ -52,12 +52,11 @@ Add-AdminRight -Administrator 'CORP\svc-sss$' -Role 'Help Desk Administrator' -A
 
 It is the smallest built-in role that covers what SSS does: list sessions, log them off, send messages, read Monitor data. It can do more than that (for example machine power actions). In production, create a custom role with only the permissions SSS needs and assign it instead. A compromised SSS process can do whatever the service account can do, so the role matters.
 
-## Ending applications and processes (not implemented yet)
+## Ending applications and processes (optional)
 
-Citrix offers no supported Broker or Monitor command to end a single process in a session. Director does it through its own channel to the VDA. The options we see for SSS:
+Off by default. It needs one more right, on the **VDAs** instead of the controller: the service account may connect to a restricted PowerShell endpoint (JEA, `SSS.Processes`) that offers only "list the processes of this user" and "end one process of this user". `scripts/Install-SssJea.ps1 -Principal 'CORP\svc-sss$'` sets it up on a VDA, no other right is granted and the account gets no general access to the machine. Details: [Ending applications and processes](PROCESSES.md).
 
-1. **Remote command channel to the VDAs** (WinRM). Needs a right on every VDA.
-2. **Just Enough Administration (JEA) endpoint on the VDAs** that exposes exactly two commands (list and end a process of one session id). The service account is then allowed to run only these two, not to administer the machine. This is the recommended design; it needs a rollout of the JEA configuration to the VDAs (GPO or master image).
-3. Using Director's internal interface: undocumented, not recommended.
-
-Whichever channel is chosen, SSS would verify that the session belongs to the user, restrict the action to that session id and audit it like a log-off.
+| Who | Right | Where | Why | Set by |
+|---|---|---|---|---|
+| Service account | may use the JEA endpoint `SSS.Processes` | every VDA | list and end the user's own processes | `Install-SssJea.ps1` |
+| | network access to WinRM (TCP 5985) | firewall, VDAs | the connection | network team |

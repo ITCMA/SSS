@@ -81,6 +81,7 @@ if ($Interactive -and -not $Update -and -not $Uninstall) {
     }
     if (-not $ServiceAccount) { $ServiceAccount = Ask 'Service account (gMSA, e.g. CORP\svc-sss$; empty = app pool identity)' '' }
     if (-not $HelpdeskGroup) { $HelpdeskGroup = Ask 'Helpdesk AD group (e.g. CORP\SSS-Helpdesk; empty = no helpdesk)' '' }
+    if (-not $HealthEndpoint) { $HealthEndpoint = (Ask 'Open /healthz for a load balancer probe without credentials? (y/N)' 'N') -match '^(y|j)' }
     $SiteName = Ask 'IIS site' $SiteName
     $AppPath = Ask 'Application path' $AppPath
     $PhysicalPath = Ask 'Install folder' $PhysicalPath
@@ -107,6 +108,10 @@ if ($Uninstall) {
         Remove-WebAppPool -Name $AppPoolName
         Ok "Removed app pool $AppPoolName"
     }
+    try {
+        Clear-WebConfiguration -Filter '/system.webServer/security/authentication' -PSPath 'MACHINE/WEBROOT/APPHOST' -Location "$SiteName/$AppPath/healthz" -ErrorAction Stop
+        Ok 'Removed the anonymous /healthz rule'
+    } catch { }
     Write-Host "Files, sss.config.json and audit logs in $PhysicalPath were kept. Delete the folder manually if you no longer need them."
     return
 }
@@ -245,6 +250,16 @@ if ($HealthEndpoint -and -not $Uninstall) {
         Set-WebConfigurationProperty -Filter "$auth/anonymousAuthentication" -Name enabled -Value $true -PSPath 'MACHINE/WEBROOT/APPHOST' -Location $healthLocation
         Set-WebConfigurationProperty -Filter "$auth/windowsAuthentication" -Name enabled -Value $false -PSPath 'MACHINE/WEBROOT/APPHOST' -Location $healthLocation
         Ok "GET /$AppPath/healthz is open without credentials"
+    }
+    if (-not $SkipSmokeTest -and -not $WhatIfPreference) {
+        $probeHost = [System.Net.Dns]::GetHostEntry([string]::Empty).HostName
+        $probeUrl = if (Get-WebBinding -Name $SiteName -Protocol 'https' -ErrorAction SilentlyContinue) { "https://$probeHost/$AppPath/healthz" } else { "http://localhost/$AppPath/healthz" }
+        try {
+            $r = Invoke-WebRequest -Uri $probeUrl -UseBasicParsing -TimeoutSec 60
+            Ok "GET $probeUrl without credentials -> $($r.StatusCode) $($r.Content)"
+        } catch {
+            Warn "GET $probeUrl without credentials failed: $($_.Exception.Message) (503 means the Broker is not reachable; 401 means the rule above did not apply, check the site's authentication settings)"
+        }
     }
 }
 

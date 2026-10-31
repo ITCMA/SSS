@@ -60,6 +60,32 @@ public class HelpdeskApiTests : IClassFixture<HelpdeskOnFactory>
     public HelpdeskApiTests(HelpdeskOnFactory f) { _f = f; _c = f.NewClient(); }
 
     [Fact]
+    public async Task Processes_can_be_listed_and_ended_for_an_own_session_and_are_audited()
+    {
+        var sessions = await (await _c.GetAsync("/api/sessions?range=24h")).Json();
+        var uid = sessions.GetProperty("live").EnumerateArray().First().GetProperty("uid").GetString()!;
+
+        var list = await (await _c.GetAsync($"/api/sessions/{uid}/processes")).Json();
+        Assert.True(list.GetProperty("processes").GetArrayLength() >= 5);
+
+        var noWindow = await (await _c.PostJson($"/api/sessions/{uid}/processes/9020/end", new { force = false })).Json();
+        Assert.Equal("no-window", noWindow.GetProperty("result").GetString());
+        var killed = await (await _c.PostJson($"/api/sessions/{uid}/processes/9020/end", new { force = true })).Json();
+        Assert.Equal("killed", killed.GetProperty("result").GetString());
+
+        var audit = string.Concat(Directory.GetFiles(_f.AuditDir).Select(File.ReadAllText));
+        Assert.Contains("end-process", audit);
+        Assert.Contains("killed", audit);
+    }
+
+    [Fact]
+    public async Task Processes_of_a_foreign_session_are_not_found()
+    {
+        Assert.Equal(HttpStatusCode.NotFound, (await _c.GetAsync("/api/sessions/does-not-exist/processes")).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await _c.GetAsync("/api/sessions/bad;uid/processes")).StatusCode);
+    }
+
+    [Fact]
     public async Task Health_probe_answers_without_details()
     {
         var r = await _c.GetAsync("/healthz");

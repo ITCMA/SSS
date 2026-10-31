@@ -22,6 +22,7 @@ A lightweight web portal that lets end users of a **Citrix Virtual Apps and Desk
 - App/desktop, delivery group, machine, start time, duration, idle time, client name and IP
 - **Session quality** with a traffic light, separated into *your device & network* (latency, bandwidth) and *datacenter & VDA* (logon time, server load) – thresholds are configurable
 - **Expert view** (toggle in the header): everything Citrix collected about a session, like Director's detail pages, grouped into session, logon (with the logon steps), client & connection, latest measurement, server (VDA) and technical ids; **charts over time** for ICA round-trip time, bandwidth and datacenter latency; connection history and failure/disconnect reasons; a **"Copy support info"** button that puts the key facts into the clipboard for a ticket. The standard view stays short: the two traffic lights plus a one-line hint when something is off
+- **Applications and processes** of a session: see them and close or end a frozen one, for users (own sessions) and the helpdesk, through a restricted JEA endpoint on the VDAs (off by default, see [docs/PROCESSES.md](docs/PROCESSES.md))
 - Filter, sorting, CSV export (protected against spreadsheet formula injection)
 - Audit log (who logged off which session, when, from where) as JSON lines
 - **Helpdesk** for an AD group: find users, see all live sessions of the farm, log off other users' sessions with a reason, **send a message** to a session, open the expert view of any session, fully audited
@@ -198,13 +199,17 @@ Everything a helpdesk user does is written to the audit log with the acting user
 - [x] Helpdesk role (AD group): search, farm overview, log off with reason, audit (not yet verified on a real farm)
 - [x] IIS installer script (app pool, permissions, Windows authentication)
 - [x] Expert view with charts, support info, message to a session, StoreFront link, status page, setup check (the expert view's optional record sets, the message and the installer's `-Update` still need a run on a real farm)
-- [ ] End single applications/processes of a session (needs a remote command channel to the VDA, see the notes in the architecture document)
+- [x] End single applications/processes of a session (JEA endpoint on the VDAs; not yet verified on a real farm)
 - [ ] Citrix Cloud (DaaS) backend
 - [x] Release builds via GitHub Actions
 
 ## Documentation
 
 - [Permissions at a glance](docs/PERMISSIONS.md): who needs which right, where and why, with copy-and-paste commands
+- [Configuration reference](docs/CONFIGURATION.md): every option with default and meaning
+- [Requirements](docs/REQUIREMENTS.md): software, accounts, Citrix, ports
+- [Operations](docs/OPERATIONS.md): update, health probe, status page, audit trail, troubleshooting
+- [Applications and processes](docs/PROCESSES.md): JEA endpoint, setup, security
 - [Several controllers and servers](docs/MULTI-SERVER.md): failover, load balancer, Kerberos alias, shared key ring, audit, Monitor over HTTPS
 - [Data sources](docs/DATA-SOURCES.md): where session data and quality metrics come from and how they are rated
 - [Architecture](docs/ARCHITECTURE.md): components, request flows, configuration reference

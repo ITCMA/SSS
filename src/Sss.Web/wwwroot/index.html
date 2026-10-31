@@ -137,6 +137,20 @@
 
   <footer class="muted"><span id="updated"></span>SSS – Session Self Service</footer>
 
+  <dialog id="procs" class="wide" aria-labelledby="procs-h">
+    <div class="section-head">
+      <h2 id="procs-h" data-i18n="procTitle">Applications and processes</h2>
+      <div class="bulk">
+        <button type="button" id="procs-reload" data-i18n="refresh">Refresh</button>
+        <button type="button" id="procs-close" data-i18n="close">Close</button>
+      </div>
+    </div>
+    <p id="procs-sub" class="muted"></p>
+    <p id="procs-msg" class="status" role="status" aria-live="polite"></p>
+    <label class="check"><input type="checkbox" id="procs-windows" checked> <span data-i18n="procOnlyWindows">Only applications with a window</span></label>
+    <div class="table-wrap"><table class="smalltable" id="procs-table"></table></div>
+  </dialog>
+
   <dialog id="details" class="wide" aria-labelledby="details-h">
     <div class="section-head">
       <h2 id="details-h" data-i18n="detailsTitle">Session details</h2>

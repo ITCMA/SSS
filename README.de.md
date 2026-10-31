@@ -21,6 +21,7 @@ Ein schlankes Web-Portal, mit dem Endanwender einer **Citrix Virtual Apps and De
 - **Abmelden** mit Bestätigung, dazu die Sammelaktionen „Alle getrennten abmelden“ (nur sichtbar, wenn es welche gibt) und „Alle abmelden“. Einen „Trennen“-Knopf gibt es bewusst nicht
 - App/Desktop, Bereitstellungsgruppe, Maschine, Startzeit, Dauer, Inaktivität, Client-Name und -IP
 - **Sitzungsqualität** mit Ampel, getrennt nach *Ihr Gerät & Netzwerk* (Latenz, Bandbreite) und *Rechenzentrum & VDA* (Anmeldezeit, Serverlast) – Schwellwerte sind konfigurierbar
+- **Anwendungen und Prozesse** einer Sitzung: ansehen und eine hängende Anwendung schließen oder beenden, für Benutzer (eigene Sitzungen) und Helpdesk, über einen eingeschränkten JEA-Endpunkt auf den VDAs (standardmäßig aus, siehe [docs/PROCESSES.de.md](docs/PROCESSES.de.md))
 - Filter, Sortierung, CSV-Export (mit Schutz vor Formel-Injection in Tabellenkalkulationen)
 - Audit-Log (wer hat wann von wo welche Sitzung abgemeldet) als JSON-Lines
 - **Helpdesk** für eine AD-Gruppe: Benutzer finden, alle aktiven Sitzungen der Farm sehen, fremde Sitzungen mit Grund abmelden, **Nachricht an eine Sitzung senden**, die Experten-Ansicht jeder Sitzung öffnen, lückenlos protokolliert
@@ -198,13 +199,17 @@ Als erstes: den Reiter **Status** öffnen (Helpdesk) oder `Test-SssSetup.ps1` au
 - [x] Helpdesk-Rolle (AD-Gruppe): Suche, Farm-Übersicht, Abmelden mit Grund, Audit (auf einer echten Farm noch nicht verifiziert)
 - [x] IIS-Installationsskript (App-Pool, Berechtigungen, Windows-Authentifizierung)
 - [x] Experten-Ansicht mit Diagrammen, Support-Info, Nachricht an eine Sitzung, StoreFront-Link, Statusseite, Setup-Prüfung (die optionalen Datensätze der Experten-Ansicht, die Nachricht und `-Update` des Installers brauchen noch einen Lauf auf einer echten Farm)
-- [ ] Einzelne Anwendungen/Prozesse einer Sitzung beenden (braucht einen Fernsteuerungsweg zum VDA, siehe Hinweise im Architektur-Dokument)
+- [x] Einzelne Anwendungen/Prozesse einer Sitzung beenden (JEA-Endpunkt auf den VDAs; auf einer echten Farm noch nicht geprüft)
 - [ ] Citrix-Cloud-Backend (DaaS)
 - [x] Release-Builds über GitHub Actions
 
 ## Dokumentation
 
 - [Berechtigungen auf einen Blick](docs/PERMISSIONS.de.md): wer braucht welches Recht, wo und warum, mit Befehlen zum Kopieren
+- [Konfigurationsreferenz](docs/CONFIGURATION.de.md): jede Option mit Standardwert und Bedeutung
+- [Voraussetzungen](docs/REQUIREMENTS.de.md): Software, Konten, Citrix, Ports
+- [Betrieb](docs/OPERATIONS.de.md): Update, Health-Probe, Status-Seite, Audit-Protokoll, Fehlersuche
+- [Anwendungen und Prozesse](docs/PROCESSES.de.md): JEA-Endpunkt, Einrichtung, Sicherheit
 - [Mehrere Controller und Server](docs/MULTI-SERVER.de.md): Failover, Load Balancer, Kerberos-Alias, gemeinsamer Schlüsselring, Audit, Monitor über HTTPS
 - [Datenquellen](docs/DATA-SOURCES.de.md): woher Sitzungsdaten und Qualitätswerte kommen und wie sie bewertet werden
 - [Architektur](docs/ARCHITECTURE.de.md): Bausteine, Abläufe, Konfigurationsreferenz

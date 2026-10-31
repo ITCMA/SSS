@@ -120,3 +120,5 @@ textarea { font: inherit; color: var(--text); background: var(--surface); border
 .legend { display: flex; gap: 10px; flex-wrap: wrap; font-size: .8rem; color: var(--muted); margin: 4px 0 0; padding: 0; list-style: none; }
 .legend .k0 { color: var(--accent); } .legend .k1 { color: var(--warn); } .legend .k2 { color: var(--good); } .legend .k3 { color: var(--crit); }
 .smalltable { font-size: .8rem; margin: 6px 0 12px; }
+
+label.check { display: flex; align-items: center; gap: 8px; margin: 8px 0; }

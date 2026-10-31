@@ -20,8 +20,11 @@ public sealed partial class BrokerWorkerPool : IBrokerClient, IHostedService, ID
     private readonly SemaphoreSlim _slots;
     private readonly ILogger<BrokerWorkerPool> _log;
 
+    private readonly CitrixOptions _options;
+
     public BrokerWorkerPool(CitrixOptions options, ILogger<BrokerWorkerPool> log)
     {
+        _options = options;
         _log = log;
         if (options.Controllers.Length == 0) throw new InvalidOperationException("Sss:Citrix:Controllers must list at least one Delivery Controller.");
         // The names end up on the PowerShell command line; the worker validates them again.
@@ -47,11 +50,11 @@ public sealed partial class BrokerWorkerPool : IBrokerClient, IHostedService, ID
 
     public Task StopAsync(CancellationToken ct) => Task.CompletedTask;
 
-    private async Task<JsonElement> RunAsync(Dictionary<string, object?> request, CancellationToken ct)
+    private async Task<JsonElement> RunAsync(Dictionary<string, object?> request, CancellationToken ct, int? timeoutSeconds = null)
     {
         await _slots.WaitAsync(ct);
         _free.TryDequeue(out var worker);
-        try { return await worker!.RequestAsync(request, ct); }
+        try { return await worker!.RequestAsync(request, ct, timeoutSeconds); }
         finally { _free.Enqueue(worker!); _slots.Release(); }
     }
 
@@ -108,6 +111,34 @@ public sealed partial class BrokerWorkerPool : IBrokerClient, IHostedService, ID
         if (valid.Count == 0) return [];
         var res = await RunAsync(new() { ["op"] = "message", ["sid"] = userSid, ["uids"] = valid, ["title"] = title, ["text"] = text }, ct);
         return Strings(res, "accepted");
+    }
+
+    public async Task<BrokerProcessList> ProcessesAsync(string userSid, string uid, CancellationToken ct)
+    {
+        if (!SidRegex().IsMatch(userSid)) throw new ArgumentException("Invalid SID.", nameof(userSid));
+        if (!UidRegex().IsMatch(uid)) throw new ArgumentException("Invalid session id.", nameof(uid));
+        var res = await RunAsync(new() { ["op"] = "processes", ["sid"] = userSid, ["uid"] = uid }, ct, Math.Max(_options.RequestTimeoutSeconds, _options.Processes.TimeoutSeconds));
+        var list = new List<BrokerProcess>();
+        if (res.TryGetProperty("processes", out var arr) && arr.ValueKind == JsonValueKind.Array)
+            foreach (var p in arr.EnumerateArray())
+                list.Add(new BrokerProcess(
+                    p.TryGetProperty("id", out var id) ? id.GetInt32() : 0,
+                    Str(p, "name") ?? "",
+                    p.TryGetProperty("sessionId", out var sid) ? sid.GetInt32() : 0,
+                    DateTimeOffset.TryParse(Str(p, "started"), out var st) ? st : null,
+                    p.TryGetProperty("memoryMb", out var mem) ? mem.GetInt32() : 0,
+                    Str(p, "window") is { Length: > 0 } w ? w : null));
+        return new BrokerProcessList(Str(res, "machine"), list);
+    }
+
+    public async Task<string> EndProcessAsync(string userSid, string uid, int processId, bool force, CancellationToken ct)
+    {
+        if (!SidRegex().IsMatch(userSid)) throw new ArgumentException("Invalid SID.", nameof(userSid));
+        if (!UidRegex().IsMatch(uid)) throw new ArgumentException("Invalid session id.", nameof(uid));
+        if (processId < 1) throw new ArgumentException("Invalid process id.", nameof(processId));
+        var res = await RunAsync(new() { ["op"] = "endprocess", ["sid"] = userSid, ["uid"] = uid, ["pid"] = processId, ["force"] = force }, ct,
+            Math.Max(_options.RequestTimeoutSeconds, _options.Processes.TimeoutSeconds));
+        return Str(res, "result") ?? "failed";
     }
 
     public async Task PingAsync(CancellationToken ct) => await RunAsync(new() { ["op"] = "ping" }, ct);

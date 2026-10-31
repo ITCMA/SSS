@@ -26,6 +26,8 @@ public class CitrixSessionProviderTests
             Messaged.AddRange(uids);
             return Task.FromResult<IReadOnlyList<string>>(uids.ToList());
         }
+        public Task<BrokerProcessList> ProcessesAsync(string sid, string uid, CancellationToken ct) => Task.FromResult(new BrokerProcessList("vdi-01", [new BrokerProcess(1, "calc", 2, null, 5, "Calculator")]));
+        public Task<string> EndProcessAsync(string sid, string uid, int processId, bool force, CancellationToken ct) => Task.FromResult("closed");
         public Task PingAsync(CancellationToken ct) => Task.CompletedTask;
         public Task<BrokerLogoffResult> LogoffAsync(string sid, IReadOnlyCollection<string> uids, CancellationToken ct)
         {
@@ -329,6 +331,7 @@ public class BrokerWorkerPoolTests
         PowerShellPath = "pwsh",
         WorkerScript = Path.Combine(AppContext.BaseDirectory, "Citrix", "sss-broker-worker.ps1"),
         SnapinOverride = Path.Combine(AppContext.BaseDirectory, "Fixtures", "FakeBroker.ps1"),
+        Processes = new ProcessOptions { Enabled = true },
         Workers = 1,
         RequestTimeoutSeconds = 30,
     }, NullLogger<BrokerWorkerPool>.Instance);
@@ -364,6 +367,51 @@ public class BrokerWorkerPoolTests
         Assert.Equal(["101"], res.Accepted);
         Assert.Contains("201", res.Rejected);
         Assert.Contains("1; Remove-Item *", res.Rejected);
+    }
+
+    [Fact]
+    public async Task Processes_come_from_the_machine_of_the_users_own_session()
+    {
+        if (!PwshAvailable()) return;
+        using var pool = Pool();
+
+        var list = await pool.ProcessesAsync(Alice, "101", default);
+
+        Assert.Equal("vdi-01.demo.local", list.Machine);
+        Assert.Equal([4120, 5304], list.Processes.Select(p => p.Id).ToArray());
+        Assert.Equal("Wiki - Chrome", list.Processes[1].Window);
+        Assert.Null(list.Processes[0].Window);
+        Assert.Equal(600, list.Processes[1].MemoryMb);
+    }
+
+    [Fact]
+    public async Task Processes_of_somebody_elses_session_are_refused_by_the_worker()
+    {
+        if (!PwshAvailable()) return;
+        using var pool = Pool();
+
+        await Assert.ThrowsAsync<ProviderUnavailableException>(() => pool.ProcessesAsync(Alice, "201", default));
+        await Assert.ThrowsAsync<ProviderUnavailableException>(() => pool.EndProcessAsync(Alice, "201", 5304, false, default));
+    }
+
+    [Fact]
+    public async Task Ending_a_process_reports_the_outcome_of_the_endpoint()
+    {
+        if (!PwshAvailable()) return;
+        using var pool = Pool();
+
+        Assert.Equal("closed", await pool.EndProcessAsync(Alice, "101", 5304, false, default));
+        Assert.Equal("killed", await pool.EndProcessAsync(Alice, "101", 5304, true, default));
+        Assert.Equal("not-owned", await pool.EndProcessAsync(Alice, "101", 4120, false, default));
+    }
+
+    [Fact]
+    public async Task Process_requests_are_validated_before_they_reach_the_worker()
+    {
+        using var pool = Pool();
+        await Assert.ThrowsAsync<ArgumentException>(() => pool.ProcessesAsync("not-a-sid", "101", default));
+        await Assert.ThrowsAsync<ArgumentException>(() => pool.ProcessesAsync(Alice, "1; calc", default));
+        await Assert.ThrowsAsync<ArgumentException>(() => pool.EndProcessAsync(Alice, "101", 0, false, default));
     }
 
     [Fact]

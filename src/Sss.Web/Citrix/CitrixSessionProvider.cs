@@ -12,7 +12,7 @@ public sealed class CitrixSessionProvider(
     IMonitorClient? monitor,
     QualityEvaluator quality,
     TimeProvider clock,
-    ILogger<CitrixSessionProvider> log) : ISessionProvider, IHelpdeskProvider, ISessionDetailsProvider
+    ILogger<CitrixSessionProvider> log) : ISessionProvider, IHelpdeskProvider, ISessionDetailsProvider, IProcessProvider
 {
     public const string WarnHistory = "history-unavailable";
     public const string WarnQuality = "quality-unavailable";
@@ -83,6 +83,16 @@ public sealed class CitrixSessionProvider(
             .ToList();
         return new HelpdeskLiveResult(rows, truncated);
     }
+
+    public async Task<ProcessListResult> ListProcessesAsync(string userSid, string uid, CancellationToken ct)
+    {
+        var list = await broker.ProcessesAsync(userSid, uid, ct);
+        return new ProcessListResult(list.Machine,
+            list.Processes.Select(p => new ProcessEntry(p.Id, p.Name, p.Started, p.MemoryMb, p.Window)).ToList());
+    }
+
+    public Task<string> EndProcessAsync(string userSid, string uid, int processId, bool force, CancellationToken ct) =>
+        broker.EndProcessAsync(userSid, uid, processId, force, ct);
 
     public Task<IReadOnlyList<string>> SendMessageAsync(string userSid, IReadOnlyCollection<string> uids, string title, string text, CancellationToken ct) =>
         broker.MessageAsync(userSid, uids, title, text, ct);

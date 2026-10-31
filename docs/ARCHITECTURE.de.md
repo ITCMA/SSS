@@ -53,35 +53,9 @@ Browser ──HTTPS──> IIS (Windows-Authentifizierung, anonym aus)
 
 Das Broker-SDK gibt es nur als Windows-PowerShell-5.1-Snap-ins. Pro Anfrage PowerShell zu starten würde Sekunden dauern, deshalb hält SSS einen kleinen Pool (Standard 2) dauerhaft laufender Worker, die das Snap-in einmal laden. Nach Timeout oder Absturz wird ein Worker automatisch neu gestartet. Die Worker sprechen ein kleines zeilenweises JSON-Protokoll über stdin/stdout, und das Worker-Skript akzeptiert nur drei Operationen mit geprüften Argumenten.
 
-## Konfigurationsreferenz (`sss.config.json`, Abschnitt `Sss`)
+## Konfigurationsreferenz
 
-| Schlüssel | Standard | Bedeutung |
-|---|---|---|
-| `Provider` | `Mock` | `Citrix` für eine echte Farm |
-| `RefreshSeconds` | `30` | automatische Aktualisierung der Oberfläche |
-| `Auth:Mode` | `Iis` | `Dev` (fester Demo-Benutzer) wird nur in der Development-Umgebung akzeptiert |
-| `Audit:Directory` | `logs` | Ort des Audit-Logs (relativ zur App) |
-| `Audit:PerServerFiles` | `false` | `true` = `audit-YYYYMMDD-SERVER.jsonl`, für einen gemeinsamen Ordner mehrerer Server |
-| `Health:Enabled` | `true` | `GET /healthz` für Load Balancer (ohne Details) |
-| `DataProtection:KeyDirectory` / `ProtectToSid` | `""` | gemeinsamer Schlüsselring (und DPAPI-NG-Schutz) für mehrere Server |
-| `RateLimit:LogoffRequestsPerMinute` | `10` | pro Benutzer |
-| `RateLimit:ReadRequestsPerMinute` | `120` | pro Benutzer |
-| `RateLimit:HelpdeskRequestsPerMinute` | `60` | pro Helpdesk-Benutzer |
-| `Helpdesk:Group` | `""` | AD-Gruppe der Helpdesk-Mitarbeiter; leer = Funktion aus |
-| `Helpdesk:ReasonRequired` | `false` | Grund beim Helpdesk-Abmelden verpflichtend |
-| `Helpdesk:MaxSessions` | `1000` | Obergrenze der Farm-Übersicht |
-| `Quality:*` | siehe `appsettings.json` | Schwellwerte für die Ampeln |
-| `Citrix:Controllers` | `[]` | Delivery Controller, der Reihe nach probiert |
-| `Citrix:Workers` | `2` | vorgewärmte PowerShell-Worker |
-| `Citrix:RequestTimeoutSeconds` | `20` | pro Worker- oder Monitor-Anfrage |
-| `Citrix:Monitor:Enabled` | `true` | `false` = nur Live-Sitzungen und Abmelden |
-| `Citrix:Monitor:BaseUrl` | `https://{Controller}/Citrix/Monitor/OData/v4/Data/` | volle Adresse, hat Vorrang vor `UseHttps` |
-| `Citrix:Monitor:BaseUrls` | aus `Controllers` abgeleitet | je Controller eine Monitor-Adresse, der Reihe nach probiert |
-| `Citrix:Monitor:UseHttps` | `true` | `false` = Standardadresse mit `http://` (Controller ohne HTTPS-Bindung) |
-| `Citrix:Monitor:MetricsDateField` / `IcaRttField` / `BandwidthField` | `CollectedDate` / `IcaRttMS` / `OutputBandwidthAvailable` | Namen der Messwert-Felder (auf CVAD 2507 CU1 geprüft) |
-| `Citrix:Monitor:BandwidthDivisor` | `1000` | rechnet das Bandbreitenfeld (bit/s) in kbit/s um |
-| `StoreFrontUrl` | `""` | optionaler Link „StoreFront öffnen“ (absolute http(s)-Adresse) |
-| `Helpdesk:MessageTitle` | `IT Helpdesk` | Titel der Nachrichten an eine Sitzung |
+Jede Option mit Standardwert und Bedeutung: [CONFIGURATION.de.md](CONFIGURATION.de.md). Voraussetzungen und Ports: [REQUIREMENTS.de.md](REQUIREMENTS.de.md).
 
 ## Experten-Ansicht, Nachrichten, Status
 
@@ -89,8 +63,10 @@ Das Broker-SDK gibt es nur als Windows-PowerShell-5.1-Snap-ins. Pro Anfrage Powe
 - `POST api/helpdesk/message`: Worker-Operation `message` (`Send-BrokerSessionMessage`), doppelte Besitzprüfung, protokolliert.
 - `GET api/helpdesk/status`: `StatusService` führt die Prüfungen des Reiters Status aus (Version, Dienstkonto, Audit-Ordner, Broker- und Monitor-Roundtrip, HTTPS, Helpdesk-Gruppe).
 
-## Prozesse beenden (nicht umgesetzt)
+## Anwendungen und Prozesse
 
-Einen unterstützten Broker-/Monitor-Befehl, der einen Prozess in einer Sitzung beendet, gibt es nicht; der Director nutzt einen eigenen Kanal zum VDA. Bevorzugter Entwurf: ein JEA-Endpunkt auf den VDAs mit zwei Befehlen, gebunden an eine Sitzungs-ID, aufgerufen vom Dienstkonto. Siehe [PERMISSIONS.de.md](PERMISSIONS.de.md).
+`GET api/sessions/{uid}/processes`, `POST api/sessions/{uid}/processes/{pid}/end` (eigene Sitzungen) und die entsprechenden Endpunkte `api/helpdesk/sessions/{uid}/processes` (Helpdesk, mit `sid`) laufen über `ProcessService`, der nur Live-Sitzungen des Zielbenutzers akzeptiert und jeden Versuch protokolliert. Die Worker-Operationen `processes` und `endprocess` suchen die Sitzung erneut im Broker, verbinden sich mit `New-PSSession -ConfigurationName` zum Rechner dieser Sitzung und rufen per implizitem Remoting (`Import-PSSession`) die zwei Befehle des JEA-Endpunkts auf, den `scripts/Install-SssJea.ps1` auf den VDAs registriert. Details, Einrichtung und Sicherheitshinweise: [PROCESSES.de.md](PROCESSES.de.md).
+
+Betrieb (Health-Probe, Status-Seite, Audit-Format, Fehlersuche): [OPERATIONS.de.md](OPERATIONS.de.md).
 
 Weitere Details: [SECURITY.md](../SECURITY.md).

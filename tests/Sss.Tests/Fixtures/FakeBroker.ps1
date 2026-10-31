@@ -33,3 +33,28 @@ function Send-BrokerSessionMessage {
     [void]$script:Messaged.Add(("{0}|{1}|{2}" -f [int64]$InputObject.Uid, $Title, $Text))
 }
 $script:Messaged = New-Object System.Collections.ArrayList
+
+# JEA endpoint on a VDA: the fakes remember which machine was contacted.
+$script:JeaMachines = New-Object System.Collections.ArrayList
+function New-PSSession {
+    [CmdletBinding()]
+    param([string]$ComputerName, [string]$ConfigurationName)
+    [void]$script:JeaMachines.Add("$ComputerName|$ConfigurationName")
+    [pscustomobject]@{ Machine = $ComputerName }
+}
+function Import-PSSession { [CmdletBinding()] param($Session, [string[]]$CommandName, [switch]$AllowClobber, [switch]$DisableNameChecking) }
+function Remove-PSSession { [CmdletBinding()] param($Session) }
+function Get-SssProcess {
+    [CmdletBinding()]
+    param([string]$UserSid)
+    if ($UserSid -eq 'S-1-5-21-1-1-1-1001') {
+        [pscustomobject]@{ Id = 4120; Name = 'explorer'; SessionId = 2; Started = '2026-10-29T08:00:00.0000000Z'; MemoryMb = 150; Window = '' }
+        [pscustomobject]@{ Id = 5304; Name = 'chrome'; SessionId = 2; Started = '2026-10-29T08:30:00.0000000Z'; MemoryMb = 600; Window = 'Wiki - Chrome' }
+    }
+}
+function Stop-SssProcess {
+    [CmdletBinding()]
+    param([string]$UserSid, [int]$ProcessId, [switch]$Force)
+    if ($ProcessId -eq 4120) { return 'not-owned' }
+    if ($Force) { 'killed' } else { 'closed' }
+}

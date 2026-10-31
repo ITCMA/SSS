@@ -1,13 +1,14 @@
 <#
   SSS broker worker: a long-running Windows PowerShell 5.1 process that talks to the Citrix Broker SDK.
   Protocol: one JSON request per line on stdin, one JSON response per line on stdout.
-  Only a few operations exist (ping, list, listall, logoff, message) and every value is validated before it reaches a cmdlet.
+  Only a few operations exist (ping, list, listall, logoff, message, processes, endprocess) and every value is validated before it reaches a cmdlet.
   Keep this file compatible with Windows PowerShell 5.1 (no ternary, no ?? operators).
 #>
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)][string]$Controllers,
-    [string]$SnapinOverride = ''
+    [string]$SnapinOverride = '',
+    [string]$JeaConfiguration = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -119,6 +120,44 @@ function Send-UserMessage([string]$sid, $uids, [string]$title, [string]$text) {
     return @{ accepted = @($accepted) }
 }
 
+# Processes of a session: the VDA offers a JEA endpoint with two commands (scripts/Install-SssJea.ps1). The session is looked up
+# again here and must belong to the SID (same independent ownership check as for log-off); only the machine of that session is contacted.
+function Get-OwnedSession([string]$sid, [string]$uid) {
+    if ($uid -notmatch $UidPattern) { throw 'Invalid session id.' }
+    if (-not $JeaConfiguration) { throw 'Process control is not enabled (Sss:Processes:Enabled).' }
+    $session = Invoke-Broker { param($c) Get-BrokerSession -AdminAddress $c -Uid ([int64]$uid) -ErrorAction SilentlyContinue }
+    $session = @($session) | Select-Object -First 1
+    if (-not $session -or $session.UserSID -ne $sid) { throw 'Session not found.' }
+    $machine = [string]$session.DNSName
+    if ($machine -notmatch '^[A-Za-z0-9._-]{1,253}$') { throw 'The session has no usable machine name.' }
+    return $machine
+}
+
+function Use-Jea([string]$machine, [scriptblock]$Action) {
+    $s = New-PSSession -ComputerName $machine -ConfigurationName $JeaConfiguration -ErrorAction Stop
+    try {
+        Import-PSSession -Session $s -CommandName 'Get-SssProcess', 'Stop-SssProcess' -AllowClobber -DisableNameChecking -ErrorAction Stop | Out-Null
+        return (& $Action)
+    } finally { Remove-PSSession $s -ErrorAction SilentlyContinue }
+}
+
+function Get-SessionProcesses([string]$sid, [string]$uid) {
+    $machine = Get-OwnedSession $sid $uid
+    $list = Use-Jea $machine { @(Get-SssProcess -UserSid $sid) }
+    $rows = @($list | Where-Object { $_ } | ForEach-Object {
+        @{ id = [int]$_.Id; name = [string]$_.Name; sessionId = [int]$_.SessionId; started = [string]$_.Started; memoryMb = [int]$_.MemoryMb; window = [string]$_.Window }
+    })
+    return @{ machine = $machine; processes = $rows }
+}
+
+function Stop-SessionProcess([string]$sid, [string]$uid, [int]$procId, [bool]$force) {
+    $machine = Get-OwnedSession $sid $uid
+    $result = Use-Jea $machine {
+        if ($force) { Stop-SssProcess -UserSid $sid -ProcessId $procId -Force } else { Stop-SssProcess -UserSid $sid -ProcessId $procId }
+    }
+    return [string]@($result)[0]
+}
+
 while ($true) {
     $line = [Console]::In.ReadLine()
     if ($null -eq $line) { break }
@@ -162,6 +201,19 @@ while ($true) {
                 if ($title -notmatch '^[^\p{Cc}]{1,300}$' -or $text -notmatch '^[^\p{Cc}]{1,300}$') { throw 'Invalid message.' }
                 $res = Send-UserMessage $sid @($req.uids) $title $text
                 Send @{ id = $id; ok = $true; accepted = $res.accepted }
+            }
+            'processes' {
+                $sid = [string]$req.sid
+                if ($sid -notmatch $SidPattern) { throw 'Invalid SID.' }
+                $res = Get-SessionProcesses $sid ([string]$req.uid)
+                Send @{ id = $id; ok = $true; machine = $res.machine; processes = @($res.processes) }
+            }
+            'endprocess' {
+                $sid = [string]$req.sid
+                if ($sid -notmatch $SidPattern) { throw 'Invalid SID.' }
+                $procId = [int]$req.pid
+                if ($procId -lt 1) { throw 'Invalid process id.' }
+                Send @{ id = $id; ok = $true; result = (Stop-SessionProcess $sid ([string]$req.uid) $procId ([bool]$req.force)) }
             }
             default { throw 'Unknown operation.' }
         }

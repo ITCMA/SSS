@@ -13,13 +13,13 @@ internal sealed class PowerShellWorker(CitrixOptions options, string scriptPath,
     private Process? _proc;
     private long _nextId;
 
-    public async Task<JsonElement> RequestAsync(Dictionary<string, object?> request, CancellationToken ct)
+    public async Task<JsonElement> RequestAsync(Dictionary<string, object?> request, CancellationToken ct, int? timeoutSeconds = null)
     {
         await _gate.WaitAsync(ct);
         try
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            timeout.CancelAfter(TimeSpan.FromSeconds(options.RequestTimeoutSeconds));
+            timeout.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds ?? options.RequestTimeoutSeconds));
             try
             {
                 return await ExchangeAsync(request, timeout.Token);
@@ -82,6 +82,11 @@ internal sealed class PowerShellWorker(CitrixOptions options, string scriptPath,
         foreach (var a in new[] { "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", scriptPath,
                      "-Controllers", string.Join(',', options.Controllers) })
             psi.ArgumentList.Add(a);
+        if (options.Processes.Enabled)
+        {
+            psi.ArgumentList.Add("-JeaConfiguration");
+            psi.ArgumentList.Add(options.Processes.Configuration);
+        }
         if (!string.IsNullOrWhiteSpace(options.SnapinOverride))
         {
             psi.ArgumentList.Add("-SnapinOverride");

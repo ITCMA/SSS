@@ -40,6 +40,11 @@ if (!mockProvider && !options.Provider.Equals("Citrix", StringComparison.Ordinal
 if (!mockProvider && !string.IsNullOrWhiteSpace(options.Citrix.SnapinOverride) && !builder.Environment.IsDevelopment())
     throw new InvalidOperationException("Sss:Citrix:SnapinOverride is a test hook and only allowed when ASPNETCORE_ENVIRONMENT=Development.");
 
+if (!options.Citrix.Processes.Audience.Equals("All", StringComparison.OrdinalIgnoreCase) && !options.Citrix.Processes.Audience.Equals("Helpdesk", StringComparison.OrdinalIgnoreCase))
+    throw new InvalidOperationException($"Unknown Sss:Citrix:Processes:Audience '{options.Citrix.Processes.Audience}'. Use 'All' or 'Helpdesk'.");
+if (!System.Text.RegularExpressions.Regex.IsMatch(options.Citrix.Processes.Configuration, "^[A-Za-z0-9._-]{1,64}$"))
+    throw new InvalidOperationException("Sss:Citrix:Processes:Configuration may only contain letters, digits, '.', '_' and '-'.");
+
 // The link is rendered as an href, so only absolute http(s) addresses are accepted.
 if (!string.IsNullOrWhiteSpace(options.StoreFrontUrl)
     && !(Uri.TryCreate(options.StoreFrontUrl, UriKind.Absolute, out var sf) && sf.Scheme is "http" or "https"))
@@ -60,6 +65,7 @@ if (mockProvider)
     builder.Services.AddSingleton<ISessionProvider>(sp => sp.GetRequiredService<MockSessionProvider>());
     builder.Services.AddSingleton<IHelpdeskProvider>(sp => sp.GetRequiredService<MockSessionProvider>());
     builder.Services.AddSingleton<ISessionDetailsProvider>(sp => sp.GetRequiredService<MockSessionProvider>());
+    builder.Services.AddSingleton<IProcessProvider>(sp => sp.GetRequiredService<MockSessionProvider>());
     builder.Services.AddSingleton<IUserDirectory, MockUserDirectory>();
 }
 else
@@ -96,6 +102,7 @@ else
     builder.Services.AddSingleton<ISessionProvider>(sp => sp.GetRequiredService<CitrixSessionProvider>());
     builder.Services.AddSingleton<IHelpdeskProvider>(sp => sp.GetRequiredService<CitrixSessionProvider>());
     builder.Services.AddSingleton<ISessionDetailsProvider>(sp => sp.GetRequiredService<CitrixSessionProvider>());
+    builder.Services.AddSingleton<IProcessProvider>(sp => sp.GetRequiredService<CitrixSessionProvider>());
     builder.Services.AddSingleton<IUserDirectory, WindowsUserDirectory>();
 }
 
@@ -104,6 +111,7 @@ builder.Services.AddSingleton(sp => new AuditLog(
     sp.GetRequiredService<TimeProvider>(), options.Audit.PerServerFiles));
 builder.Services.AddSingleton<SessionService>();
 builder.Services.AddSingleton<DetailsService>();
+builder.Services.AddSingleton<ProcessService>();
 builder.Services.AddSingleton<StatusService>(sp => new StatusService(
     options, sp.GetRequiredService<HelpdeskAccess>(), sp.GetRequiredService<TimeProvider>(),
     sp.GetService<IBrokerClient>(), sp.GetService<IMonitorClient>(), unknownConfigKeys));
@@ -259,7 +267,7 @@ api.MapGet("/csrf", (HttpContext http, IAntiforgery af) =>
     Results.Ok(new { token = af.GetAndStoreTokens(http).RequestToken }));
 
 // Who am I, plus the few settings the UI needs.
-api.MapGet("/me", (HttpContext http, HelpdeskAccess helpdesk) =>
+api.MapGet("/me", (HttpContext http, HelpdeskAccess helpdesk, ProcessService processes) =>
 {
     var user = ResolveUser(http, options);
     return user is null
@@ -275,6 +283,7 @@ api.MapGet("/me", (HttpContext http, HelpdeskAccess helpdesk) =>
             storeFrontUrl = options.StoreFrontUrl,
             rttWarnMs = options.Quality.RttWarnMs,
             loadWarn = options.Quality.LoadWarn,
+            processes = processes.Available(helpdesk.IsHelpdesk(http)),
         });
 });
 
@@ -306,6 +315,25 @@ api.MapGet("/sessions/{key}/details", async (HttpContext http, string key, Detai
     if (!Guid.TryParse(key, out _)) return Results.BadRequest("Invalid session key.");
     return await svc.GetAsync(user, key, full: false, ct) is { } d ? Results.Ok(d) : Results.NotFound();
 }).RequireRateLimiting("read");
+
+// Processes of an own session (needs the JEA endpoint on the VDAs). Ownership is checked in ProcessService and again in the worker.
+api.MapGet("/sessions/{uid}/processes", async (HttpContext http, string uid, ProcessService svc, CancellationToken ct) =>
+{
+    var user = ResolveUser(http, options);
+    if (user is null) return Results.Unauthorized();
+    if (!svc.Available(false)) return Results.NotFound();
+    if (!uidPattern.IsMatch(uid)) return Results.BadRequest("Invalid session id.");
+    return await svc.ListAsync(user, uid, null, RemoteIp(http), ct) is { } list ? Results.Ok(list) : Results.NotFound();
+}).RequireRateLimiting("read");
+
+api.MapPost("/sessions/{uid}/processes/{pid:int}/end", async (HttpContext http, string uid, int pid, EndProcessRequest? body, ProcessService svc, CancellationToken ct) =>
+{
+    var user = ResolveUser(http, options);
+    if (user is null) return Results.Unauthorized();
+    if (!svc.Available(false)) return Results.NotFound();
+    if (!uidPattern.IsMatch(uid)) return Results.BadRequest("Invalid session id.");
+    return await svc.EndAsync(user, uid, pid, body?.Force == true, null, RemoteIp(http), ct) is { } r ? Results.Ok(new EndProcessResult(r)) : Results.NotFound();
+}).RequireRateLimiting("logoff");
 
 // Log-off endpoints: ownership is re-verified in SessionService before anything reaches Citrix.
 api.MapPost("/sessions/{uid}/logoff", async (HttpContext http, string uid, SessionService svc, CancellationToken ct) =>
@@ -381,6 +409,25 @@ hd.MapGet("/sessions/{key}/details", async (HttpContext http, string key, string
     return await svc.GetDetailsAsync(actor, sid, key, RemoteIp(http), ct) is { } d ? Results.Ok(d) : Results.NotFound();
 });
 
+hd.MapGet("/sessions/{uid}/processes", async (HttpContext http, string uid, string? sid, ProcessService svc, IUserDirectory directory, CancellationToken ct) =>
+{
+    var actor = ResolveUser(http, options);
+    if (actor is null) return Results.Unauthorized();
+    if (!svc.Available(true)) return Results.NotFound();
+    if (sid is null || !HelpdeskService.SidRegex().IsMatch(sid) || sid.Length > 184) return Results.BadRequest("Invalid user.");
+    if (!uidPattern.IsMatch(uid)) return Results.BadRequest("Invalid session id.");
+    return await svc.ListAsync(new UserIdentity(sid, directory.NameOf(sid)), uid, actor, RemoteIp(http), ct) is { } list ? Results.Ok(list) : Results.NotFound();
+});
+hd.MapPost("/sessions/{uid}/processes/{pid:int}/end", async (HttpContext http, string uid, int pid, HelpdeskEndProcessRequest body, ProcessService svc, IUserDirectory directory, CancellationToken ct) =>
+{
+    var actor = ResolveUser(http, options);
+    if (actor is null) return Results.Unauthorized();
+    if (!svc.Available(true)) return Results.NotFound();
+    if (body.Sid is null || !HelpdeskService.SidRegex().IsMatch(body.Sid) || body.Sid.Length > 184) return Results.BadRequest("Invalid user.");
+    if (!uidPattern.IsMatch(uid)) return Results.BadRequest("Invalid session id.");
+    return await svc.EndAsync(new UserIdentity(body.Sid, directory.NameOf(body.Sid)), uid, pid, body.Force == true, actor, RemoteIp(http), ct) is { } r
+        ? Results.Ok(new EndProcessResult(r)) : Results.NotFound();
+});
 hd.MapPost("/message", async (HttpContext http, HelpdeskMessageRequest body, HelpdeskService svc, CancellationToken ct) =>
 {
     var actor = ResolveUser(http, options);
@@ -434,6 +481,8 @@ static RateLimitPartition<string> PerUserPerMinute(HttpContext http, SssOptions 
 
 /// <summary>Body of <c>POST api/helpdesk/logoff</c>. Scope: selected, disconnected or all.</summary>
 /// <summary>Body of <c>POST api/helpdesk/message</c>.</summary>
+public sealed record EndProcessRequest(bool? Force);
+public sealed record HelpdeskEndProcessRequest(string? Sid, bool? Force);
 public sealed record HelpdeskMessageRequest(string? Sid, string[]? Uids, string? Text);
 
 public sealed record HelpdeskLogoffRequest(string? Sid, string? Scope, string[]? Uids, string? Reason);

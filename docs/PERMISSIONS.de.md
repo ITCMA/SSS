@@ -52,12 +52,11 @@ Add-AdminRight -Administrator 'CORP\svc-sss$' -Role 'Help Desk Administrator' -A
 
 Es ist die kleinste eingebaute Rolle, die abdeckt, was SSS tut: Sitzungen auflisten, abmelden, Nachrichten senden, Monitor-Daten lesen. Sie kann mehr (zum Beispiel Maschinen ein- und ausschalten). Im Produktivbetrieb eine eigene Rolle mit genau den nötigen Berechtigungen anlegen und stattdessen zuweisen. Ein kompromittierter SSS-Prozess darf alles, was das Dienstkonto darf, deshalb zählt die Rolle.
 
-## Anwendungen und Prozesse beenden (noch nicht umgesetzt)
+## Anwendungen und Prozesse beenden (optional)
 
-Citrix bietet keinen unterstützten Broker- oder Monitor-Befehl, um einen einzelnen Prozess in einer Sitzung zu beenden. Der Director macht das über einen eigenen Kanal zum VDA. Die Möglichkeiten für SSS:
+Standardmäßig aus. Es braucht ein weiteres Recht, und zwar auf den **VDAs** statt auf dem Controller: Das Dienstkonto darf sich mit einem eingeschränkten PowerShell-Endpunkt (JEA, `SSS.Processes`) verbinden, der nur „Prozesse dieses Benutzers auflisten“ und „einen Prozess dieses Benutzers beenden“ anbietet. `scripts/Install-SssJea.ps1 -Principal 'CORP\svc-sss$'` richtet ihn auf einem VDA ein; weitere Rechte werden nicht vergeben und das Konto erhält keinen allgemeinen Zugriff auf den Rechner. Details: [Anwendungen und Prozesse beenden](PROCESSES.de.md).
 
-1. **Fernsteuerungskanal zu den VDAs** (WinRM). Braucht ein Recht auf jedem VDA.
-2. **Just-Enough-Administration-Endpunkt (JEA) auf den VDAs**, der genau zwei Befehle anbietet (Prozesse einer Sitzungs-ID auflisten und beenden). Das Dienstkonto darf dann nur diese zwei ausführen, nicht die Maschine verwalten. Das ist der empfohlene Entwurf; er braucht die Verteilung der JEA-Konfiguration auf die VDAs (GPO oder Master-Image).
-3. Die interne Director-Schnittstelle: undokumentiert, nicht empfohlen.
-
-Egal welcher Kanal: SSS würde prüfen, dass die Sitzung dem Benutzer gehört, die Aktion auf diese Sitzungs-ID beschränken und sie wie ein Abmelden protokollieren.
+| Wer | Recht | Wo | Warum | Gesetzt durch |
+|---|---|---|---|---|
+| Dienstkonto | darf den JEA-Endpunkt `SSS.Processes` nutzen | jeder VDA | eigene Prozesse des Benutzers auflisten und beenden | `Install-SssJea.ps1` |
+| | Netzwerkzugriff auf WinRM (TCP 5985) | Firewall, VDAs | die Verbindung | Netzwerkteam |

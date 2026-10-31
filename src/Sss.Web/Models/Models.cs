@@ -77,3 +77,9 @@ public sealed record SessionDetails(
 
 /// <summary>One health check of the status page.</summary>
 public sealed record StatusCheck(string Id, bool? Ok, string Detail);
+
+public sealed record ProcessEntry(int Id, string Name, DateTimeOffset? Started, int MemoryMb, string? Window);
+
+public sealed record ProcessListResult(string? Machine, IReadOnlyList<ProcessEntry> Processes);
+
+public sealed record EndProcessResult(string Result);

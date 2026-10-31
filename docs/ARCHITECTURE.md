@@ -53,35 +53,9 @@ Browser ──HTTPS──> IIS (Windows authentication, anonymous off)
 
 The Broker SDK exists only as Windows PowerShell 5.1 snap-ins. Starting PowerShell per request would take seconds, so SSS keeps a small pool (default 2) of long-running workers that load the snap-in once. A worker is restarted automatically after a timeout or crash. Workers speak a tiny line-delimited JSON protocol over stdin/stdout, and the worker script accepts nothing but three operations with validated arguments.
 
-## Configuration reference (`sss.config.json`, section `Sss`)
+## Configuration reference
 
-| Key | Default | Meaning |
-|---|---|---|
-| `Provider` | `Mock` | `Citrix` for a real site |
-| `RefreshSeconds` | `30` | automatic refresh of the UI |
-| `Auth:Mode` | `Iis` | `Dev` (fixed demo user) is only accepted in the Development environment |
-| `Audit:Directory` | `logs` | audit trail location (relative to the app) |
-| `Audit:PerServerFiles` | `false` | `true` = `audit-YYYYMMDD-SERVER.jsonl`, for one shared folder on several servers |
-| `Health:Enabled` | `true` | `GET /healthz` for load balancers (no details) |
-| `DataProtection:KeyDirectory` / `ProtectToSid` | `""` | shared key ring (and DPAPI-NG key protection) for several servers |
-| `RateLimit:LogoffRequestsPerMinute` | `10` | per user |
-| `RateLimit:ReadRequestsPerMinute` | `120` | per user |
-| `RateLimit:HelpdeskRequestsPerMinute` | `60` | per helpdesk user |
-| `Helpdesk:Group` | `""` | AD group of helpdesk staff; empty = feature off |
-| `Helpdesk:ReasonRequired` | `false` | reason mandatory for helpdesk log-offs |
-| `Helpdesk:MaxSessions` | `1000` | cap of the farm-wide overview |
-| `Quality:*` | see `appsettings.json` | thresholds for the traffic lights |
-| `Citrix:Controllers` | `[]` | Delivery Controllers, tried in order |
-| `Citrix:Workers` | `2` | warm PowerShell workers |
-| `Citrix:RequestTimeoutSeconds` | `20` | per worker or Monitor request |
-| `Citrix:Monitor:Enabled` | `true` | `false` = live sessions and log-off only |
-| `Citrix:Monitor:BaseUrl` | `https://{controller}/Citrix/Monitor/OData/v4/Data/` | full address, overrides `UseHttps` |
-| `Citrix:Monitor:BaseUrls` | derived from `Controllers` | one Monitor address per controller, tried in order |
-| `Citrix:Monitor:UseHttps` | `true` | `false` = default address uses `http://` (controller without HTTPS binding) |
-| `Citrix:Monitor:MetricsDateField` / `IcaRttField` / `BandwidthField` | `CollectedDate` / `IcaRttMS` / `OutputBandwidthAvailable` | metric property names (verified on CVAD 2507 CU1) |
-| `Citrix:Monitor:BandwidthDivisor` | `1000` | converts the bandwidth field (bit/s) to kbit/s |
-| `StoreFrontUrl` | `""` | optional "Open StoreFront" link (absolute http(s) address) |
-| `Helpdesk:MessageTitle` | `IT Helpdesk` | title of messages sent to a session |
+Every option with default and meaning: [CONFIGURATION.md](CONFIGURATION.md). Requirements and ports: [REQUIREMENTS.md](REQUIREMENTS.md).
 
 ## Expert view, messages, status
 
@@ -89,8 +63,10 @@ The Broker SDK exists only as Windows PowerShell 5.1 snap-ins. Starting PowerShe
 - `POST api/helpdesk/message`: worker operation `message` (`Send-BrokerSessionMessage`), double ownership check, audited.
 - `GET api/helpdesk/status`: `StatusService` runs the health checks shown in the Status tab (version, service account, audit folder, Broker and Monitor round trips, HTTPS, helpdesk group).
 
-## Ending processes (not implemented)
+## Applications and processes
 
-A supported Broker/Monitor command to end a process inside a session does not exist; Director uses its own channel to the VDA. The preferred design is a JEA endpoint on the VDAs with two commands bound to a session id, called by the service account. See [PERMISSIONS.md](PERMISSIONS.md).
+`GET api/sessions/{uid}/processes`, `POST api/sessions/{uid}/processes/{pid}/end` (own sessions) and the matching `api/helpdesk/sessions/{uid}/processes` endpoints (helpdesk, with `sid`) go through `ProcessService`, which accepts only live sessions of the target user and audits every attempt. The worker operations `processes` and `endprocess` look the session up again in the Broker, connect to the machine of that session with `New-PSSession -ConfigurationName` and use implicit remoting (`Import-PSSession`) to call the two commands of the JEA endpoint that `scripts/Install-SssJea.ps1` registers on the VDAs. Details, setup and security notes: [PROCESSES.md](PROCESSES.md).
+
+Operations (health probe, status page, audit format, troubleshooting): [OPERATIONS.md](OPERATIONS.md).
 
 Further details: [SECURITY.md](../SECURITY.md).

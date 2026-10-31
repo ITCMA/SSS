@@ -4,7 +4,7 @@ using Sss.Web.Services;
 namespace Sss.Web.Providers;
 
 /// <summary>Demo data for development and tests. Contains sessions of several users to prove isolation.</summary>
-public sealed class MockSessionProvider : ISessionProvider, IHelpdeskProvider, ISessionDetailsProvider
+public sealed class MockSessionProvider : ISessionProvider, IHelpdeskProvider, ISessionDetailsProvider, IProcessProvider
 {
     /// <summary>Messages "sent" by the helpdesk (uid, text); lets tests check the call.</summary>
     public List<(string Uid, string Text)> Messages { get; } = [];
@@ -113,6 +113,49 @@ public sealed class MockSessionProvider : ISessionProvider, IHelpdeskProvider, I
                 .Select(n => new HelpdeskUser(n.Value, n.Key, _items.Any(e => e.OwnerSid == n.Key && e.Info.State != SessionState.Ended)))
                 .Take(max).ToList();
             return Task.FromResult(users);
+        }
+    }
+
+    private readonly Dictionary<string, List<ProcessEntry>> _processes = [];
+
+    private List<ProcessEntry> ProcessesOf(string uid)
+    {
+        if (!_processes.TryGetValue(uid, out var list))
+        {
+            var t = DateTimeOffset.UtcNow;
+            _processes[uid] = list =
+            [
+                new(4120, "explorer", t.AddHours(-3), 148, null),
+                new(5304, "chrome", t.AddHours(-2), 612, "Wiki - Google Chrome"),
+                new(6212, "EXCEL", t.AddMinutes(-95), 284, "Budget.xlsx - Excel"),
+                new(7188, "OUTLOOK", t.AddHours(-3), 402, "Inbox - Outlook"),
+                new(8040, "notepad", t.AddMinutes(-12), 18, "Untitled - Notepad"),
+                new(9020, "backgroundTask", t.AddHours(-3), 41, null),
+            ];
+        }
+        return list;
+    }
+
+    public Task<ProcessListResult> ListProcessesAsync(string userSid, string uid, CancellationToken ct)
+    {
+        lock (_gate)
+        {
+            var owned = _items.Any(e => e.OwnerSid == userSid && e.Info.Uid == uid && e.Info.State != SessionState.Ended);
+            return Task.FromResult(owned ? new ProcessListResult("demo-vda.demo.local", ProcessesOf(uid).ToList()) : throw new InvalidOperationException("Session not found."));
+        }
+    }
+
+    public Task<string> EndProcessAsync(string userSid, string uid, int processId, bool force, CancellationToken ct)
+    {
+        lock (_gate)
+        {
+            if (!_items.Any(e => e.OwnerSid == userSid && e.Info.Uid == uid && e.Info.State != SessionState.Ended)) throw new InvalidOperationException("Session not found.");
+            var list = ProcessesOf(uid);
+            var p = list.FirstOrDefault(x => x.Id == processId);
+            if (p is null) return Task.FromResult("not-found");
+            if (!force && p.Window is null) return Task.FromResult("no-window");
+            list.Remove(p);
+            return Task.FromResult(force ? "killed" : "closed");
         }
     }
 

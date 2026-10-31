@@ -20,7 +20,7 @@ jobs:
         run: dotnet publish src/Sss.Web -c Release -r win-x64 --self-contained -p:PublishReadyToRun=true -p:Version="${GITHUB_REF_NAME#v}" -o "dist/sss/app"
       - name: Package
         run: |
-          cp scripts/install.ps1 scripts/Test-SssSetup.ps1 scripts/Test-SssCitrix.ps1 LICENSE README.md README.de.md dist/sss/
+          cp scripts/install.ps1 scripts/Install-SssJea.ps1 scripts/Test-SssSetup.ps1 scripts/Test-SssCitrix.ps1 LICENSE README.md README.de.md dist/sss/
           cp -r docs dist/sss/docs
           (cd dist && zip -qr "../sss-${GITHUB_REF_NAME}-win-x64.zip" sss)
           sha256sum "sss-${GITHUB_REF_NAME}-win-x64.zip" > "sss-${GITHUB_REF_NAME}-win-x64.zip.sha256"
