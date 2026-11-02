@@ -2,6 +2,19 @@
 
 All notable changes to SSS. The project follows [Semantic Versioning](docs/COMPATIBILITY.md); versions below 1.0.0 may still change configuration keys between minor versions, and every such change is listed here.
 
+## Unreleased
+
+### Added
+- **Architecture documentation** with diagrams of all components and communication paths, and a description of the optional component on the VDAs: what it is for and what works with and without it ([docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)).
+- **Expert view in tabs** (Diagnosis, Over time, Properties, Profile). The dialog follows the window width (up to 1700 px) and keeps its header in place.
+- **Diagnosis tab**: explains both traffic lights metric by metric (value, rating, rule), names the cause of a yellow or red light and says why a light is unknown. A live session without a network value shows "not measured yet" in the list.
+- **Times to the second** in all tables, **timestamps to the millisecond** and durations in a sensible precision in the expert view. Start/end pairs show the difference; step durations and waterfall bars are rated good / normal / slow by color, symbol and text.
+- Charts show the warning and critical limit of the latency, minimum/average/maximum, and gaps where nothing was measured.
+
+### Changed
+- A value of 0 for ICA round-trip time is "not measured" (like bandwidth) and no longer rated as perfect. The newest usable value of the latest 10 metric samples is used per metric, so a newest sample without ICA values no longer turns a light to "unknown".
+- Rarely useful metric charts moved under "More metrics".
+
 ## 0.4.0 - 2026-10-31 (beta)
 
 ### Added

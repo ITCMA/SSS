@@ -16,7 +16,7 @@ const state = {
   lang: 'en', dict: {}, fallback: {}, range: '24h', filter: '', csrf: null, data: null, timer: null,
   sort: { live: { key: 'started', dir: -1 }, hist: { key: 'ended', dir: -1 }, hd: { key: 'user', dir: 1 } },
   // view: 'mine' = own sessions, 'hdlist' = helpdesk search/overview, 'hduser' = sessions of the chosen user
-  view: 'mine', target: null, helpdesk: false, reasonRequired: false, hdFilter: '', hdLive: null, expert: false, detailsCtx: null, msgTarget: null, limits: { rttWarn: 80, loadWarn: 7000 },
+  view: 'mine', target: null, helpdesk: false, reasonRequired: false, hdFilter: '', hdLive: null, expert: false, detailsCtx: null, msgTarget: null, limits: { rttWarn: 80, loadWarn: 7000 }, quality: null,
 };
 
 const t = (key, vars = {}) => {
@@ -59,15 +59,49 @@ function detectLang() {
 }
 
 // ---------- formatting ----------
-const fmtDate = (iso) => iso ? new Intl.DateTimeFormat(state.lang, { dateStyle: 'short', timeStyle: 'short' }).format(new Date(iso)) : '–';
+// Times are shown to the second; Citrix timestamps in the expert view even to the millisecond.
+const fmtDate = (iso) => iso ? new Intl.DateTimeFormat(state.lang, { dateStyle: 'short', timeStyle: 'medium' }).format(new Date(iso)) : '–';
+const fmtDateMs = (iso) => new Intl.DateTimeFormat(state.lang, { year: '2-digit', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 }).format(new Date(iso));
 
 function fmtDur(seconds) {
   if (seconds == null || seconds < 0) return '–';
-  const d = Math.floor(seconds / 86400), h = Math.floor(seconds % 86400 / 3600), m = Math.floor(seconds % 3600 / 60);
+  const d = Math.floor(seconds / 86400), h = Math.floor(seconds % 86400 / 3600), m = Math.floor(seconds % 3600 / 60), sec = Math.floor(seconds % 60);
   if (d) return `${d}d ${h}h`;
   if (h) return `${h}h ${m}m`;
-  return `${m}m`;
+  if (m) return `${m}m ${sec}s`;
+  return `${sec}s`;
 }
+
+// Milliseconds in a sensible precision: 46 ms, 2.08 s, 10.6 s, 1 min 12 s.
+function fmtMs(ms) {
+  if (ms == null || !Number.isFinite(ms)) return '–';
+  const a = Math.abs(ms), nf = (n, d) => new Intl.NumberFormat(state.lang, { maximumFractionDigits: d }).format(n);
+  if (a < 1000) return `${nf(ms, 0)} ms`;
+  if (a < 10000) return `${nf(ms / 1000, 2)} s`;
+  if (a < 60000) return `${nf(ms / 1000, 1)} s`;
+  const total = Math.round(a / 1000);
+  return `${Math.floor(total / 60)} min ${total % 60} s`;
+}
+
+// Rating of a duration: good / norm(al) / bad, from limits in ms [good below, bad from]. Logon steps use rules of thumb,
+// the whole logon uses the thresholds of the traffic light. Unknown steps have no rating.
+const STEP_LIMITS = [
+  [/^brokering/i, [1000, 3000]], [/^(vmstart|machinestart)/i, [30000, 90000]], [/^hdx/i, [1500, 4000]], [/^authentication/i, [2000, 6000]],
+  [/^(gpo|grouppolicy)/i, [5000, 15000]], [/^logonscripts?/i, [5000, 15000]], [/^profileload/i, [5000, 15000]], [/^interactive/i, [8000, 20000]],
+];
+function stepLimits(name) {
+  if (/^(client)?log_?on$/i.test(name) && state.quality) return [state.quality.logonWarnSeconds * 1000, state.quality.logonCritSeconds * 1000];
+  return STEP_LIMITS.find(([re]) => re.test(name.replace(/[^A-Za-z]/g, '')))?.[1] ?? null;
+}
+function rateMs(name, ms) {
+  const lim = stepLimits(name);
+  return !lim || ms == null ? null : ms >= lim[1] ? 'bad' : ms < lim[0] ? 'good' : 'norm';
+}
+const RATE_SYMBOL = { good: '✔', norm: '●', bad: '✖' };
+const RATE_WORD = { good: 'rateGood', norm: 'rateNorm', bad: 'rateBad' };
+const rateEl = (rate, text, cls = '') => rate
+  ? el('span', { class: `rt r-${rate} ${cls}`.trim(), title: t(RATE_WORD[rate]) }, el('span', { class: 'dot', 'aria-hidden': 'true', text: RATE_SYMBOL[rate] }), el('span', { text }), el('span', { class: 'sr', text: ` (${t(RATE_WORD[rate])})` }))
+  : el('span', { class: cls, text });
 const durationOf = (s) => Math.round(((s.endTime ? new Date(s.endTime) : new Date()) - new Date(s.startTime)) / 1000);
 
 // ---------- columns ----------
@@ -149,7 +183,7 @@ function buildHeads() {
 // ---------- rendering ----------
 const SYMBOL = { good: '✔', warning: '▲', critical: '✖', unknown: '?' };
 
-function qualityCell(q) {
+function qualityCell(q, live = false) {
   const line = (labelKey, health, detail) => el('span', { class: `badge h-${health}`, title: detail },
     el('span', { class: 'dot', 'aria-hidden': 'true', text: SYMBOL[health] }),
     el('span', { text: `${t(labelKey)}: ${t('health' + health[0].toUpperCase() + health.slice(1))}` }));
@@ -163,6 +197,7 @@ function qualityCell(q) {
     if (q.icaRttMs != null && q.icaRttMs >= (state.limits.rttWarn)) hints.push(t('hintClientRtt'));
     else hints.push(t('hintClientBw'));
   }
+  if (live && q.frontend === 'unknown') hints.push(t('hintClientUnknown'));
   if (q.backend === 'warning' || q.backend === 'critical') hints.push(t(q.loadIndex != null && q.loadIndex >= state.limits.loadWarn ? 'hintBackendLoad' : 'hintBackendLogon'));
   const box = el('div', { class: 'q' }, line('qualityClient', q.frontend, fe), line('qualityBackend', q.backend, be));
   for (const h of hints) box.append(el('small', { class: 'hint', text: h }));
@@ -246,7 +281,7 @@ function render() {
       cell(t('colDuration'), fmtDur(durationOf(s))),
       cell(t('colIdle'), fmtDur(s.idleSeconds)),
       cell(t('colClient'), `${s.clientName ?? '–'}${s.clientAddress ? ` (${s.clientAddress})` : ''}`),
-      cell(t('colQuality'), qualityCell(s.quality)),
+      cell(t('colQuality'), qualityCell(s.quality, true)),
       cell(t('colAction'), actions(s, btn)));
   }));
   $('live-empty').hidden = live.length > 0;
@@ -415,20 +450,34 @@ const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/;
 
 // Citrix durations are milliseconds; show seconds as well once they are long enough to be hard to read.
 function fmtItem(i) {
-  if (ISO.test(i.value)) return fmtDate(i.value);
+  if (ISO.test(i.value)) return fmtDateMs(i.value);
   if (i.unit === 'ms' || (/Duration$/.test(i.key) && /^\d+$/.test(i.value))) {
     const ms = Number(i.value);
-    return ms >= 1000 ? `${ms} ms (${(ms / 1000).toFixed(1)} s)` : `${ms} ms`;
+    return ms >= 1000 ? `${ms} ms (${fmtMs(ms)})` : `${ms} ms`;
   }
   return i.unit ? `${i.value} ${i.unit}` : i.value;
+}
+
+const isDurationItem = (i) => /Duration$/.test(i.key) && /^\d+(\.\d+)?$/.test(i.value) && i.unit !== 'kbit/s';
+
+// A value cell: durations are colored by rating, and behind the end of a Start/End pair the difference is shown.
+function valueNode(i, byKey) {
+  const text = fmtItem(i);
+  if (isDurationItem(i)) return rateEl(rateMs(i.key.replace(/Duration$/, ''), Number(i.value)), text);
+  const m = /^(.*)EndDate$/.exec(i.key), start = m && byKey.get(`${m[1]}StartDate`);
+  if (m && start && ISO.test(i.value) && ISO.test(start.value)) {
+    const ms = new Date(i.value) - new Date(start.value);
+    if (ms >= 0) return el('span', {}, text, ' ', rateEl(m[1] ? rateMs(m[1], ms) : null, `Δ ${fmtMs(ms)}`, 'delta'));
+  }
+  return text;
 }
 
 // "IcaRttMS" -> "Ica Rtt MS": Citrix property names are shown as they are, only easier to read.
 const fieldLabel = (k) => k.replace(/([a-z0-9])([A-Z])/g, '$1 $2');
 
 function groupBox(g) {
-  const dl = el('dl');
-  for (const i of g.items) dl.append(el('dt', { text: fieldLabel(i.key) }), el('dd', { text: fmtItem(i) }));
+  const dl = el('dl'), byKey = new Map(g.items.map((i) => [i.key, i]));
+  for (const i of g.items) dl.append(el('dt', { text: fieldLabel(i.key) }), el('dd', {}, valueNode(i, byKey)));
   return el('section', { class: 'group' }, el('h3', { text: t(GROUP_TITLE[g.id] ?? g.id) }), dl);
 }
 
@@ -436,6 +485,18 @@ function groupBox(g) {
 function niceMax(v) {
   const p = 10 ** Math.floor(Math.log10(v)), f = v / p;
   return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * p;
+}
+
+// Splits a series where the samples are further apart than 3 typical intervals (at least 5 minutes).
+function segments(points) {
+  const d = points.slice(1).map((p, i) => p[0] - points[i][0]).sort((a, b) => a - b);
+  const gap = Math.max(5 * 60000, 3 * (d[Math.floor(d.length / 2)] ?? 0));
+  const out = [[]];
+  for (const p of points) {
+    const cur = out[out.length - 1];
+    if (cur.length && p[0] - cur[cur.length - 1][0] > gap) out.push([p]); else cur.push(p);
+  }
+  return out;
 }
 
 const TIME_STEPS_MIN = [1, 2, 5, 10, 15, 30, 60, 120, 180, 360, 720, 1440, 2880, 10080];
@@ -450,11 +511,13 @@ function timeTicks(x0, x1, maxTicks) {
   return ticks;
 }
 
-function chart(title, series) {
+// opts.lines: horizontal reference lines [{ y, cls }] (e.g. the warning and critical limit of the traffic light).
+function chart(title, series, opts = {}) {
   const W = 420, H = 180, L = 46, R = 10, T = 12, B = 24;
   const pts = series.flatMap((s) => s.points);
   const x0 = Math.min(...pts.map((p) => p[0])), x1 = Math.max(...pts.map((p) => p[0]));
-  const yMax = niceMax(Math.max(1, ...pts.map((p) => p[1])));
+  const refs = opts.lines ?? [];
+  const yMax = niceMax(Math.max(1, ...pts.map((p) => p[1]), ...refs.map((r) => r.y)));
   const sx = (x) => L + (x1 === x0 ? 0 : (x - x0) / (x1 - x0)) * (W - L - R);
   const sy = (y) => H - B - (y / yMax) * (H - T - B);
   const svg = svgEl('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': title });
@@ -477,9 +540,19 @@ function chart(title, series) {
   });
   if (!ticks.length) svg.append(label(tf.format(x0), L, H - 7, 'start'), label(tf.format(x1), W - R, H - 7, 'end'));
 
+  for (const r of refs) {
+    svg.append(svgEl('line', { class: `ref ${r.cls}`, x1: L, y1: sy(r.y), x2: W - R, y2: sy(r.y) }));
+    svg.append(label(r.label, W - R - 3, sy(r.y) - 3, 'end'));
+    svg.lastChild.setAttribute('class', `reflabel ${r.cls}`);
+  }
+
   const legend = el('ul', { class: 'legend' });
   series.forEach((s, n) => {
-    svg.append(svgEl('polyline', { class: `line s${n % 4}`, points: s.points.map((p) => `${sx(p[0]).toFixed(1)},${sy(p[1]).toFixed(1)}`).join(' ') }));
+    // a gap in the samples (value not measured) breaks the line instead of drawing a false connection
+    for (const seg of segments(s.points)) {
+      if (seg.length === 1) svg.append(svgEl('circle', { class: `pt s${n % 4}`, cx: sx(seg[0][0]), cy: sy(seg[0][1]), r: 2 }));
+      else svg.append(svgEl('polyline', { class: `line s${n % 4}`, points: seg.map((p) => `${sx(p[0]).toFixed(1)},${sy(p[1]).toFixed(1)}`).join(' ') }));
+    }
     const last = s.points[s.points.length - 1][1];
     legend.append(el('li', { class: `k${n % 4}`, text: `■ ${fieldLabel(s.name)}${s.unit ? ` (${s.unit})` : ''}: ${val.format(last)}` }));
   });
@@ -490,7 +563,9 @@ function chart(title, series) {
   const hit = svgEl('rect', { class: 'hit', x: L, y: T, width: W - L - R, height: H - T - B });
   svg.append(cross, ...dots, hit);
   const tip = el('div', { class: 'tip', hidden: '' });
-  const fig = el('figure', { class: 'chart' }, el('h3', { text: title }), svg, legend, tip);
+  const stat = series.length === 1 ? series[0].points.map((p) => p[1]) : null;
+  const stats = stat && el('p', { class: 'muted stats', text: t('chartStats', { min: val.format(Math.min(...stat)), avg: val.format(stat.reduce((a, b) => a + b, 0) / stat.length), max: val.format(Math.max(...stat)), n: stat.length }) });
+  const fig = el('figure', { class: 'chart' }, el('h3', { text: title }), svg, legend, stats, tip);
   const hide = () => { cross.setAttribute('visibility', 'hidden'); dots.forEach((d) => d.setAttribute('visibility', 'hidden')); tip.hidden = true; };
   const show = (ev) => {
     const box = svg.getBoundingClientRect();
@@ -514,32 +589,34 @@ function chart(title, series) {
 }
 
 // Logon waterfall: one bar per step on a common time axis, so the step that eats the time stands out.
+// Bars are colored by rating (green good, blue normal, red slow); the longest measured step gets an outline.
 function buildWaterfall(w) {
   if (!w || !w.steps.length) return el('div');
-  const L = 150, R = 70, rowH = 26, T = 8, B = 26, W = 720;
+  const stepName = (id) => t(`step${id}`) === `step${id}` ? fieldLabel(id) : t(`step${id}`);
+  const R = 74, rowH = 26, T = 8, B = 26, W = 640;
+  const L = Math.min(260, Math.max(120, Math.ceil(Math.max(...w.steps.map((s) => stepName(s.id).length)) * 6.6) + 16));
   const H = T + w.steps.length * rowH + B;
-  const unit = w.totalMs >= 20000 ? 5000 : w.totalMs >= 8000 ? 2000 : w.totalMs >= 3000 ? 1000 : 500;
+  const unit = w.totalMs >= 40000 ? 10000 : w.totalMs >= 20000 ? 5000 : w.totalMs >= 8000 ? 2000 : w.totalMs >= 3000 ? 1000 : 500;
   const sx = (ms) => L + (ms / w.totalMs) * (W - L - R);
   const svg = svgEl('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': t('waterfallTitle') });
   const text = (txt, x, y, anchor, cls) => { const e = svgEl('text', { x, y, 'text-anchor': anchor, ...(cls ? { class: cls } : {}) }); e.textContent = txt; return e; };
   for (let ms = 0; ms <= w.totalMs; ms += unit) {
-    svg.append(svgEl('line', { class: 'grid', x1: sx(ms), y1: T, x2: sx(ms), y2: H - B }), text(`${ms / 1000} s`, sx(ms), H - 8, ms === 0 ? 'start' : 'middle'));
+    svg.append(svgEl('line', { class: 'grid', x1: sx(ms), y1: T, x2: sx(ms), y2: H - B }), text(fmtMs(ms), sx(ms), H - 8, ms === 0 ? 'start' : 'middle'));
   }
-  const secFmt = (n) => new Intl.NumberFormat(state.lang, { maximumFractionDigits: n < 1 ? 2 : 1 }).format(n);
-  const sec = { format: secFmt };
   const measured = w.steps.filter((s) => !s.estimated && s.id !== 'Unaccounted');
   const slowest = (measured.length ? measured : w.steps).reduce((a, b) => (b.durationMs > a.durationMs ? b : a));
   w.steps.forEach((s, i) => {
-    const y = T + i * rowH, name = t(`step${s.id}`) === `step${s.id}` ? fieldLabel(s.id) : t(`step${s.id}`);
+    const y = T + i * rowH, name = stepName(s.id), rate = s.id === 'Unaccounted' ? null : rateMs(s.id, s.durationMs);
     const pct = Math.round((s.durationMs / w.totalMs) * 100);
-    const bar = svgEl('rect', { class: `wbar${s.estimated ? ' est' : ''}${s.id === 'Unaccounted' ? ' gap' : ''}${s === slowest ? ' slow' : ''}`, x: sx(s.startMs), y: y + 4, width: Math.max(2, sx(s.durationMs) - sx(0)), height: rowH - 10, rx: 3 });
-    const tip = svgEl('title'); tip.textContent = `${name}: ${sec.format(s.durationMs / 1000)} s (${pct} %), ${t('waterfallAt', { s: sec.format(s.startMs / 1000) })}${s.estimated ? ` – ${t('waterfallEstimated')}` : ''}`;
+    const bar = svgEl('rect', { class: `wbar${rate ? ` r-${rate}` : ''}${s.estimated ? ' est' : ''}${s.id === 'Unaccounted' ? ' gap' : ''}${s === slowest ? ' slow' : ''}`, x: sx(s.startMs), y: y + 4, width: Math.max(2, sx(s.durationMs) - sx(0)), height: rowH - 10, rx: 3 });
+    const tip = svgEl('title'); tip.textContent = `${name}: ${fmtMs(s.durationMs)} (${pct} %), ${t('waterfallAt', { s: fmtMs(s.startMs) })}${rate ? ` – ${t(RATE_WORD[rate])}` : ''}${s.estimated ? ` – ${t('waterfallEstimated')}` : ''}`;
     bar.append(tip);
-    svg.append(text(name, L - 8, y + rowH / 2 + 4, 'end'), bar, text(`${sec.format(s.durationMs / 1000)} s`, sx(s.startMs + s.durationMs) + 5, y + rowH / 2 + 4, 'start', 'wval'));
+    svg.append(text(name, L - 8, y + rowH / 2 + 4, 'end'), bar, text(fmtMs(s.durationMs), sx(s.startMs + s.durationMs) + 5, y + rowH / 2 + 4, 'start', 'wval'));
   });
-  const slowName = t(`step${slowest.id}`) === `step${slowest.id}` ? fieldLabel(slowest.id) : t(`step${slowest.id}`);
-  return el('figure', { class: 'chart waterfall' }, el('h3', { text: t('waterfallTitle') }), svg,
-    el('p', { class: 'muted', text: t('waterfallSlowest', { name: slowName, s: sec.format(slowest.durationMs / 1000), p: Math.round((slowest.durationMs / w.totalMs) * 100) }) }),
+  const legend = el('ul', { class: 'legend rates' }, ...['good', 'norm', 'bad'].map((r) => el('li', {}, rateEl(r, t(RATE_WORD[r])))));
+  return el('figure', { class: 'chart waterfall' }, el('h3', { text: t('waterfallTitle') }), svg, legend,
+    el('p', { class: 'muted', text: t('waterfallSlowest', { name: stepName(slowest.id), s: fmtMs(slowest.durationMs), p: Math.round((slowest.durationMs / w.totalMs) * 100) }) }),
+    el('p', { class: 'muted', text: t('waterfallNoRating') }),
     w.steps.some((s) => s.estimated) ? el('p', { class: 'muted', text: t('waterfallEstimated') }) : el('span'));
 }
 
@@ -549,13 +626,97 @@ function buildCharts(series) {
   const dc = series.filter(is(/^(Dc|Server)/i));
   const net = series.filter((s) => /Latency|Rtt/i.test(s.name) && !/^(Dc|Server)/i.test(s.name) && !/Bandwidth/i.test(s.name));
   const used = new Set([...bw, ...dc, ...net]);
-  const more = series.filter((s) => !used.has(s)).slice(0, 6);
+  const more = series.filter((s) => !used.has(s));
   const box = el('div', { class: 'charts' });
   const bwAvail = bw.filter(is(/Available/i)), bwUsed = bw.filter((x) => !bwAvail.includes(x));
-  for (const [title, list] of [[t('chartNetwork'), net], [t('chartBandwidth'), bwUsed], [t('chartBandwidthAvail'), bwAvail], [t('chartDatacenter'), dc]])
-    if (list.length) box.append(chart(title, list.slice(0, 4)));
-  for (const s of more) box.append(chart(`${t('chartMore')}: ${fieldLabel(s.name)}`, [s]));
-  return box.childElementCount ? box : el('p', { class: 'muted', text: t('chartNoData') });
+  const Q = state.quality;
+  // the limits of the traffic light as reference lines, so a curve can be judged at a glance
+  const rttLines = Q && net.some(is(/Rtt/i)) ? [{ y: Q.rttWarnMs, cls: 'warn', label: `${t('healthWarning')} ${Q.rttWarnMs} ms` }, { y: Q.rttCritMs, cls: 'crit', label: `${t('healthCritical')} ${Q.rttCritMs} ms` }] : [];
+  for (const [title, list, lines] of [[t('chartNetwork'), net, rttLines], [t('chartBandwidth'), bwUsed], [t('chartBandwidthAvail'), bwAvail], [t('chartDatacenter'), dc]])
+    if (list.length) box.append(chart(title, list.slice(0, 4), { lines }));
+  const out = [box.childElementCount ? box : el('p', { class: 'muted', text: t('chartNoData') })];
+  if (more.length) {
+    const rest = el('div', { class: 'charts' });
+    for (const s of more.slice(0, 12)) rest.append(chart(fieldLabel(s.name), [s]));
+    out.push(el('details', { class: 'morecharts' }, el('summary', { text: `${t('chartMore')} (${Math.min(more.length, 12)})` }), rest));
+  }
+  return el('div', {}, ...out);
+}
+
+// ---------- why a traffic light is what it is ----------
+const rateValue = (v, warn, crit, higher) => v == null ? 'unknown' : higher ? (v >= crit ? 'critical' : v >= warn ? 'warning' : 'good') : (v <= crit ? 'critical' : v <= warn ? 'warning' : 'good');
+const healthWord = (h) => t('health' + h[0].toUpperCase() + h.slice(1));
+
+function buildQuality(s) {
+  const q = s.quality, Q = state.quality;
+  if (!Q) return el('div');
+  const num = new Intl.NumberFormat(state.lang, { maximumFractionDigits: 1 });
+  const sides = [
+    ['qualityClient', q.frontend, 'client', [
+      { label: t('metricRtt'), v: q.icaRttMs, text: (v) => `${num.format(v)} ms`, health: rateValue(q.icaRttMs, Q.rttWarnMs, Q.rttCritMs, true),
+        rule: t('ruleHigher', { warn: `${Q.rttWarnMs} ms`, crit: `${Q.rttCritMs} ms` }) },
+      { label: t('metricBandwidth'), v: q.bandwidthKbps, text: (v) => `${num.format(v / 1000)} Mbit/s`, health: rateValue(q.bandwidthKbps, Q.bandwidthWarnKbps, Q.bandwidthCritKbps, false),
+        rule: t('ruleLower', { warn: `${num.format(Q.bandwidthWarnKbps / 1000)} Mbit/s`, crit: `${num.format(Q.bandwidthCritKbps / 1000)} Mbit/s` }) },
+    ]],
+    ['qualityBackend', q.backend, 'backend', [
+      { label: t('metricLogon'), v: q.logonSeconds, text: (v) => fmtMs(v * 1000), health: rateValue(q.logonSeconds, Q.logonWarnSeconds, Q.logonCritSeconds, true),
+        rule: t('ruleHigher', { warn: fmtMs(Q.logonWarnSeconds * 1000), crit: fmtMs(Q.logonCritSeconds * 1000) }) },
+      ...(q.loadIndex != null ? [{ label: t('metricLoad'), v: q.loadIndex, text: (v) => num.format(v), health: rateValue(q.loadIndex, Q.loadWarn, Q.loadCrit, true),
+        rule: t('ruleHigher', { warn: String(Q.loadWarn), crit: String(Q.loadCrit) }) }] : []),
+    ]],
+  ];
+  const box = el('section', { class: 'group quality' }, el('h3', { text: t('qTitle') }), el('p', { class: 'muted', text: t('qIntro') }));
+  for (const [titleKey, health, kind, rows] of sides) {
+    const bad = rows.filter((r) => r.health === 'warning' || r.health === 'critical');
+    let why;
+    if (health === 'unknown') why = t(s.state === 'ended' && kind === 'client' ? 'qUnknownEnded' : kind === 'client' ? 'qUnknownClient' : 'qUnknownBackend');
+    else if (bad.length) why = t('qCause', { list: bad.map((r) => `${r.label} ${r.text(r.v)} (${healthWord(r.health)})`).join('; ') });
+    else why = t('qAllGood');
+    const hint = [];
+    if (kind === 'client' && (health === 'warning' || health === 'critical')) hint.push(t(q.icaRttMs != null && q.icaRttMs >= Q.rttWarnMs ? 'hintClientRtt' : 'hintClientBw'));
+    if (kind === 'backend' && (health === 'warning' || health === 'critical')) hint.push(t(q.loadIndex != null && q.loadIndex >= Q.loadWarn ? 'hintBackendLoad' : 'hintBackendLogon'));
+    const table = el('table', { class: 'smalltable qtable' },
+      el('thead', {}, el('tr', {}, ...['qMetric', 'qValue', 'qRating', 'qRule'].map((k) => el('th', { scope: 'col', text: t(k) })))),
+      el('tbody', {}, ...rows.map((r) => el('tr', {},
+        el('td', { 'data-label': t('qMetric'), text: r.label }),
+        el('td', { 'data-label': t('qValue'), text: r.v != null ? r.text(r.v) : t('qNotMeasured') }),
+        el('td', { 'data-label': t('qRating') }, el('span', { class: `badge h-${r.health}` }, el('span', { class: 'dot', 'aria-hidden': 'true', text: SYMBOL[r.health] }), el('span', { text: healthWord(r.health) }))),
+        el('td', { 'data-label': t('qRule'), class: 'muted', text: r.rule })))));
+    const measured = kind === 'client' && q.measuredAt
+      ? el('p', { class: 'muted', text: t('qMeasuredAt', { time: fmtDate(q.measuredAt), age: fmtDur(Math.max(0, Math.round((Date.now() - new Date(q.measuredAt)) / 1000))) }) }) : null;
+    box.append(el('div', { class: 'qside' },
+      el('h4', {}, el('span', { class: `badge h-${health}` }, el('span', { class: 'dot', 'aria-hidden': 'true', text: SYMBOL[health] }), el('span', { text: `${t(titleKey)}: ${healthWord(health)}` }))),
+      el('p', { text: why }), ...hint.map((h) => el('p', { class: 'muted', text: h })), table, measured));
+  }
+  box.append(el('p', { class: 'muted', text: t('qNote') }));
+  return box;
+}
+
+// Tabs of the details dialog: the page stays short and a section is one click away.
+function buildTabs(defs, first) {
+  const nav = el('div', { class: 'tabbar', role: 'tablist' }), body = el('div');
+  const buttons = [];
+  const select = (id, focus = false) => defs.forEach((d, n) => {
+    const on = d.id === id;
+    buttons[n].setAttribute('aria-selected', String(on));
+    buttons[n].tabIndex = on ? 0 : -1;
+    d.panel.hidden = !on;
+    if (on && focus) buttons[n].focus();
+  });
+  defs.forEach((d, n) => {
+    d.panel = el('div', { role: 'tabpanel', id: `dp-${d.id}`, 'aria-labelledby': `dt-${d.id}`, tabindex: '0' }, d.node);
+    const b = el('button', { type: 'button', role: 'tab', id: `dt-${d.id}`, 'aria-controls': `dp-${d.id}`, text: d.label });
+    b.addEventListener('click', () => select(d.id));
+    b.addEventListener('keydown', (e) => {
+      const step = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+      if (step) { e.preventDefault(); select(defs[(n + step + defs.length) % defs.length].id, true); }
+    });
+    buttons.push(b);
+    nav.append(b);
+    body.append(d.panel);
+  });
+  select(defs.some((d) => d.id === first) ? first : defs[0].id);
+  return [nav, body];
 }
 
 function detailTable(tb) {
@@ -754,7 +915,7 @@ async function endProcess(ctx, p) {
   }
 }
 
-async function openDetails(s) {
+async function openDetails(s, tab = 'summary') {
   const dlg = $('details');
   const ctx = state.detailsCtx = { s, d: null };   // a slower, older response must not overwrite a newer dialog
   $('details-sub').textContent = `${s.resourceName} · ${s.machine}`;
@@ -776,12 +937,13 @@ async function openDetails(s) {
     ctx.d = d;
     $('details-msg').textContent = d.unavailable.length
       ? t('detailsPartial', { parts: d.unavailable.map((p) => t(TABLE_TITLE[p] ?? p)).join(', ') }) : '';
-    $('details-body').replaceChildren(
-      ...(state.profile && ctx.s.uid && ctx.s.state !== 'ended' ? [buildProfileSection(ctx)] : []),
-      buildWaterfall(d.waterfall),
-      buildCharts(d.series),
-      el('div', { class: 'groups' }, ...d.groups.map(groupBox)),
-      ...d.tables.map(detailTable));
+    const defs = [
+      { id: 'summary', label: t('tabSummary'), node: el('div', { class: 'summary' }, buildQuality(ctx.s), buildWaterfall(d.waterfall)) },
+      { id: 'charts', label: t('tabCharts'), node: buildCharts(d.series) },
+      { id: 'props', label: t('tabProps'), node: el('div', {}, el('div', { class: 'groups' }, ...d.groups.map(groupBox)), ...d.tables.map(detailTable)) },
+      ...(state.profile && ctx.s.uid && ctx.s.state !== 'ended' ? [{ id: 'profile', label: t('tabProfile'), node: buildProfileSection(ctx) }] : []),
+    ];
+    $('details-body').replaceChildren(...buildTabs(defs, tab));
   } catch {
     $('details-msg').textContent = t('error');
   }
@@ -954,6 +1116,7 @@ async function init() {
     $('user').textContent = t('signedInAs', { name: me.name });
     $('demo').hidden = !me.demo;
     state.limits = { rttWarn: me.rttWarnMs ?? 80, loadWarn: me.loadWarn ?? 7000 };
+    state.quality = me.quality ?? null;
     if (me.storeFrontUrl) { $('storefront').href = me.storeFrontUrl; $('storefront').hidden = false; }
     state.helpdesk = !!me.helpdesk;
     state.reasonRequired = !!me.reasonRequired;
@@ -971,7 +1134,7 @@ async function init() {
   if (!$('demo').hidden && state.data?.live[0] && ['details', 'profile', 'processes'].includes(shot)) {
     setExpert(true);
     if (shot === 'processes') await openProcesses(state.data.live[0]);
-    else { await openDetails(state.data.live[0]); if (shot === 'profile') document.querySelector('.profile button')?.click(); }
+    else { await openDetails(state.data.live[0], shot === 'profile' ? 'profile' : 'summary'); if (shot === 'profile') document.querySelector('.profile button')?.click(); }
   }
   state.timer = setInterval(() => { if (!document.hidden && !$('confirm').open) load(); }, refreshSeconds * 1000);
 }

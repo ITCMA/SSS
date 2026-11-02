@@ -283,6 +283,7 @@ api.MapGet("/me", (HttpContext http, HelpdeskAccess helpdesk, ProcessService pro
             storeFrontUrl = options.StoreFrontUrl,
             rttWarnMs = options.Quality.RttWarnMs,
             loadWarn = options.Quality.LoadWarn,
+            quality = options.Quality,
             processes = processes.Available(helpdesk.IsHelpdesk(http)),
             profile = processes.ProfileAvailable(helpdesk.IsHelpdesk(http)),
         });

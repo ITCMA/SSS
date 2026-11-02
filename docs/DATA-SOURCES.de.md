@@ -25,7 +25,7 @@ Dieselben Daten wie im Director (`/Citrix/Monitor/OData/v4/Data/`), gelesen mit 
 | Bedarf | Abfrage |
 |---|---|
 | numerische Benutzer-ID | `Users?$filter=Sid eq '<sid>'` (30 Minuten gemerkt) |
-| Live-Sitzungen + letzte Messung | `Sessions?$filter=UserId eq <id> and EndDate eq null` mit `Machine`, `DesktopGroup`, `CurrentConnection`, neuestem `SessionMetrics`-Eintrag |
+| Live-Sitzungen + letzte Messung | `Sessions?$filter=UserId eq <id> and EndDate eq null` mit `Machine`, `DesktopGroup`, `CurrentConnection`, den letzten 10 `SessionMetrics`-Einträgen |
 | Verlauf | `Sessions?$filter=UserId eq <id> and EndDate ge <Beginn>` (seitenweise, bis `MaxPages`) |
 | Experten-Ansicht | genau die eine Sitzung über `UserId` **und** `SessionKey`, mit Maschine, Verbindung und bis zu 240 `SessionMetrics`-Einträgen; dazu `Connections`, `ConnectionFailureLogs`, `ApplicationInstances` dieser Sitzung |
 | Helpdesk-Suche | `Users?$filter=contains(...)` |
@@ -70,8 +70,29 @@ Die Größe des Profilordners wird mit Zeitlimit gezählt (`Processes:ProfileSca
 | Rechenzentrum & VDA | Last-Index des Servers | noch nicht angebunden | ab 7000 / ab 9000 |
 
 - Der **schlechteste bekannte** Wert einer Ampel gewinnt. Ein fehlender Wert ist „unbekannt“ (?), nie rot.
+- Ein Wert **0** bei ICA-Round-Trip-Zeit oder Bandbreite bedeutet im Monitor „nicht gemessen“ und gilt als fehlend. Der Monitor schreibt mehrere Arten von Messzeilen, und die neueste enthält nicht immer jeden Messwert; SSS liest deshalb die letzten 10 Messungen und nimmt je Messwert den **neuesten brauchbaren Wert**. Die Experten-Ansicht zeigt, wann diese Messung war.
 - Die Schwellwerte stehen in `Sss:Quality`. Die Ampel hat immer Symbol und Text, nicht nur Farbe.
-- Standard-Ansicht: die zwei Ampeln plus ein Hinweis in einer Zeile, wenn eine gelb oder rot ist. Experten-Ansicht: jede Zahl, die Citrix gesammelt hat, und Diagramme im Zeitverlauf aller numerischen `SessionMetrics`-Spalten (Spalten, die immer 0 sind, entfallen): Latenz, Bandbreite und Rechenzentrums-Latenz.
+- Standard-Ansicht: die zwei Ampeln plus ein Hinweis in einer Zeile, wenn eine gelb oder rot ist, oder „noch nicht gemessen“, solange eine laufende Sitzung keinen Netzwerkwert hat.
+- Experten-Ansicht, Reiter **Diagnose**: je Ampel die Messwerte mit Wert, Bewertung und Regel, die Ursache in einfachen Worten („ICA-Roundtrip-Zeit 210 ms (schlecht)“), der Grund, wenn eine Ampel unbekannt ist, und das Alter der neuesten Netzwerkmessung. Reiter **Zeitverlauf**: Diagramme der numerischen `SessionMetrics`-Spalten (Latenz mit Warn- und Kritisch-Grenze als Hilfslinien, Lücken, wo nichts gemessen wurde, Minimum/Durchschnitt/Maximum; selten nützliche Spalten stehen unter „Weitere Messwerte“). Reiter **Eigenschaften**: jeder Wert, den Citrix gesammelt hat.
+- SSS bewertet nur, was der Monitor je Sitzung meldet. Director kann weitere oder anders zusammengefasste Werte zeigen (zum Beispiel für die Sitzungstopologie), die Zahlen können daher abweichen.
+
+### Zeiten und Bewertung in der Experten-Ansicht
+
+Zeiten werden sekundengenau angezeigt, Citrix-Zeitstempel millisekundengenau. Dauern haben eine sinnvolle Genauigkeit (46 ms, 2,08 s, 10,6 s, 1 min 12 s). Gehören zwei Werte zusammen (`<Schritt>StartDate` und `<Schritt>EndDate`), folgt der Endzeit die Differenz (`Δ 2,1 s`); Schrittdauern im Reiter *Eigenschaften* und die Balken des Wasserfalls sind eingefärbt: grün = gut, blau = normal, rot = langsam (zusätzlich mit Symbol und Text für Screenreader). Die Grenzen sind Faustwerte für eine typische Umgebung; die gesamte Anmeldung nutzt die Grenzen der Ampel.
+
+| Schritt | gut unter | langsam ab |
+|---|---|---|
+| Vermittlung (Brokering) | 1 s | 3 s |
+| HDX-Verbindung | 1,5 s | 4 s |
+| Authentifizierung | 2 s | 6 s |
+| Gruppenrichtlinien | 5 s | 15 s |
+| Anmeldeskripte | 5 s | 15 s |
+| Profil laden | 5 s | 15 s |
+| Shell / Desktop (Interactive) | 8 s | 20 s |
+| Maschinenstart | 30 s | 90 s |
+| Gesamte Anmeldung | `Sss:Quality:LogonWarnSeconds` | `Sss:Quality:LogonCritSeconds` |
+
+Andere Dauern werden ohne Bewertung angezeigt.
 
 ## Grenzen
 

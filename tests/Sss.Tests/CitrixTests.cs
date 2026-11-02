@@ -234,6 +234,60 @@ public class ODataMonitorClientTests
     }
 
     [Fact]
+    public async Task Live_metrics_use_the_newest_sample_that_has_a_value_and_zero_means_not_measured()
+    {
+        var (c, _) = Make(r => r.RequestUri!.AbsolutePath.EndsWith("/Users")
+            ? """{"value":[{"Id":4320}]}"""
+            : """
+              {"value":[{"SessionKey":"AAAA-1","StartDate":"2026-10-29T08:00:00Z","EndDate":null,"SessionType":0,
+                "SessionMetrics":[{"CollectedDate":"2026-10-29T09:30:00Z","IcaRttMS":0,"OutputBandwidthAvailable":0},
+                                  {"CollectedDate":"2026-10-29T09:28:00Z","IcaRttMS":51,"OutputBandwidthAvailable":0},
+                                  {"CollectedDate":"2026-10-29T09:20:00Z","IcaRttMS":300,"OutputBandwidthAvailable":2000000}]}]}
+              """);
+
+        var s = Assert.Single(await c.GetLiveAsync(Sid, default));
+
+        Assert.Equal(51, s.IcaRttMs);          // not the 0 of the newest row, not the older 300
+        Assert.Equal(2000, s.BandwidthKbps);   // the newest row that has one
+        Assert.Equal(DateTimeOffset.Parse("2026-10-29T09:28:00Z"), s.MeasuredAt);
+    }
+
+    [Fact]
+    public async Task Live_metrics_stay_unknown_when_every_sample_is_zero()
+    {
+        var (c, _) = Make(r => r.RequestUri!.AbsolutePath.EndsWith("/Users")
+            ? """{"value":[{"Id":4320}]}"""
+            : """{"value":[{"SessionKey":"AAAA-1","SessionMetrics":[{"CollectedDate":"2026-10-29T09:30:00Z","IcaRttMS":0,"OutputBandwidthAvailable":0}]}]}""");
+
+        var s = Assert.Single(await c.GetLiveAsync(Sid, default));
+
+        Assert.Null(s.IcaRttMs);
+        Assert.Null(s.BandwidthKbps);
+        Assert.Null(s.MeasuredAt);
+    }
+
+    [Fact]
+    public async Task Details_series_leave_out_samples_where_latency_was_not_measured()
+    {
+        var (c, _) = Make(r => r.RequestUri!.AbsolutePath switch
+        {
+            var p when p.EndsWith("/Users") => """{"value":[{"Id":4320}]}""",
+            var p when p.EndsWith("/Sessions") => """
+                {"value":[{"SessionKey":"11111111-1111-1111-1111-111111111111",
+                  "SessionMetrics":[{"CollectedDate":"2026-10-29T08:01:00Z","IcaRttMS":40,"InputFps":0},
+                                    {"CollectedDate":"2026-10-29T08:02:00Z","IcaRttMS":0,"InputFps":2},
+                                    {"CollectedDate":"2026-10-29T08:03:00Z","IcaRttMS":44,"InputFps":0}]}]}
+                """,
+            _ => """{"value":[]}""",
+        });
+
+        var d = (await c.GetDetailsAsync(Sid, Key, false, default))!;
+
+        Assert.Equal([40d, 44d], d.Series.Single(x => x.Name == "IcaRttMS").Points.Select(p => p[1]).ToArray());
+        Assert.Equal(3, d.Series.Single(x => x.Name == "InputFps").Points.Count);   // 0 is a real value for other metrics
+    }
+
+    [Fact]
     public async Task Live_query_filters_by_resolved_user_id_and_picks_latest_rtt()
     {
         var (c, h) = Make(r => r.RequestUri!.AbsolutePath.EndsWith("/Users")

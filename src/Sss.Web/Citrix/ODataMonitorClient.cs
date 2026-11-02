@@ -18,7 +18,8 @@ public sealed record MonitorSession(
     string? ClientName,
     string? ClientAddress,
     int? IcaRttMs,
-    int? BandwidthKbps = null);
+    int? BandwidthKbps = null,
+    DateTimeOffset? MeasuredAt = null);
 
 public sealed record MonitorUser(string Name, string Sid);
 
@@ -83,9 +84,12 @@ public sealed partial class ODataMonitorClient(HttpClient http, CitrixOptions op
         if (await ResolveUserIdAsync(userSid, ct) is not { } uid) return [];
         var dateField = options.Monitor.MetricsDateField;
         var query = $"Sessions?$filter={Esc($"UserId eq {uid.ToString(CultureInfo.InvariantCulture)} and EndDate eq null")}" +
-                    $"&$expand={Esc($"{Expand},SessionMetrics($orderby={dateField} desc;$top=1)")}";
+                    $"&$expand={Esc($"{Expand},SessionMetrics($orderby={dateField} desc;$top={MetricSamples})")}";
         return await PagedAsync(query, ct);
     }
+
+    // Monitor writes several kinds of rows; the newest one does not always carry every metric, so a few samples are read.
+    private const int MetricSamples = 10;
 
     public async Task<IReadOnlyList<MonitorSession>> GetEndedAsync(string userSid, DateTimeOffset since, CancellationToken ct)
     {
@@ -229,29 +233,30 @@ public sealed partial class ODataMonitorClient(HttpClient http, CitrixOptions op
             ? (int)Math.Clamp(ms / 1000, 0, int.MaxValue) : null;
         var isDesktop = TryGet(s, "SessionType", out var st) && st.ValueKind == JsonValueKind.Number && st.TryGetInt32(out var t) && t == 0;
 
-        var (rtt, bandwidth) = LatestMetrics(s);
+        var (rtt, bandwidth, at) = LatestMetrics(s);
         return new MonitorSession(key, machine, group, isDesktop, Date(s, "StartDate"), Date(s, "EndDate"),
-            logon, client, address, rtt, bandwidth);
+            logon, client, address, rtt, bandwidth, at);
     }
 
-    private (int? RttMs, int? BandwidthKbps) LatestMetrics(JsonElement session)
+    /// <summary>Newest usable value per metric. 0 means "not measured" in Monitor, so it never counts as a (perfect or
+    /// terrible) value; the sample time is that of the newest value used.</summary>
+    private (int? RttMs, int? BandwidthKbps, DateTimeOffset? At) LatestMetrics(JsonElement session)
     {
-        if (!TryGet(session, "SessionMetrics", out var metrics) || metrics.ValueKind != JsonValueKind.Array) return (null, null);
-        JsonElement? best = null;
-        DateTimeOffset bestDate = DateTimeOffset.MinValue;
-        foreach (var m in metrics.EnumerateArray())
-        {
-            var d = Date(m, options.Monitor.MetricsDateField) ?? DateTimeOffset.MinValue;
-            if (best is null || d >= bestDate) { best = m; bestDate = d; }
-        }
-        if (best is not { } b) return (null, null);
+        if (!TryGet(session, "SessionMetrics", out var metrics) || metrics.ValueKind != JsonValueKind.Array) return (null, null, null);
+        var samples = metrics.EnumerateArray()
+            .Select(m => (Date: Date(m, options.Monitor.MetricsDateField) ?? DateTimeOffset.MinValue, E: m))
+            .OrderByDescending(x => x.Date).ToList();
 
-        int? rtt = TryGet(b, options.Monitor.IcaRttField, out var r) && r.ValueKind == JsonValueKind.Number && r.TryGetDouble(out var rv)
-            ? (int)Math.Round(rv) : null;
-        // 0 means "not measured" in Monitor, so it never counts as a (terrible) bandwidth
-        int? kbps = TryGet(b, options.Monitor.BandwidthField, out var bw) && bw.ValueKind == JsonValueKind.Number && bw.TryGetDouble(out var bv) && bv > 0
-            ? (int)Math.Min(int.MaxValue, bv / Math.Max(1, options.Monitor.BandwidthDivisor)) : null;
-        return (rtt, kbps);
+        int? rtt = null, kbps = null;
+        DateTimeOffset? at = null;
+        foreach (var (date, m) in samples)
+        {
+            if (rtt is null && TryGet(m, options.Monitor.IcaRttField, out var r) && r.ValueKind == JsonValueKind.Number && r.TryGetDouble(out var rv) && rv > 0)
+            { rtt = (int)Math.Round(rv); at ??= date; }
+            if (kbps is null && TryGet(m, options.Monitor.BandwidthField, out var bw) && bw.ValueKind == JsonValueKind.Number && bw.TryGetDouble(out var bv) && bv > 0)
+            { kbps = (int)Math.Min(int.MaxValue, bv / Math.Max(1, options.Monitor.BandwidthDivisor)); at ??= date; }
+        }
+        return (rtt, kbps, at is { } a && a > DateTimeOffset.MinValue ? a : null);
     }
 
     // ---- expert view ----------------------------------------------------------------------------
@@ -397,9 +402,11 @@ public sealed partial class ODataMonitorClient(HttpClient http, CitrixOptions op
         foreach (var name in names)
         {
             var bandwidth = name.Contains("Bandwidth", StringComparison.OrdinalIgnoreCase);
+            // for these metrics 0 means "not measured": leave the sample out, so the chart shows a gap and not a dive to zero
+            var zeroIsGap = bandwidth || Regex.IsMatch(name, "Rtt|Latency", RegexOptions.IgnoreCase);
             var points = new List<double[]>();
             foreach (var (date, e) in samples)
-                if (TryGet(e, name, out var v) && v.ValueKind == JsonValueKind.Number && v.TryGetDouble(out var dv))
+                if (TryGet(e, name, out var v) && v.ValueKind == JsonValueKind.Number && v.TryGetDouble(out var dv) && !(zeroIsGap && dv == 0))
                     points.Add([date!.Value.ToUnixTimeMilliseconds(), bandwidth ? Math.Floor(dv / Math.Max(1, options.Monitor.BandwidthDivisor)) : dv]);
             if (points.Any(p => p[1] != 0))
                 result.Add(new DetailSeries(name, bandwidth ? "kbit/s" : name.EndsWith("MS", StringComparison.OrdinalIgnoreCase) ? "ms" : "", points));

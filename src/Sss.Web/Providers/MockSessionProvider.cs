@@ -71,7 +71,7 @@ public sealed class MockSessionProvider : ISessionProvider, IHelpdeskProvider, I
         DateTimeOffset start, DateTimeOffset? end, SessionState state, int? idle, string client, string ip,
         int rtt, int kbps, int logon, int load) =>
         _items.Add(new Entry(sid, new SessionInfo(uid, name, type, dg, machine, start, end, state, idle, client, ip,
-            _quality.Evaluate(rtt, kbps, logon, load), Guid.CreateVersion7().ToString())));
+            _quality.Evaluate(rtt, kbps, logon, load, state == SessionState.Ended ? null : _clock.GetUtcNow().AddSeconds(-40)), Guid.CreateVersion7().ToString())));
 
     public Task<SessionQueryResult> GetSessionsAsync(UserIdentity user, TimeSpan historyWindow, CancellationToken ct)
     {
@@ -194,7 +194,7 @@ public sealed class MockSessionProvider : ISessionProvider, IHelpdeskProvider, I
         if (e is null) return Task.FromResult<SessionDetails?>(null);
 
         var now = _clock.GetUtcNow();
-        var rnd = new Random(e.Info.Uid.GetHashCode());
+        var rnd = new Random(int.TryParse(e.Info.Uid, out var seed) ? seed : 7);   // same curves on every start
         var rtt = new List<double[]>();
         var bw = new List<double[]>();
         var dc = new List<double[]>();
@@ -206,12 +206,18 @@ public sealed class MockSessionProvider : ISessionProvider, IHelpdeskProvider, I
             dc.Add([t, 2 + rnd.Next(0, 6)]);
         }
         var i0 = e.Info;
+        var logStart = i0.StartTime.AddMilliseconds(437);
+        var total0 = 14000 + rnd.Next(0, 3) * 4000;
         var groups = new List<DetailGroup>
         {
             new("session", [new("StartDate", i0.StartTime.ToString("o")), new("LifecycleState", i0.State.ToString()), new("SessionType", i0.ResourceType)]),
             new("logon", [new("LogOnDuration", ((i0.Quality.LogonSeconds ?? 20) * 1000).ToString(), "ms"), new("BrokeringDuration", "850", "ms"),
                 new("ProfileLoadDuration", "4200", "ms"), new("GroupPolicyDuration", "2300", "ms"), new("LogonScriptsDuration", "1100", "ms")]),
-            new("client", [new("ClientName", i0.ClientName ?? ""), new("ClientAddress", i0.ClientAddress ?? ""), new("ClientVersion", "2507.1"), new("Protocol", "HDX")]),
+            new("client", [new("ClientName", i0.ClientName ?? ""), new("ClientAddress", i0.ClientAddress ?? ""), new("ClientVersion", "2507.1"), new("Protocol", "HDX"),
+                new("LogOnStartDate", logStart.ToString("o")), new("LogOnEndDate", logStart.AddMilliseconds(total0).ToString("o")),
+                new("HdxStartDate", logStart.AddMilliseconds(850).ToString("o")), new("HdxEndDate", logStart.AddMilliseconds(2750).ToString("o")),
+                new("GpoStartDate", logStart.AddMilliseconds(2750).ToString("o")), new("GpoEndDate", logStart.AddMilliseconds(5050).ToString("o")),
+                new("BrokeringDuration", "46", "ms")]),
             new("network", [new("IcaRttMS", (i0.Quality.IcaRttMs ?? 0).ToString(), "ms"), new("OutputBandwidthAvailable", (i0.Quality.BandwidthKbps ?? 0).ToString(), "kbit/s")]),
             new("machine", [new("DnsName", i0.Machine), new("OSType", "Windows 11"), new("AgentVersion", "2507.0.0.1")]),
             new("technical", [new("SessionKey", sessionKey), new("Uid", i0.Uid)]),
@@ -223,14 +229,13 @@ public sealed class MockSessionProvider : ISessionProvider, IHelpdeskProvider, I
             new("DcLatency", "ms", dc),
         ];
         // Demo logon: the profile load is the slow part, like in many real sites.
-        var logonMs = (i0.Quality.LogonSeconds ?? 20) * 1000.0;
         var steps = new List<LogonStep>
         {
             new("Brokering", 0, 850, true), new("Hdx", 850, 1900, false), new("Authentication", 2750, 1400, true), new("Gpo", 2750, 2300, false),
-            new("LogOnScripts", 5050, 1100, false), new("ProfileLoad", 6150, 4200 + (rnd.Next(0, 3) * 4000), false), new("Interactive", 10350 + (rnd.Next(0, 3) * 4000), 3200, false),
+            new("LogOnScripts", 5050, 1100, false), new("ProfileLoad", 6150, 4200 + (rnd.Next(0, 3) * 4000), false), new("Interactive", 10350 + (rnd.Next(0, 3) * 4000), 3200 + (rnd.Next(0, 3) * 9000), false),
         };
         var total = steps.Max(s => s.StartMs + s.DurationMs);
-        return Task.FromResult<SessionDetails?>(new SessionDetails(sessionKey, groups, series, [], [], new LogonWaterfall(Math.Max(total, logonMs), steps)));
+        return Task.FromResult<SessionDetails?>(new SessionDetails(sessionKey, groups, series, [], [], new LogonWaterfall(total, steps)));
     }
 
     public Task<IReadOnlyList<string>> LogoffAsync(UserIdentity user, IReadOnlyCollection<string> uids, CancellationToken ct)

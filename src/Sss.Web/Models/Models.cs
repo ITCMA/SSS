@@ -9,14 +9,15 @@ public enum LogoffScope { Selected, Disconnected, All }
 public sealed record UserIdentity(string Sid, string Name);
 
 /// <summary>Raw metrics plus the traffic-light rating for the client side (network/WLAN)
-/// and the backend side (datacenter/VDA).</summary>
+/// and the backend side (datacenter/VDA). <c>MeasuredAt</c> is the time of the newest network sample used.</summary>
 public sealed record SessionQuality(
     int? IcaRttMs,
     int? BandwidthKbps,
     int? LogonSeconds,
     int? LoadIndex,
     Health Frontend,
-    Health Backend);
+    Health Backend,
+    DateTimeOffset? MeasuredAt = null);
 
 public sealed record SessionInfo(
     string Uid,

@@ -138,7 +138,7 @@ public sealed class CitrixSessionProvider(
         b.IdleSeconds,
         NullIfEmpty(b.ClientName) ?? m?.ClientName,
         NullIfEmpty(b.ClientAddress) ?? m?.ClientAddress,
-        quality.Evaluate(m?.IcaRttMs, m?.BandwidthKbps, m?.LogonSeconds, null),
+        quality.Evaluate(m?.IcaRttMs, m?.BandwidthKbps, m?.LogonSeconds, null, m?.MeasuredAt),
         b.SessionKey ?? m?.SessionKey);
 
     private async Task<IReadOnlyList<MonitorSession>?> TryAsync(Func<Task<IReadOnlyList<MonitorSession>>> call)

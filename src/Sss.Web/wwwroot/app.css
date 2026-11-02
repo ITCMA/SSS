@@ -94,17 +94,22 @@ h3 { font-size: 1rem; margin: 0; }
 #expert[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .hint { display: block; color: var(--muted); font-size: .8rem; max-width: 26ch; }
 .rowactions { display: flex; gap: 6px; flex-wrap: wrap; }
-dialog.wide { max-width: min(980px, 96vw); width: 96vw; max-height: 92vh; overflow: auto; }
+/* The big dialogs follow the window: nearly its full width up to 1700px, header fixed, content scrolls. */
+dialog.wide { max-width: none; width: min(97vw, 1700px); height: min(94vh, 1200px); padding: 0; overflow: hidden; }
+dialog.wide[open] { display: flex; flex-direction: column; }
+.dlg-head { padding: 14px 20px 10px; border-bottom: 1px solid var(--border); background: var(--surface); }
+.dlg-head .section-head { margin-bottom: 4px; }
+.dlg-body { padding: 14px 20px 20px; overflow: auto; flex: 1 1 auto; }
 textarea { font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; width: 100%; }
 .supporttext { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .85rem; }
-.groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; margin: 12px 0; }
+.groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; margin: 12px 0; align-items: start; }
 .group { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
 .group h3 { margin-bottom: 6px; }
 .group dl { margin: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 2px 10px; font-size: .85rem; }
 .group dt { color: var(--muted); overflow-wrap: anywhere; }
 .group dd { margin: 0; overflow-wrap: anywhere; }
-.charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr)); gap: 12px; margin: 12px 0; }
-.chart { border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; position: relative; }
+.charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(380px, 100%), 1fr)); gap: 12px; margin: 12px 0; }
+.chart { border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; position: relative; margin: 0; min-width: 0; }
 .chart svg { width: 100%; height: auto; display: block; }
 .chart .axis { stroke: var(--muted); stroke-width: 1; }
 .chart .grid { stroke: var(--border); stroke-width: 1; stroke-dasharray: 2 3; }
@@ -125,9 +130,9 @@ label.check { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
 
 .waterfall { grid-column: 1 / -1; margin: 12px 0; }
 .chart .wbar { fill: var(--accent); }
-.chart .wbar.slow { fill: var(--crit); }
-.chart .wbar.est { fill-opacity: .45; stroke: var(--accent); stroke-dasharray: 4 3; }
-.chart .wbar.slow.est { stroke: var(--crit); }
+.chart .wbar.r-good { fill: var(--good); } .chart .wbar.r-norm { fill: var(--accent); } .chart .wbar.r-bad { fill: var(--crit); }
+.chart .wbar.slow { stroke: var(--text); stroke-width: 2; }
+.chart .wbar.est { fill-opacity: .45; stroke: var(--text); stroke-width: 1; stroke-dasharray: 4 3; }
 .chart text.wval { font-size: 11px; }
 
 .hints { list-style: none; margin: 12px 0; padding: 0; display: grid; gap: 6px; }
@@ -151,3 +156,28 @@ progress { width: 100%; height: 10px; accent-color: var(--accent); }
 .ptree details > :not(summary) { margin-left: 18px; }
 
 .chart .wbar.gap { fill: var(--muted); fill-opacity: .35; }
+
+/* ---- details dialog: tabs, quality explanation, rated times ---- */
+.tabbar { display: flex; gap: 6px; flex-wrap: wrap; border-bottom: 1px solid var(--border); margin-bottom: 12px; }
+.tabbar button { border-bottom-left-radius: 0; border-bottom-right-radius: 0; border-bottom-color: transparent; margin-bottom: -1px; }
+.tabbar button[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(480px, 100%), 1fr)); gap: 12px; align-items: start; }
+.summary > .waterfall { margin: 0; grid-column: auto; }
+.quality h3 { margin-bottom: 4px; }
+.qside { margin-top: 14px; }
+.qside h4 { margin: 0 0 4px; }
+.qside p { margin: 4px 0; }
+.qtable { width: 100%; margin: 6px 0; }
+.qtable th, .qtable td { padding: 4px 8px; }
+.quality > .muted:last-child { margin-top: 14px; font-size: .85rem; }
+.rt { display: inline-flex; gap: 4px; align-items: baseline; font-variant-numeric: tabular-nums; }
+.rt .dot { width: auto; }
+.r-good { color: var(--good); } .r-norm { color: var(--accent); } .r-bad { color: var(--crit); font-weight: 600; }
+.delta { font-weight: 600; }
+.legend.rates { gap: 16px; }
+.chart .ref { stroke-width: 1; stroke-dasharray: 5 3; } .chart .ref.warn { stroke: var(--warn); } .chart .ref.crit { stroke: var(--crit); }
+.chart text.reflabel.warn { fill: var(--warn); } .chart text.reflabel.crit { fill: var(--crit); }
+.chart .pt { stroke-width: 1.6; fill: none; }
+.stats { font-size: .8rem; margin-top: 2px; }
+.morecharts > summary { cursor: pointer; margin: 8px 0; }
+@media (max-width: 760px) { dialog.wide { width: 100vw; height: 100vh; max-height: none; border-radius: 0; } }

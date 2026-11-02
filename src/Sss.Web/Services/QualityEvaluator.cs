@@ -8,12 +8,13 @@ namespace Sss.Web.Services;
 /// and never counts as bad; the worst known rating of a pair wins.</summary>
 public sealed class QualityEvaluator(QualityThresholds t)
 {
-    public SessionQuality Evaluate(int? rttMs, int? bandwidthKbps, int? logonSeconds, int? loadIndex) => new(
+    public SessionQuality Evaluate(int? rttMs, int? bandwidthKbps, int? logonSeconds, int? loadIndex, DateTimeOffset? measuredAt = null) => new(
         rttMs, bandwidthKbps, logonSeconds, loadIndex,
         Combine(HigherIsWorse(rttMs, t.RttWarnMs, t.RttCritMs),
                 LowerIsWorse(bandwidthKbps, t.BandwidthWarnKbps, t.BandwidthCritKbps)),
         Combine(HigherIsWorse(logonSeconds, t.LogonWarnSeconds, t.LogonCritSeconds),
-                HigherIsWorse(loadIndex, t.LoadWarn, t.LoadCrit)));
+                HigherIsWorse(loadIndex, t.LoadWarn, t.LoadCrit)),
+        measuredAt);
 
     public static Health HigherIsWorse(int? value, int warn, int crit) => value switch
     {

@@ -25,7 +25,7 @@ The same data Director shows (`/Citrix/Monitor/OData/v4/Data/`), read with the s
 | Need | Query |
 |---|---|
 | numeric user id | `Users?$filter=Sid eq '<sid>'` (cached 30 min) |
-| live sessions + latest measurement | `Sessions?$filter=UserId eq <id> and EndDate eq null` with `Machine`, `DesktopGroup`, `CurrentConnection`, newest `SessionMetrics` sample |
+| live sessions + latest measurement | `Sessions?$filter=UserId eq <id> and EndDate eq null` with `Machine`, `DesktopGroup`, `CurrentConnection`, latest 10 `SessionMetrics` samples |
 | history | `Sessions?$filter=UserId eq <id> and EndDate ge <start>` (paged, up to `MaxPages`) |
 | expert view | the one session by `UserId` **and** `SessionKey`, with machine, connection and up to 240 `SessionMetrics` samples; plus `Connections`, `ConnectionFailureLogs`, `ApplicationInstances` of that session |
 | helpdesk search | `Users?$filter=contains(...)` |
@@ -70,8 +70,29 @@ The size of the profile folder is counted with a time limit (`Processes:ProfileS
 | Datacenter & VDA | server load index | not connected yet | from 7000 / from 9000 |
 
 - The **worst known** value of a light wins. A missing value is "unknown" (?), never red.
+- A value of **0** for ICA round-trip time or bandwidth means "not measured" in Monitor and counts as missing. Monitor writes several kinds of sample rows and the newest one does not always carry every metric, so SSS reads the latest 10 samples and takes the **newest usable value per metric**; the expert view shows when that sample was taken.
 - Thresholds are in `Sss:Quality`. The traffic light always has a symbol and text, not only a colour.
-- Standard view: the two lights plus a one-line hint when one is yellow or red. Expert view: every number Citrix collected, and charts over time of all numeric `SessionMetrics` columns (columns that are always 0 are left out): latency, bandwidth and datacenter latency.
+- Standard view: the two lights plus a one-line hint when one is yellow or red, or "not measured yet" while a live session has no network value.
+- Expert view, tab **Diagnosis**: for each light the metrics with value, rating and rule, the cause in plain words ("ICA round-trip time 210 ms (poor)"), the reason when a light is unknown, and the age of the newest network sample. Tab **Over time**: charts of the numeric `SessionMetrics` columns (latency with the warning and critical limit as reference lines, gaps where nothing was measured, minimum/average/maximum; rarely useful columns sit under "More metrics"). Tab **Properties**: every value Citrix collected.
+- SSS rates only what Monitor reports per session. Director may show additional or differently aggregated values (for example for the session topology), so numbers can differ.
+
+### Times and ratings in the expert view
+
+Times are shown to the second, Citrix timestamps to the millisecond. Durations use a sensible precision (46 ms, 2.08 s, 10.6 s, 1 min 12 s). Where two values belong together (`<Step>StartDate` and `<Step>EndDate`), the difference follows the end time (`Δ 2.1 s`), and step durations in the *Properties* tab and the bars of the waterfall are colored: green = good, blue = normal, red = slow (also marked with a symbol and a text for screen readers). The limits are rules of thumb for a typical site; the whole logon uses the limits of the traffic light.
+
+| Step | good below | slow from |
+|---|---|---|
+| Brokering | 1 s | 3 s |
+| HDX connection | 1.5 s | 4 s |
+| Authentication | 2 s | 6 s |
+| Group policies | 5 s | 15 s |
+| Logon scripts | 5 s | 15 s |
+| Profile load | 5 s | 15 s |
+| Shell / desktop (interactive) | 8 s | 20 s |
+| Machine start | 30 s | 90 s |
+| Whole logon | `Sss:Quality:LogonWarnSeconds` | `Sss:Quality:LogonCritSeconds` |
+
+Other durations are shown without a rating.
 
 ## Limits
 
