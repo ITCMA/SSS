@@ -82,7 +82,7 @@ The state is `sss.config.json`, `sss.local.json` (if you use it) and the `logs` 
 | Page loads, no sessions, banner "unavailable" | the Status tab: `broker` failed. The message names the account the worker runs as; that account needs the Citrix administrator entry |
 | History or quality missing | Status: `monitor` failed. A `404` over HTTPS means the Monitor service answers on `http://` only ([Monitor over HTTPS](MULTI-SERVER.md#monitor-over-https)) |
 | Status: `config` warns | a key in `sss.config.json` is at the wrong level or misspelled; the warning names it and suggests the right place |
-| Helpdesk tab missing | the group in `Sss:Helpdesk:Group` is empty, does not resolve (Status: `helpdesk`), or the user must log on again after being added to the group |
+| Helpdesk tab missing | the groups in `Sss:Roles` (or the older `Sss:Helpdesk:Group`) are empty, does not resolve (Status: `helpdesk`), or the user must log on again after being added to the group |
 | "Processes" button missing | `Sss:Citrix:Processes:Enabled` is false, the audience is `Helpdesk`, or the expert view is off |
 | Browser console shows CSP violations | a reverse proxy rewrites headers; SSS sends its own `Content-Security-Policy` and expects it to stay |
 

@@ -27,7 +27,7 @@ Eine hängende Anwendung, ein zäher Desktop, eine Sitzung, die auf einem andere
 
 ## Für deinen Helpdesk: die Diagnose in einem Dialog
 
-Mitglieder einer AD-Gruppe bekommen einen **Helpdesk**-Reiter und eine **Experten-Ansicht** mit allem, was Citrix weiß, ohne Director und ohne Fernzugriff auf die Sitzung.
+Mitglieder der AD-Gruppen der [Rollen](docs/ROLES.de.md) bekommen einen **Helpdesk**-Reiter und eine **Experten-Ansicht** mit allem, was Citrix weiß, ohne Director und ohne Fernzugriff auf die Sitzung.
 
 <p align="center">
   <img src="docs/img/expert-light.png" alt="Experten-Ansicht mit Anmelde-Wasserfall und Leistungsdiagrammen" width="49%">
@@ -36,13 +36,14 @@ Mitglieder einer AD-Gruppe bekommen einen **Helpdesk**-Reiter und eine **Experte
 <p align="center"><em>Anmelde-Wasserfall und Leistungsdiagramme; Profiltyp, Größe, Ordnerbaum und Befunde</em></p>
 
 - **Benutzer finden** oder **alle Live-Sitzungen der Farm** auflisten; Sitzungen und Verlauf jedes Benutzers öffnen.
-- Sitzungen **abmelden** (mit Pflicht- oder optionalem Grund) und eine **Nachricht an eine Sitzung** senden („bitte Arbeit speichern, der Server startet neu“).
+- **Rollen**: Stufe 1 sieht an, Stufe 2 meldet auch ab und sendet Nachrichten, Stufe 3 liest zusätzlich Prozesse und Profile anderer Benutzer; **Auditor** und **Admin** sind eigene Rollen. Für jede ändernde Aktion ist eine **Ticketnummer oder ein Grund** Pflicht.
+- Sitzungen **abmelden** und eine **Nachricht an eine Sitzung** senden („bitte Arbeit speichern, der Server startet neu“).
 - **Leistungsdaten und Diagramme** im Zeitverlauf: ICA-Laufzeit, verfügbare Bandbreite, Rechenzentrums-Latenz, mit Werten beim Überfahren, dazu Verbindungsverlauf sowie Fehler- und Trennungsgründe.
 - **Anmelde-Wasserfall**: wohin die Anmeldezeit geht (Vermittlung, HDX-Verbindung, Authentifizierung, Gruppenrichtlinien, Anmeldeskripte, Profil laden, Shell). Der langsamste Schritt ist hervorgehoben, Zeit, die Citrix nicht aufschlüsselt, wird als solche gezeigt.
 - **Profilanalyse, auf dem VDA gelesen**: lokal, servergespeichert, Citrix Profile Management oder **FSLogix**; Container- und Ordnergröße; ein **Ordnerbaum** wie bei TreeSize und die **größten Dateien**; Ordnerumleitung; FSLogix- und UPM-Einstellungen samt Ausschlüssen; dazu **Befunde mit Empfehlung** (Container fast voll, Outlook- oder Teams-Caches, persönliche Daten im Profil, fehlende Ausschlüsse, alte lokale Profile, ...).
 - **Anwendungen und Prozesse beenden** einer Sitzung über einen eingeschränkten Endpunkt auf den VDAs (standardmäßig aus).
 - **„Support-Info kopieren“** legt die wichtigsten Fakten einer Sitzung für ein Ticket in die Zwischenablage.
-- **Statusseite** mit Live-Prüfungen statt Suche in der Ereignisanzeige; **Audit-Protokoll** für jede Suche, Ansicht, Abmeldung, Nachricht und Prozessaktion.
+- **Statusseite** mit Live-Prüfungen statt Suche in der Ereignisanzeige; **Audit-Protokoll** für jede Suche, Ansicht, Abmeldung, Nachricht und Prozessaktion: wer was an wem getan hat, mit Hash-Kette, einem **Audit-Reiter** für den Auditor und Kopien an einen **zentralen Ort** (UNC-Ordner, Syslog/CEF, HTTP/SIEM, SNMP).
 
 <p align="center"><img src="docs/img/processes-light.png" alt="Anwendungen und Prozesse einer Sitzung" width="60%"></p>
 
@@ -53,7 +54,8 @@ Mitglieder einer AD-Gruppe bekommen einen **Helpdesk**-Reiter und eine **Experte
 | **Leicht und schnell** | ASP.NET Core direkt im IIS. Keine Datenbank, kein Agent, nichts auf den Clients zu installieren, keine Cloud. Vorgewärmte PowerShell-Worker halten das Citrix-SDK geladen. Läuft neben Web Studio auf demselben Server. |
 | **Sicher gebaut** | Die Identität kommt nur aus der Windows-Authentifizierung des IIS. Jede Aktion wird auf dem Server und noch einmal im Worker geprüft, ein Benutzer kann also keine fremde Sitzung anfassen. CSRF-Schutz, strenge Content-Security-Policy, Ratenbegrenzung, **keine Pakete von Drittanbietern**. [Bedrohungsanalyse](docs/THREAT-MODEL.de.md). |
 | **Einfach zu betreiben** | Ein Dienstkonto (gMSA), ein Skript: `install.ps1`. `Test-SssSetup.ps1` prüft die Verdrahtung und nennt zu jedem Befund die Abhilfe. Updates rollen von selbst zurück, wenn die neue Version nicht antwortet. |
-| **Bereit für größere Umgebungen** | Mehrere Delivery Controller mit Failover, mehrere Webserver hinter einem Load Balancer (Health-Probe, gemeinsamer Schlüsselring), Audit-Protokoll, Versionsregel, Dokumentation auf Deutsch und Englisch. |
+| **Bereit für größere Umgebungen** | Delivery Controller werden automatisch gefunden und lastverteilt, mehrere Webserver hinter einem Load Balancer (Health-Probe, Ausleiten, gemeinsamer Schlüsselring) mit **Serverliste und Prüfung auf Konfigurationsabweichung**, zentrales Audit-Protokoll, Rollen, Prometheus-Metriken, Versionsregel, Dokumentation auf Deutsch und Englisch. |
+| **Einfach zu konfigurieren** | Ein JSON-Schema für die Editor-Vervollständigung, fertige Beispiele, `Test-SssConfig.ps1` zum Prüfen vor dem Einsatz und eine schreibgeschützte Ansicht der wirksamen Konfiguration mit der Herkunft jedes Werts. |
 
 ## Loslegen
 
@@ -105,7 +107,11 @@ ASPNETCORE_ENVIRONMENT=Development ASPNETCORE_URLS=http://localhost:5080 dotnet 
 - [x] Experten-Ansicht mit Diagrammen, Anmelde-Wasserfall, Profilanalyse, Support-Info, StoreFront-Link, Statusseite, Setup-Prüfung
 - [x] Einzelne Prozesse einer Sitzung beenden (JEA-Endpunkt auf den VDAs)
 - [x] IIS-Installer mit automatischem Rückfall, Release-Builds über GitHub Actions
-- [ ] Mehrere Controller und mehrere Webserver in einer echten Umgebung prüfen
+- [x] Rollen (Helpdesk-Stufen, Auditor, Admin), Pflicht-Ticketnummer
+- [x] Zentrales Audit-Protokoll mit Hash-Kette, Ziele (UNC, Syslog/CEF, HTTP, SNMP) und Audit-Reiter
+- [x] Controller-Erkennung und Lastverteilung, Serverliste mit Abweichungsprüfung, Konfigurations-Schema und -Prüfung
+- [ ] Mehrere Controller, mehrere Webserver und die zentralen Ziele in einer echten Umgebung prüfen
+- [ ] Mehrere Citrix-Sites in einer Ansicht
 - [ ] Freundliches „Schließen“ einer Anwendung (braucht einen Helfer in der Sitzung des Benutzers)
 - [ ] Engere eigene Citrix-Rolle für das Dienstkonto ([so leitest du sie her](docs/PERMISSIONS.de.md#die-rolle-enger-fassen-offen-vor-10))
 - [ ] Citrix-Cloud-Backend (DaaS)

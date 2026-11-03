@@ -27,7 +27,7 @@ A frozen application, a slow desktop, a session left open on another machine: to
 
 ## For your helpdesk: the diagnosis in one dialog
 
-Members of an AD group get a **Helpdesk** tab and an **Expert view** with everything Citrix knows, without opening Director and without a remote session.
+Members of the AD groups of the [roles](docs/ROLES.md) get a **Helpdesk** tab and an **Expert view** with everything Citrix knows, without opening Director and without a remote session.
 
 <p align="center">
   <img src="docs/img/expert-light.png" alt="Expert view with logon waterfall and performance graphs" width="49%">
@@ -36,13 +36,14 @@ Members of an AD group get a **Helpdesk** tab and an **Expert view** with everyt
 <p align="center"><em>Logon waterfall and performance graphs; profile type, size, folder tree and findings</em></p>
 
 - **Find a user** or list **all live sessions of the farm**; open any user's sessions and history.
-- **Log off** sessions (with a mandatory or optional reason) and **send a message** to a session ("please save your work, the server restarts").
+- **Roles**: level 1 looks, level 2 also logs off and sends messages, level 3 also reads processes and profiles of other users; **auditor** and **admin** are separate roles. A **ticket number or reason** is mandatory for every action that changes something.
+- **Log off** sessions and **send a message** to a session ("please save your work, the server restarts").
 - **Performance data and graphs** over time: ICA round-trip time, available bandwidth, datacenter latency, with values on hover, plus connection history and failure or disconnect reasons.
 - **Logon waterfall**: where the logon time goes (brokering, HDX connection, authentication, group policies, logon scripts, profile load, shell). The slowest step is highlighted, time Citrix does not itemize is shown as such.
 - **Profile analysis, read on the VDA**: local, roaming, Citrix Profile Management or **FSLogix**; container and folder size; a TreeSize-like **folder tree** and the **largest files**; folder redirection; FSLogix and UPM settings and exclusions; and **findings with advice** (container nearly full, Outlook or Teams caches, personal data in the profile, missing exclusions, leftover local profiles, ...).
 - **End applications and processes** of a session through a restricted endpoint on the VDAs (off by default).
 - **"Copy support info"** puts the key facts of a session into the clipboard for a ticket.
-- **Status page** with live health checks instead of digging through event logs; **audit trail** of every search, view, log-off, message and process action.
+- **Status page** with live health checks instead of digging through event logs; **audit trail** of every search, view, log-off, message and process action: who did what to whom, with a hash chain, an **Audit tab** for the auditor and copies to a **central place** (UNC folder, Syslog/CEF, HTTP/SIEM, SNMP).
 
 <p align="center"><img src="docs/img/processes-light.png" alt="Applications and processes of a session" width="60%"></p>
 
@@ -53,7 +54,8 @@ Members of an AD group get a **Helpdesk** tab and an **Expert view** with everyt
 | **Light and fast** | ASP.NET Core running inside IIS. No database, no agent, nothing to install on clients, no cloud. Warm PowerShell workers keep the Citrix SDK loaded. Runs next to Web Studio on the same server. |
 | **Secure by design** | The identity comes only from IIS Windows authentication. Every action is checked again on the server and again in the worker, so a user cannot touch a session that is not theirs. CSRF protection, strict content security policy, rate limits, **no third-party packages**. [Threat model](docs/THREAT-MODEL.md). |
 | **Simple to run** | One service account (gMSA), one script: `install.ps1`. `Test-SssSetup.ps1` checks the wiring and prints the fix for every finding. Updates roll back by themselves if the new version does not answer. |
-| **Ready for bigger sites** | Several Delivery Controllers with failover, several web servers behind a load balancer (health probe, shared key ring), audit trail, versioning policy, English and German documentation. |
+| **Ready for bigger sites** | Delivery Controllers found automatically and load balanced, several web servers behind a load balancer (health probe, draining, shared key ring) with a **server list and configuration drift check**, central audit trail, roles, Prometheus metrics, versioning policy, English and German documentation. |
+| **Easy to configure** | A JSON schema for editor completion, ready-made examples, `Test-SssConfig.ps1` to check a configuration before it goes live, and a read-only view of the effective configuration with the source of each value. |
 
 ## Get started
 
@@ -105,7 +107,11 @@ Open <http://localhost:5080> and add `?shot=profile` or `?shot=processes` to the
 - [x] Expert view with charts, logon waterfall, profile analysis, support info, StoreFront link, status page, setup check
 - [x] End single processes of a session (JEA endpoint on the VDAs)
 - [x] IIS installer with automatic rollback, release builds via GitHub Actions
-- [ ] Verify several controllers and several web servers on a real site
+- [x] Roles (helpdesk levels, auditor, admin), mandatory ticket number
+- [x] Central audit trail with hash chain, destinations (UNC, Syslog/CEF, HTTP, SNMP) and Audit tab
+- [x] Delivery Controller discovery and load balancing, server list with drift check, configuration schema and check
+- [ ] Verify several controllers, several web servers and the central destinations on a real site
+- [ ] Several Citrix sites in one view
 - [ ] Polite "close" of an application (needs a helper inside the user's session)
 - [ ] Stricter custom Citrix role for the service account ([how to derive it](docs/PERMISSIONS.md#narrowing-the-role-open-item-before-10))
 - [ ] Citrix Cloud (DaaS) backend

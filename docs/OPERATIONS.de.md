@@ -82,7 +82,7 @@ Der Zustand sind `sss.config.json`, `sss.local.json` (falls genutzt) und der Ord
 | Seite lädt, keine Sitzungen, Hinweis „nicht verfügbar“ | Status-Reiter: `broker` schlägt fehl. Die Meldung nennt das Konto, unter dem der Worker läuft; dieses Konto braucht den Citrix-Administratoreintrag |
 | Verlauf oder Qualität fehlen | Status: `monitor` schlägt fehl. Ein `404` über HTTPS heißt, dass der Monitor-Dienst nur über `http://` antwortet ([Monitor über HTTPS](MULTI-SERVER.de.md#monitor-über-https)) |
 | Status: `config` warnt | ein Schlüssel in `sss.config.json` steht auf der falschen Ebene oder ist falsch geschrieben; die Warnung nennt ihn und schlägt die richtige Stelle vor |
-| Helpdesk-Reiter fehlt | die Gruppe in `Sss:Helpdesk:Group` ist leer, wird nicht aufgelöst (Status: `helpdesk`), oder der Benutzer muss sich nach der Aufnahme in die Gruppe neu anmelden |
+| Helpdesk-Reiter fehlt | die Gruppen in `Sss:Roles` (oder die ältere `Sss:Helpdesk:Group`) sind leer, wird nicht aufgelöst (Status: `helpdesk`), oder der Benutzer muss sich nach der Aufnahme in die Gruppe neu anmelden |
 | Knopf „Prozesse“ fehlt | `Sss:Citrix:Processes:Enabled` ist false, die Zielgruppe ist `Helpdesk`, oder die Expertenansicht ist aus |
 | Browserkonsole meldet CSP-Verstöße | ein Reverse Proxy ändert Header; SSS sendet eine eigene `Content-Security-Policy` und erwartet, dass sie unverändert bleibt |
 

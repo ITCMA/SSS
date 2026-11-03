@@ -125,13 +125,13 @@ Nach Änderungen ist ein Neustart (Recycling des App-Pools) nötig.
 
 ## Helpdesk
 
-Mitglieder einer AD-Gruppe können Benutzer finden und **deren** Sitzungen sehen und abmelden. Alle anderen bekommen bei allen Helpdesk-Endpunkten HTTP 403 und sehen den Reiter nie.
+Mitglieder der AD-Gruppen der [Rollen](ROLES.de.md) können Benutzer finden und **deren** Sitzungen sehen (Stufe 1), abmelden und Nachrichten senden (Stufe 2) sowie Prozesse und Profile lesen (Stufe 3). Alle anderen bekommen bei allen Helpdesk-Endpunkten HTTP 403 und sehen den Reiter nie.
 
-1. Eine Sicherheitsgruppe anlegen, z. B. `SSS-Helpdesk`, und die Helpdesk-Mitarbeiter aufnehmen: `New-ADGroup -Name SSS-Helpdesk -GroupScope Global -GroupCategory Security`.
+1. Sicherheitsgruppen anlegen, z. B. `SSS-Helpdesk-L1`, `SSS-Helpdesk-L2`, `SSS-Auditors`, `SSS-Admins` (nach Bedarf auch `-L3`), und die Mitarbeiter aufnehmen: `New-ADGroup -Name SSS-Helpdesk-L1 -GroupScope Global -GroupCategory Security`.
 2. Die Gruppe in die `sss.config.json` eintragen (oder bei einer Neuinstallation `-HelpdeskGroup 'CORP\SSS-Helpdesk'` an `install.ps1` übergeben) und den App-Pool recyceln:
 
 ```json
-{ "Sss": { "Helpdesk": { "Group": "CORP\\SSS-Helpdesk", "ReasonRequired": false, "MaxSessions": 1000 } } }
+{ "Sss": { "Roles": { "Level1Group": "CORP\\SSS-Helpdesk-L1", "Level2Group": "CORP\\SSS-Helpdesk-L2", "AuditorGroup": "CORP\\SSS-Auditors", "AdminGroup": "CORP\\SSS-Admins" } } }
 ```
 
 3. Helpdesk-Mitarbeiter müssen sich nach der Aufnahme in die Gruppe neu anmelden, weil Gruppenmitgliedschaften im Windows-Anmeldetoken stehen.

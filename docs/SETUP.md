@@ -124,13 +124,13 @@ Set `Sss:Provider` to `Citrix` in `sss.config.json`:
 
 ## Helpdesk
 
-Members of an AD group can find users and see and log off **their** sessions. Everyone else gets HTTP 403 on all helpdesk endpoints and never sees the tab.
+Members of the AD groups of the [roles](ROLES.md) can find users and see (level 1), log off and message (level 2) and read processes and profiles of (level 3) **their** sessions. Everyone else gets HTTP 403 on all helpdesk endpoints and never sees the tab.
 
-1. Create a security group, e.g. `SSS-Helpdesk`, and add the helpdesk staff: `New-ADGroup -Name SSS-Helpdesk -GroupScope Global -GroupCategory Security`.
+1. Create security groups, e.g. `SSS-Helpdesk-L1`, `SSS-Helpdesk-L2`, `SSS-Auditors`, `SSS-Admins` (and `-L3` if needed), and add the staff: `New-ADGroup -Name SSS-Helpdesk-L1 -GroupScope Global -GroupCategory Security`.
 2. Put the group into `sss.config.json` (or pass `-HelpdeskGroup 'CORP\SSS-Helpdesk'` to `install.ps1` on a fresh install) and recycle the app pool:
 
 ```json
-{ "Sss": { "Helpdesk": { "Group": "CORP\\SSS-Helpdesk", "ReasonRequired": false, "MaxSessions": 1000 } } }
+{ "Sss": { "Roles": { "Level1Group": "CORP\\SSS-Helpdesk-L1", "Level2Group": "CORP\\SSS-Helpdesk-L2", "AuditorGroup": "CORP\\SSS-Auditors", "AdminGroup": "CORP\\SSS-Admins" } } }
 ```
 
 3. Helpdesk staff must log on again after being added to the group, because group memberships live in the Windows logon token.

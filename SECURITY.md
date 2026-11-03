@@ -36,7 +36,7 @@ SSS lets ordinary users log off sessions on a Citrix site through a service acco
 - Keep **write access** to the application folder and `sss.config.json` limited to administrators. The installer grants the app pool identity only read access, plus modify on `logs`. Whoever can edit the configuration controls which process the application starts.
 - Protect the **audit log**: the app pool identity must be able to append to it, so it could also delete it. Forward `logs\audit-*.jsonl` to a central log collector (SIEM) if you rely on it for accountability.
 - Restart the app pool after changing group memberships of the service account; a running process keeps its old token.
-- Keep the **helpdesk group small**: members can see every user's sessions and log them off. Helpdesk staff must log on again after being added to the group. Review the audit log for `helpdesk:*` and `helpdesk-logoff:*` entries; they contain actor, affected user and reason. Consider `Sss:Helpdesk:ReasonRequired`.
+- Keep the **helpdesk group small**: members can see every user's sessions and log them off. Helpdesk staff must log on again after being added to the group. Review the audit log for `helpdesk:*` and `helpdesk-logoff:*` entries; they contain actor, affected user and reason. Use the [roles](docs/ROLES.md) to give most staff level 1 or 2 only, keep `Sss:Helpdesk:ReasonRequired` on, and send the audit trail to a [central destination](docs/AUDIT.md) the web server cannot change.
 
 - Releases come with a SHA-256 checksum file; verify the zip before installing. GitHub Actions are pinned to commit SHAs, CodeQL and Dependabot run on the repository.
 
