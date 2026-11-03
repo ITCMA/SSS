@@ -28,7 +28,8 @@ public class ConfigSchemaTests
         var file = Path.Combine(RepoFiles.Root(), "docs", "sss.config.schema.json");
         var generated = ConfigSchema.Build();
         if (Environment.GetEnvironmentVariable("SSS_UPDATE_SCHEMA") == "1") File.WriteAllText(file, generated);
-        Assert.True(File.Exists(file) && File.ReadAllText(file) == generated,
+        // git on Windows may check the file out with CRLF line endings
+        Assert.True(File.Exists(file) && File.ReadAllText(file).Replace("\r\n", "\n") == generated,
             "docs/sss.config.schema.json is out of date. Run: SSS_UPDATE_SCHEMA=1 dotnet test --filter ConfigSchemaTests");
     }
 
