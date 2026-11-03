@@ -49,7 +49,8 @@ public static partial class ConfigSchema
             ["type"] = "object",
             ["properties"] = new JsonObject { ["Sss"] = sss },
         };
-        return root.ToJsonString(new JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }) + "\n";
+        // the serializer indents with Environment.NewLine (CRLF on Windows); the committed file always uses LF
+        return root.ToJsonString(new JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }).Replace("\r\n", "\n") + "\n";
     }
 
     /// <summary>Property paths of the option classes that have no XML comment (so no description in the schema).</summary>
