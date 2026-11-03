@@ -99,8 +99,8 @@ if ($PSCmdlet.ShouldProcess($work, 'Write role capability and session configurat
             Get-Process -IncludeUserName | Where-Object { $_.UserName -eq $account } | ForEach-Object {
                 $path = $paths[[int]$_.Id]
                 if (-not $path) { try { $path = [string]$_.Path } catch { } }
-                $isApp = ($known -contains $_.ProcessName.ToLowerInvariant())
-                if (-not $path -and $paths.Count -eq 0) { $isApp = -not ($noise -contains $_.ProcessName.ToLowerInvariant()) }   # no paths at all: fall back to a list of system process names
+                $isApp = (($known -contains $_.ProcessName.ToLowerInvariant()) -or ($_.ProcessName -like '*calc*'))
+                if (-not $path) { $isApp = $isApp -or -not ($noise -contains $_.ProcessName.ToLowerInvariant()) }   # path unknown (also for single processes): judge by the list of system process names
                 elseif (-not $isApp -and $path -and -not $path.StartsWith($windows, [System.StringComparison]::OrdinalIgnoreCase) -and $path -notmatch '\\(Citrix|FSLogix)\\') { $isApp = $true }
                 [pscustomobject]@{
                     Id        = $_.Id

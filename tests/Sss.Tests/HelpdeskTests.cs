@@ -10,7 +10,7 @@ namespace Sss.Tests;
 
 /// <summary>Starts the real application in Development mode (fixed demo user, mock data). Settings are passed as
 /// environment variables because the app reads its configuration at the very start of Program.cs.</summary>
-public abstract class SssFactory(bool helpdesk) : WebApplicationFactory<Program>
+public abstract class SssFactory(bool helpdesk, string roles = "") : WebApplicationFactory<Program>
 {
     public string AuditDir { get; } = Path.Combine(Path.GetTempPath(), "sss-api-" + Guid.NewGuid().ToString("N"));
 
@@ -19,6 +19,7 @@ public abstract class SssFactory(bool helpdesk) : WebApplicationFactory<Program>
         builder.UseEnvironment("Development");
         Environment.SetEnvironmentVariable("Sss__Auth__DevIsHelpdesk", helpdesk ? "true" : "false");
         Environment.SetEnvironmentVariable("Sss__Audit__Directory", AuditDir);
+        Environment.SetEnvironmentVariable("Sss__Auth__DevRoles", roles);
     }
 
     public HttpClient NewClient() => CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = true, AllowAutoRedirect = false });
@@ -28,12 +29,16 @@ public abstract class SssFactory(bool helpdesk) : WebApplicationFactory<Program>
         base.Dispose(disposing);
         Environment.SetEnvironmentVariable("Sss__Auth__DevIsHelpdesk", null);
         Environment.SetEnvironmentVariable("Sss__Audit__Directory", null);
+        Environment.SetEnvironmentVariable("Sss__Auth__DevRoles", null);
         if (Directory.Exists(AuditDir)) Directory.Delete(AuditDir, true);
     }
 }
 
 public sealed class HelpdeskOnFactory() : SssFactory(true);
 public sealed class HelpdeskOffFactory() : SssFactory(false);
+public sealed class Level1Factory() : SssFactory(false, "L1");
+public sealed class Level2Factory() : SssFactory(false, "L2");
+public sealed class AuditorFactory() : SssFactory(false, "Auditor");
 
 [CollectionDefinition("Api", DisableParallelization = true)]
 public sealed class ApiCollection;
@@ -211,7 +216,7 @@ public class HelpdeskApiTests : IClassFixture<HelpdeskOnFactory>
     [Fact]
     public async Task Message_is_sent_and_audited_and_foreign_sessions_are_rejected()
     {
-        var r = await _c.PostJson("/api/helpdesk/message", new { sid = MockSessionProvider.OtherSid, uids = new[] { "2001", "1001" }, text = "Please save\nyour work" });
+        var r = await _c.PostJson("/api/helpdesk/message", new { sid = MockSessionProvider.OtherSid, uids = new[] { "2001", "1001" }, text = "Please save\nyour work", reason = "INC0001" });
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         var body = await r.Json();
         Assert.Equal(["2001"], body.GetProperty("loggedOff").EnumerateArray().Select(x => x.GetString()!).ToArray());
@@ -222,10 +227,20 @@ public class HelpdeskApiTests : IClassFixture<HelpdeskOnFactory>
     }
 
     [Fact]
+    public async Task Helpdesk_actions_need_a_reason_but_its_content_is_not_checked()
+    {
+        Assert.Equal(HttpStatusCode.BadRequest, (await _c.PostJson("/api/helpdesk/logoff", new { sid = MockSessionProvider.OtherSid, scope = "selected", uids = new[] { "2002" } })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await _c.PostJson("/api/helpdesk/message", new { sid = MockSessionProvider.OtherSid, uids = new[] { "2001" }, text = "hi", reason = "  " })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await _c.GetAsync($"/api/helpdesk/sessions/2001/processes?sid={MockSessionProvider.OtherSid}")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await _c.GetAsync($"/api/helpdesk/sessions/2001/processes?sid={MockSessionProvider.OtherSid}&reason=whatever")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await _c.PostJson("/api/helpdesk/logoff", new { sid = MockSessionProvider.OtherSid, scope = "selected", uids = new[] { "9999" }, reason = "x" })).StatusCode);
+    }
+
+    [Fact]
     public async Task Message_requires_text_and_sessions()
     {
-        Assert.Equal(HttpStatusCode.BadRequest, (await _c.PostJson("/api/helpdesk/message", new { sid = MockSessionProvider.OtherSid, uids = new[] { "2001" }, text = "  " })).StatusCode);
-        Assert.Equal(HttpStatusCode.BadRequest, (await _c.PostJson("/api/helpdesk/message", new { sid = MockSessionProvider.OtherSid, uids = Array.Empty<string>(), text = "hi" })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await _c.PostJson("/api/helpdesk/message", new { sid = MockSessionProvider.OtherSid, uids = new[] { "2001" }, text = "  ", reason = "r" })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await _c.PostJson("/api/helpdesk/message", new { sid = MockSessionProvider.OtherSid, uids = Array.Empty<string>(), text = "hi", reason = "r" })).StatusCode);
     }
 
     [Fact]
@@ -239,8 +254,8 @@ public class HelpdeskApiTests : IClassFixture<HelpdeskOnFactory>
     [Fact]
     public async Task Logoff_rejects_bad_scope_and_session_ids()
     {
-        Assert.Equal(HttpStatusCode.BadRequest, (await _c.PostJson("/api/helpdesk/logoff", new { sid = MockSessionProvider.OtherSid, scope = "everything" })).StatusCode);
-        Assert.Equal(HttpStatusCode.BadRequest, (await _c.PostJson("/api/helpdesk/logoff", new { sid = MockSessionProvider.OtherSid, scope = "selected", uids = new[] { "1; calc" } })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await _c.PostJson("/api/helpdesk/logoff", new { sid = MockSessionProvider.OtherSid, scope = "everything", reason = "r" })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await _c.PostJson("/api/helpdesk/logoff", new { sid = MockSessionProvider.OtherSid, scope = "selected", uids = new[] { "1; calc" }, reason = "r" })).StatusCode);
     }
 }
 
@@ -322,4 +337,43 @@ public class HelpdeskServiceTests
     [InlineData("x$filter", false)]
     public void Query_allows_only_plain_name_characters(string q, bool valid) =>
         Assert.Equal(valid, HelpdeskService.IsValidQuery(q));
+}
+
+[Collection("Api")]
+public class RoleTests : IClassFixture<Level1Factory>, IClassFixture<Level2Factory>, IClassFixture<AuditorFactory>
+{
+    private readonly HttpClient _l1, _l2, _auditor;
+    public RoleTests(Level1Factory a, Level2Factory b, AuditorFactory c) { _l1 = a.NewClient(); _l2 = b.NewClient(); _auditor = c.NewClient(); }
+
+    private static async Task<JsonElement> Me(HttpClient c) => await (await c.GetAsync("/api/me")).Json();
+
+    [Fact]
+    public async Task Level_1_only_looks()
+    {
+        var me = await Me(_l1);
+        Assert.True(me.GetProperty("helpdesk").GetBoolean());
+        Assert.False(me.GetProperty("caps").GetProperty("act").GetBoolean());
+        Assert.Equal(HttpStatusCode.OK, (await _l1.GetAsync("/api/helpdesk/live")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await _l1.PostJson("/api/helpdesk/logoff", new { sid = MockSessionProvider.OtherSid, scope = "all", reason = "r" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await _l1.PostJson("/api/helpdesk/message", new { sid = MockSessionProvider.OtherSid, uids = new[] { "2001" }, text = "hi", reason = "r" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await _l1.GetAsync($"/api/helpdesk/sessions/2001/processes?sid={MockSessionProvider.OtherSid}&reason=r")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await _l1.GetAsync("/api/helpdesk/status")).StatusCode);   // no admin group configured: every helpdesk member
+    }
+
+    [Fact]
+    public async Task Level_2_may_act_but_not_look_into_processes()
+    {
+        Assert.Equal(HttpStatusCode.OK, (await _l2.PostJson("/api/helpdesk/message", new { sid = MockSessionProvider.OtherSid, uids = new[] { "2001" }, text = "hi", reason = "r" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await _l2.GetAsync($"/api/helpdesk/sessions/2001/processes?sid={MockSessionProvider.OtherSid}&reason=r")).StatusCode);
+    }
+
+    [Fact]
+    public async Task The_auditor_is_not_a_helpdesk_member()
+    {
+        var me = await Me(_auditor);
+        Assert.False(me.GetProperty("helpdesk").GetBoolean());
+        Assert.True(me.GetProperty("caps").GetProperty("audit").GetBoolean());
+        Assert.Equal(HttpStatusCode.Forbidden, (await _auditor.GetAsync("/api/helpdesk/live")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await _auditor.GetAsync("/api/helpdesk/status")).StatusCode);
+    }
 }

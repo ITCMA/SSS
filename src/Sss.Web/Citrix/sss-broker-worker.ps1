@@ -1,7 +1,7 @@
 <#
   SSS broker worker: a long-running Windows PowerShell 5.1 process that talks to the Citrix Broker SDK.
   Protocol: one JSON request per line on stdin, one JSON response per line on stdout.
-  Only a few operations exist (ping, list, listall, logoff, message, processes, endprocess, profile) and every value is validated before it reaches a cmdlet.
+  Only a few operations exist (ping, controllers, list, listall, logoff, message, processes, endprocess, profile) and every value is validated before it reaches a cmdlet.
   Keep this file compatible with Windows PowerShell 5.1 (no ternary, no ?? operators).
 #>
 [CmdletBinding()]
@@ -27,8 +27,18 @@ $SidPattern = '^S-1-\d+(-\d+)+$'
 $UidPattern = '^\d{1,18}$'
 $QueryPattern = '^[\p{L}\p{N} ._@\\-]{0,64}$'
 $script:Active = $ControllerList[0]
+$HostPattern = '^[A-Za-z0-9._-]{1,253}$'
+# The web application sends the controllers in the order they should be tried (load balancing); without it the start list is used.
+$script:Order = @()
+$script:Used = $null
+$script:Failed = @()
 
 function Send($obj) {
+    if ($obj -is [hashtable] -and $obj.ContainsKey('id')) {
+        # which controller answered and which ones failed on the way: the web application keeps health statistics from it
+        $obj.controller = $script:Used
+        $obj.failed = @($script:Failed)
+    }
     $json = ConvertTo-Json -InputObject $obj -Compress -Depth 6
     # ASCII-only output keeps the stream independent of console code pages
     $json = [regex]::Replace($json, '[^\x00-\x7F]', { param($m) '\u{0:x4}' -f [int][char]$m.Value })
@@ -37,14 +47,16 @@ function Send($obj) {
 }
 
 function Invoke-Broker([scriptblock]$Action) {
-    $order = @($script:Active) + @($ControllerList | Where-Object { $_ -ne $script:Active })
+    $order = @($script:Order)
+    if ($order.Count -eq 0) { $order = @($script:Active) + @($ControllerList | Where-Object { $_ -ne $script:Active }) }
     $last = $null
     foreach ($c in $order) {
         try {
             $r = & $Action $c
             $script:Active = $c
+            $script:Used = $c
             return ,$r
-        } catch { $last = $_ }
+        } catch { $last = $_; $script:Failed += $c }
     }
     throw $last
 }
@@ -180,9 +192,27 @@ while ($true) {
     try {
         $req = $line | ConvertFrom-Json
         $id = $req.id
+        $script:Failed = @()
+        $script:Used = $null
+        $script:Order = @()
+        if ($req.controllers) { $script:Order = @($req.controllers | ForEach-Object { [string]$_ } | Where-Object { $_ -match $HostPattern }) }
         switch ([string]$req.op) {
             'ping' {
+                # deep = really ask a controller (status page, load balancer probe); the warm-up ping only checks that the worker runs
+                if ([bool]$req.deep) { Invoke-Broker { param($c) Get-BrokerSite -AdminAddress $c | Out-Null } | Out-Null }
                 Send @{ id = $id; ok = $true }
+            }
+            'controllers' {
+                # all Delivery Controllers of the site, asked from one of them
+                $via = [string]$req.via
+                if ($via -notmatch $HostPattern) { throw 'Invalid controller name.' }
+                $rows = @(Get-BrokerController -AdminAddress $via | ForEach-Object {
+                    $zone = $null
+                    if ($_.PSObject.Properties['ZoneName']) { $zone = [string]$_.ZoneName }
+                    @{ name = [string]$_.DNSName; state = [string]$_.State; version = [string]$_.ControllerVersion; zone = $zone }
+                })
+                $script:Used = $via
+                Send @{ id = $id; ok = $true; controllers = $rows }
             }
             'list' {
                 $sid = [string]$req.sid

@@ -7,13 +7,13 @@ namespace Sss.Web.Citrix;
 
 /// <summary>One warm PowerShell process speaking line-delimited JSON. Requests are strictly serialised;
 /// a timeout or crash kills the process and the next request starts a fresh one.</summary>
-internal sealed class PowerShellWorker(CitrixOptions options, string scriptPath, ILogger log) : IDisposable
+internal sealed class PowerShellWorker(CitrixOptions options, string scriptPath, ILogger log, Func<IReadOnlyList<string>>? controllers = null) : IDisposable
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
     private Process? _proc;
     private long _nextId;
 
-    public async Task<JsonElement> RequestAsync(Dictionary<string, object?> request, CancellationToken ct, int? timeoutSeconds = null)
+    public async Task<JsonElement> RequestAsync(Dictionary<string, object?> request, CancellationToken ct, int? timeoutSeconds = null, Action<JsonElement>? observe = null)
     {
         await _gate.WaitAsync(ct);
         try
@@ -22,7 +22,7 @@ internal sealed class PowerShellWorker(CitrixOptions options, string scriptPath,
             timeout.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds ?? options.RequestTimeoutSeconds));
             try
             {
-                return await ExchangeAsync(request, timeout.Token);
+                return await ExchangeAsync(request, timeout.Token, observe);
             }
             catch (OperationCanceledException) when (!ct.IsCancellationRequested)
             {
@@ -41,7 +41,7 @@ internal sealed class PowerShellWorker(CitrixOptions options, string scriptPath,
         }
     }
 
-    private async Task<JsonElement> ExchangeAsync(Dictionary<string, object?> request, CancellationToken ct)
+    private async Task<JsonElement> ExchangeAsync(Dictionary<string, object?> request, CancellationToken ct, Action<JsonElement>? observe)
     {
         var proc = EnsureStarted();
         var id = Interlocked.Increment(ref _nextId);
@@ -56,6 +56,7 @@ internal sealed class PowerShellWorker(CitrixOptions options, string scriptPath,
             using var doc = JsonDocument.Parse(line);
             var root = doc.RootElement;
             if (!root.TryGetProperty("id", out var rid) || rid.ValueKind != JsonValueKind.Number || rid.GetInt64() != id) continue;
+            observe?.Invoke(root);   // success or failure, the pool reads which controller answered and which ones failed
             if (root.TryGetProperty("ok", out var ok) && ok.ValueKind == JsonValueKind.True) return root.Clone();
             var msg = root.TryGetProperty("error", out var e) ? e.GetString() : "unknown error";
             if (msg?.Contains("administrative privilege", StringComparison.OrdinalIgnoreCase) == true)
@@ -80,7 +81,7 @@ internal sealed class PowerShellWorker(CitrixOptions options, string scriptPath,
             StandardOutputEncoding = Encoding.UTF8,
         };
         foreach (var a in new[] { "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", scriptPath,
-                     "-Controllers", string.Join(',', options.Controllers) })
+                     "-Controllers", string.Join(',', controllers?.Invoke() is { Count: > 0 } c ? c : options.Controllers) })
             psi.ArgumentList.Add(a);
         if (options.Processes.Enabled)
         {

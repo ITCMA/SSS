@@ -51,6 +51,9 @@ public interface IBrokerClient
     /// <summary>Profile type and size of the user on the machine of the given session (JEA command Get-SssProfile).</summary>
     Task<ProfileInfo> ProfileAsync(string userSid, string uid, int scanSeconds, CancellationToken ct);
 
+    /// <summary>Asks the controller <paramref name="via"/> for all Delivery Controllers of its site (Get-BrokerController).</summary>
+    Task<IReadOnlyList<DiscoveredController>> DiscoverAsync(string via, CancellationToken ct);
+
     /// <summary>Round trip to a worker (status page).</summary>
     Task PingAsync(CancellationToken ct);
 }

@@ -87,7 +87,10 @@ Open <http://localhost:5080> and add `?shot=profile` or `?shot=processes` to the
 | [Permissions at a glance](docs/PERMISSIONS.md) | who needs which right, where and why |
 | [Operations](docs/OPERATIONS.md) | update, health probe, status page, audit trail, troubleshooting |
 | [Applications, processes and profiles](docs/PROCESSES.md) | the JEA endpoint on the VDAs, setup, security |
-| [Several controllers and servers](docs/MULTI-SERVER.md) | failover, load balancer, Kerberos alias, Monitor over HTTPS |
+| [Roles](docs/ROLES.md) | helpdesk levels, auditor, admin, mandatory ticket number |
+| [Audit trail and central logging](docs/AUDIT.md) | who did what, destinations (UNC, Syslog/CEF, HTTP, SNMP), integrity |
+| [Delivery Controllers](docs/CONTROLLERS.md) | discovery, load balancing, virtual address |
+| [Several controllers and servers](docs/MULTI-SERVER.md) | server list, configuration sync, draining, load balancer, Kerberos alias, Monitor over HTTPS |
 | [Data sources](docs/DATA-SOURCES.md) | where the data comes from and how quality is rated |
 | [Architecture](docs/ARCHITECTURE.md) | components and request flows |
 | [Versioning and compatibility](docs/COMPATIBILITY.md), [Changelog](CHANGELOG.md) | what is stable, how to update |

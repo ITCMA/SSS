@@ -32,6 +32,7 @@ public static class ConfigCheck
             var path = prefix.Append(p.Name).ToArray();
             into.Add(path);
             if (IsSection(p.PropertyType)) Collect(p.PropertyType, path, into);
+            else if (p.PropertyType.IsArray && IsSection(p.PropertyType.GetElementType()!)) Collect(p.PropertyType.GetElementType()!, path, into);
         }
     }
 
@@ -46,6 +47,8 @@ public static class ConfigCheck
                 if (!(type == typeof(SssOptions) && Extra.Contains(child.Key, StringComparer.OrdinalIgnoreCase))) unknown.Add(childPath);
             }
             else if (IsSection(prop.PropertyType)) Walk(child, prop.PropertyType, childPath, unknown);
+            else if (prop.PropertyType.IsArray && IsSection(prop.PropertyType.GetElementType()!))
+                foreach (var item in child.GetChildren()) Walk(item, prop.PropertyType.GetElementType()!, $"{childPath}:{item.Key}", unknown);
         }
     }
 }

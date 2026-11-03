@@ -1,0 +1,856 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SSS configuration (sss.config.json, sss.local.json)",
+  "description": "Everything lives in the section \"Sss\". Write only what you change. Keys are case-insensitive in SSS; this schema uses the spelling shown. Generated from the option classes; do not edit by hand.",
+  "type": "object",
+  "properties": {
+    "Sss": {
+      "type": "object",
+      "properties": {
+        "Provider": {
+          "description": "\"Citrix\" for a real site, \"Mock\" for demo data (with a banner).",
+          "type": "string",
+          "enum": [
+            "Mock",
+            "Citrix"
+          ],
+          "default": "Mock"
+        },
+        "RefreshSeconds": {
+          "description": "Automatic refresh interval of the web interface in seconds.",
+          "type": "integer",
+          "default": 30
+        },
+        "StoreFrontUrl": {
+          "description": "Optional address of StoreFront; the UI then shows an \"Open StoreFront\" link (to start or reconnect sessions).",
+          "type": "string",
+          "default": ""
+        },
+        "Auth": {
+          "description": "Authentication mode (IIS Windows authentication, or a fixed demo user in development).",
+          "type": "object",
+          "properties": {
+            "Mode": {
+              "description": "\"Iis\" = Windows authentication of IIS (production). \"Dev\" = fixed demo user, only accepted when ASPNETCORE_ENVIRONMENT=Development.",
+              "type": "string",
+              "enum": [
+                "Iis",
+                "Dev"
+              ],
+              "default": "Iis"
+            },
+            "DevUserName": {
+              "description": "Development mode only: name of the fixed demo user.",
+              "type": "string",
+              "default": "DEMO\\demo.user"
+            },
+            "DevUserSid": {
+              "description": "Development mode only: SID of the fixed demo user.",
+              "type": "string",
+              "default": "S-1-5-21-1000-1000-1000-1001"
+            },
+            "DevIsHelpdesk": {
+              "description": "Dev mode only: treat the demo user as a member of the helpdesk group.",
+              "type": "boolean",
+              "default": false
+            },
+            "DevRoles": {
+              "description": "Dev mode only: roles of the demo user, a list of L1, L2, L3, Auditor, Admin.",
+              "type": "string",
+              "default": ""
+            }
+          },
+          "additionalProperties": false
+        },
+        "Audit": {
+          "description": "Audit trail: local files, retention and central destinations.",
+          "type": "object",
+          "properties": {
+            "Directory": {
+              "description": "Directory for audit-YYYYMMDD.jsonl files; relative paths are based on the app directory.",
+              "type": "string",
+              "default": "logs"
+            },
+            "PerServerFiles": {
+              "description": "Name the files audit-YYYYMMDD-SERVER.jsonl so several servers can write into one shared folder.",
+              "type": "boolean",
+              "default": false
+            },
+            "RetentionDays": {
+              "description": "Delete local audit and ops files older than this many days once every sink has passed them. 0 = keep.",
+              "type": "integer",
+              "default": 0
+            },
+            "OpsStream": {
+              "description": "Operational messages (warnings and errors of SSS itself) go into a second stream \"ops\" next to the audit trail.",
+              "type": "boolean",
+              "default": true
+            },
+            "Sinks": {
+              "description": "Central destinations. The local file is always written first; every sink gets a copy and catches up after an outage.",
+              "type": "object",
+              "properties": {
+                "Unc": {
+                  "description": "Destinations that copy the events to a shared folder.",
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "Path": {
+                        "description": "Shared folder (UNC path) the events are copied to: one file per day, server and stream.",
+                        "type": "string",
+                        "default": ""
+                      },
+                      "Enabled": {
+                        "description": "Set to false to switch this destination off without removing it.",
+                        "type": "boolean",
+                        "default": true
+                      },
+                      "Name": {
+                        "description": "Name in the status page and for the position file; defaults to the sink type and number.",
+                        "type": "string",
+                        "default": ""
+                      },
+                      "Streams": {
+                        "description": "\"audit\", \"ops\" or both.",
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "audit",
+                            "ops"
+                          ]
+                        },
+                        "default": [
+                          "audit",
+                          "ops"
+                        ]
+                      },
+                      "Include": {
+                        "description": "Only events whose action starts with one of these (for example \"helpdesk\", \"alert:\"). Empty = all.",
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "default": []
+                      },
+                      "OnlyProblems": {
+                        "description": "Only failures, rejections, alerts and operational problems (for a notification channel).",
+                        "type": "boolean",
+                        "default": false
+                      },
+                      "BatchSize": {
+                        "description": "Maximum number of events sent in one batch.",
+                        "type": "integer",
+                        "default": 200
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "Syslog": {
+                  "description": "Syslog destinations (RFC 5424, JSON or CEF).",
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "Host": {
+                        "description": "Syslog server name or address.",
+                        "type": "string",
+                        "default": ""
+                      },
+                      "Port": {
+                        "description": "Port; 0 = the default of the protocol (514, or 6514 for TLS).",
+                        "type": "integer",
+                        "default": 0
+                      },
+                      "Protocol": {
+                        "description": "Udp, Tcp or Tls.",
+                        "type": "string",
+                        "enum": [
+                          "Udp",
+                          "Tcp",
+                          "Tls"
+                        ],
+                        "default": "Udp"
+                      },
+                      "Format": {
+                        "description": "Json (the record as it is) or Cef (Common Event Format).",
+                        "type": "string",
+                        "enum": [
+                          "Json",
+                          "Cef"
+                        ],
+                        "default": "Json"
+                      },
+                      "Facility": {
+                        "description": "Syslog facility number (13 = log audit).",
+                        "type": "integer",
+                        "default": 13
+                      },
+                      "AppName": {
+                        "description": "Application name in the syslog header.",
+                        "type": "string",
+                        "default": "sss"
+                      },
+                      "Framing": {
+                        "description": "TCP/TLS framing: \"Newline\" (default of most collectors) or \"OctetCount\" (RFC 6587).",
+                        "type": "string",
+                        "enum": [
+                          "Newline",
+                          "OctetCount"
+                        ],
+                        "default": "Newline"
+                      },
+                      "Enabled": {
+                        "description": "Set to false to switch this destination off without removing it.",
+                        "type": "boolean",
+                        "default": true
+                      },
+                      "Name": {
+                        "description": "Name in the status page and for the position file; defaults to the sink type and number.",
+                        "type": "string",
+                        "default": ""
+                      },
+                      "Streams": {
+                        "description": "\"audit\", \"ops\" or both.",
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "audit",
+                            "ops"
+                          ]
+                        },
+                        "default": [
+                          "audit",
+                          "ops"
+                        ]
+                      },
+                      "Include": {
+                        "description": "Only events whose action starts with one of these (for example \"helpdesk\", \"alert:\"). Empty = all.",
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "default": []
+                      },
+                      "OnlyProblems": {
+                        "description": "Only failures, rejections, alerts and operational problems (for a notification channel).",
+                        "type": "boolean",
+                        "default": false
+                      },
+                      "BatchSize": {
+                        "description": "Maximum number of events sent in one batch.",
+                        "type": "integer",
+                        "default": 200
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "Http": {
+                  "description": "HTTP(S) destinations (SIEM, log platforms, chat webhooks).",
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "Url": {
+                        "description": "Address that receives the events by POST; must be https:// unless AllowHttp is set.",
+                        "type": "string",
+                        "default": ""
+                      },
+                      "Format": {
+                        "description": "Ndjson, JsonArray, SplunkHec, ElasticBulk or Text (short sentences for chat webhooks).",
+                        "type": "string",
+                        "enum": [
+                          "Ndjson",
+                          "JsonArray",
+                          "SplunkHec",
+                          "ElasticBulk",
+                          "Text"
+                        ],
+                        "default": "Ndjson"
+                      },
+                      "Index": {
+                        "description": "Elasticsearch/OpenSearch index for the bulk format.",
+                        "type": "string",
+                        "default": "sss-audit"
+                      },
+                      "Headers": {
+                        "description": "Extra headers without secrets.",
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "string"
+                        }
+                      },
+                      "AuthorizationFile": {
+                        "description": "File whose content is the complete Authorization header value (for example \"Splunk 1234-...\" or \"Bearer ...\"), read for every request so the secret never sits in the configuration and can be rotated.",
+                        "type": "string",
+                        "default": ""
+                      },
+                      "TimeoutSeconds": {
+                        "description": "Time limit of one request in seconds.",
+                        "type": "integer",
+                        "default": 15
+                      },
+                      "AllowHttp": {
+                        "description": "Allow plain http:// (otherwise the address must be https://).",
+                        "type": "boolean",
+                        "default": false
+                      },
+                      "Enabled": {
+                        "description": "Set to false to switch this destination off without removing it.",
+                        "type": "boolean",
+                        "default": true
+                      },
+                      "Name": {
+                        "description": "Name in the status page and for the position file; defaults to the sink type and number.",
+                        "type": "string",
+                        "default": ""
+                      },
+                      "Streams": {
+                        "description": "\"audit\", \"ops\" or both.",
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "audit",
+                            "ops"
+                          ]
+                        },
+                        "default": [
+                          "audit",
+                          "ops"
+                        ]
+                      },
+                      "Include": {
+                        "description": "Only events whose action starts with one of these (for example \"helpdesk\", \"alert:\"). Empty = all.",
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "default": []
+                      },
+                      "OnlyProblems": {
+                        "description": "Only failures, rejections, alerts and operational problems (for a notification channel).",
+                        "type": "boolean",
+                        "default": false
+                      },
+                      "BatchSize": {
+                        "description": "Maximum number of events sent in one batch.",
+                        "type": "integer",
+                        "default": 200
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "Snmp": {
+                  "description": "SNMP v2c trap destinations.",
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "Host": {
+                        "description": "Trap receiver name or address.",
+                        "type": "string",
+                        "default": ""
+                      },
+                      "Port": {
+                        "description": "UDP port of the trap receiver.",
+                        "type": "integer",
+                        "default": 162
+                      },
+                      "Community": {
+                        "description": "SNMP community string (sent in clear text: management network only).",
+                        "type": "string",
+                        "default": ""
+                      },
+                      "EnterpriseOid": {
+                        "description": "Your own enterprise OID, for example 1.3.6.1.4.1.NNNNN.1 (no default: pick the number your organisation owns).",
+                        "type": "string",
+                        "default": ""
+                      },
+                      "Enabled": {
+                        "description": "Set to false to switch this destination off without removing it.",
+                        "type": "boolean",
+                        "default": true
+                      },
+                      "Name": {
+                        "description": "Name in the status page and for the position file; defaults to the sink type and number.",
+                        "type": "string",
+                        "default": ""
+                      },
+                      "Streams": {
+                        "description": "\"audit\", \"ops\" or both.",
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "audit",
+                            "ops"
+                          ]
+                        },
+                        "default": [
+                          "audit",
+                          "ops"
+                        ]
+                      },
+                      "Include": {
+                        "description": "Only events whose action starts with one of these (for example \"helpdesk\", \"alert:\"). Empty = all.",
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "default": []
+                      },
+                      "OnlyProblems": {
+                        "description": "Only failures, rejections, alerts and operational problems (for a notification channel).",
+                        "type": "boolean",
+                        "default": true
+                      },
+                      "BatchSize": {
+                        "description": "Maximum number of events sent in one batch.",
+                        "type": "integer",
+                        "default": 200
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        "Health": {
+          "description": "The anonymous health probe GET /healthz for load balancers.",
+          "type": "object",
+          "properties": {
+            "Enabled": {
+              "description": "Serves GET /healthz (no details, 200 or 503) for load balancers. IIS must allow anonymous access to that path; scripts/install.ps1 -HealthEndpoint does that.",
+              "type": "boolean",
+              "default": true
+            }
+          },
+          "additionalProperties": false
+        },
+        "DataProtection": {
+          "description": "Shared key ring for several SSS servers.",
+          "type": "object",
+          "properties": {
+            "KeyDirectory": {
+              "description": "Shared folder for the key ring when SSS runs on several servers (CSRF tokens then work on every server). Empty = keys stay on this server (single server, or a load balancer with sticky sessions).",
+              "type": "string",
+              "default": ""
+            },
+            "ProtectToSid": {
+              "description": "Optional: encrypt the keys for this account or group SID (DPAPI-NG), e.g. the SID of the gMSA. Windows only.",
+              "type": "string",
+              "default": ""
+            }
+          },
+          "additionalProperties": false
+        },
+        "RateLimit": {
+          "description": "Request limits per user and minute.",
+          "type": "object",
+          "properties": {
+            "LogoffRequestsPerMinute": {
+              "description": "Log-off and end-process requests per user and minute.",
+              "type": "integer",
+              "default": 10
+            },
+            "ReadRequestsPerMinute": {
+              "description": "Listing sessions and CSV export; each call queries Citrix, so it is limited as well.",
+              "type": "integer",
+              "default": 120
+            },
+            "HelpdeskRequestsPerMinute": {
+              "description": "All helpdesk calls (search, overview, view, log-off) per helpdesk user.",
+              "type": "integer",
+              "default": 60
+            }
+          },
+          "additionalProperties": false
+        },
+        "Quality": {
+          "description": "Thresholds of the quality traffic lights.",
+          "type": "object",
+          "properties": {
+            "RttWarnMs": {
+              "description": "ICA round-trip time in ms from which the light is yellow.",
+              "type": "integer",
+              "default": 80
+            },
+            "RttCritMs": {
+              "description": "ICA round-trip time in ms from which the light is red.",
+              "type": "integer",
+              "default": 150
+            },
+            "BandwidthWarnKbps": {
+              "description": "Available bandwidth in kbit/s at or below which the light is yellow.",
+              "type": "integer",
+              "default": 1500
+            },
+            "BandwidthCritKbps": {
+              "description": "Available bandwidth in kbit/s at or below which the light is red.",
+              "type": "integer",
+              "default": 400
+            },
+            "LogonWarnSeconds": {
+              "description": "Logon duration in seconds from which the light is yellow.",
+              "type": "integer",
+              "default": 45
+            },
+            "LogonCritSeconds": {
+              "description": "Logon duration in seconds from which the light is red.",
+              "type": "integer",
+              "default": 90
+            },
+            "LoadWarn": {
+              "description": "Server load index from which the light is yellow.",
+              "type": "integer",
+              "default": 7000
+            },
+            "LoadCrit": {
+              "description": "Server load index from which the light is red.",
+              "type": "integer",
+              "default": 9000
+            }
+          },
+          "additionalProperties": false
+        },
+        "Citrix": {
+          "description": "Connection to the Citrix site (used when Provider is Citrix).",
+          "type": "object",
+          "properties": {
+            "Controllers": {
+              "description": "Delivery Controller host names, tried in order (failover). With Discovery this may be empty or only a few names; the rest of the site is found automatically.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": []
+            },
+            "Discovery": {
+              "description": "Finds all Delivery Controllers of the site from one of them and keeps the list up to date.",
+              "type": "object",
+              "properties": {
+                "Enabled": {
+                  "description": "Turn controller discovery on.",
+                  "type": "boolean",
+                  "default": false
+                },
+                "Bootstrap": {
+                  "description": "Controller to ask. Empty = the first entry of Controllers. If it is down, the cached and configured controllers are tried.",
+                  "type": "string",
+                  "default": ""
+                },
+                "RefreshMinutes": {
+                  "description": "How often the controller list is refreshed, in minutes.",
+                  "type": "integer",
+                  "default": 15
+                },
+                "AllowedSuffixes": {
+                  "description": "Only controllers whose name ends with one of these suffixes are accepted (for example \".corp.local\"). Empty = the domain part of the bootstrap controller. A manipulated answer can therefore not send requests elsewhere.",
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "default": []
+                },
+                "IncludeInactive": {
+                  "description": "Also use controllers the Broker reports as not active (for example failed or in maintenance).",
+                  "type": "boolean",
+                  "default": false
+                }
+              },
+              "additionalProperties": false
+            },
+            "Balancing": {
+              "description": "How requests are spread over the controllers.",
+              "type": "object",
+              "properties": {
+                "Strategy": {
+                  "description": "\"Failover\" (default: the controller that answered last, the others as fallback), \"RoundRobin\" or \"LeastLatency\" (the faster of two random healthy controllers; spreads load and avoids slow ones).",
+                  "type": "string",
+                  "enum": [
+                    "Failover",
+                    "RoundRobin",
+                    "LeastLatency"
+                  ],
+                  "default": "Failover"
+                },
+                "Preferred": {
+                  "description": "Controllers (or, if discovered, their zone) that are used first while they are healthy, for example the ones in the same data center.",
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "default": []
+                },
+                "FailureThreshold": {
+                  "description": "A controller that failed this many times in a row is skipped for OpenSeconds.",
+                  "type": "integer",
+                  "default": 3
+                },
+                "OpenSeconds": {
+                  "description": "How long a controller that keeps failing is skipped, in seconds.",
+                  "type": "integer",
+                  "default": 30
+                }
+              },
+              "additionalProperties": false
+            },
+            "PowerShellPath": {
+              "description": "Windows PowerShell 5.1 host that has the Citrix snap-ins (or the Remote PowerShell SDK) installed.",
+              "type": "string",
+              "default": "powershell.exe"
+            },
+            "WorkerScript": {
+              "description": "Defaults to Citrix/sss-broker-worker.ps1 next to the application.",
+              "type": "string"
+            },
+            "SnapinOverride": {
+              "description": "Test hook: a script that is dot-sourced instead of loading the Citrix snap-in (provides fake cmdlets).",
+              "type": "string"
+            },
+            "Workers": {
+              "description": "Number of warm PowerShell workers (each holds one loaded snap-in, roughly 60-100 MB).",
+              "type": "integer",
+              "default": 2
+            },
+            "RequestTimeoutSeconds": {
+              "description": "Time limit of one Broker or Monitor request in seconds.",
+              "type": "integer",
+              "default": 20
+            },
+            "Monitor": {
+              "description": "History, quality data and the expert view (Monitor OData).",
+              "type": "object",
+              "properties": {
+                "Enabled": {
+                  "description": "Set to false to run without history and metrics (live sessions and log-off only).",
+                  "type": "boolean",
+                  "default": true
+                },
+                "BaseUrl": {
+                  "description": "Defaults to {scheme}://{first controller}/Citrix/Monitor/OData/v4/Data/ (see UseHttps).",
+                  "type": "string"
+                },
+                "BaseUrls": {
+                  "description": "One Monitor address per Delivery Controller, tried in order (failover). Empty = derived from Controllers.",
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "default": []
+                },
+                "UseHttps": {
+                  "description": "Scheme of the default address when BaseUrl is empty. Set to false only for a controller without an HTTPS binding.",
+                  "type": "boolean",
+                  "default": true
+                },
+                "MetricsDateField": {
+                  "description": "Property of SessionMetrics used to pick the newest sample. Verify with scripts/Test-SssCitrix.ps1.",
+                  "type": "string",
+                  "default": "CollectedDate"
+                },
+                "IcaRttField": {
+                  "description": "Property of SessionMetrics holding the ICA round-trip time in ms.",
+                  "type": "string",
+                  "default": "IcaRttMS"
+                },
+                "BandwidthField": {
+                  "description": "Property of SessionMetrics with the bandwidth available towards the client. Seen on CVAD 2507: OutputBandwidthAvailable = 105379594 on a 100 Mbit/s LAN, i.e. bits per second.",
+                  "type": "string",
+                  "default": "OutputBandwidthAvailable"
+                },
+                "BandwidthDivisor": {
+                  "description": "Converts the bandwidth field to kbit/s (1000 for bit/s).",
+                  "type": "integer",
+                  "default": 1000
+                },
+                "MaxPages": {
+                  "description": "Maximum number of pages read for one history query.",
+                  "type": "integer",
+                  "default": 5
+                }
+              },
+              "additionalProperties": false
+            },
+            "Processes": {
+              "description": "Ending processes and profile analysis through the JEA endpoint on the VDAs.",
+              "type": "object",
+              "properties": {
+                "Enabled": {
+                  "description": "Turn process control and profile analysis on (needs the JEA endpoint on the VDAs).",
+                  "type": "boolean",
+                  "default": false
+                },
+                "Configuration": {
+                  "description": "Name of the JEA session configuration on the VDAs.",
+                  "type": "string",
+                  "default": "SSS.Processes"
+                },
+                "Audience": {
+                  "description": "\"All\" = users for their own sessions and the helpdesk; \"Helpdesk\" = helpdesk only.",
+                  "type": "string",
+                  "enum": [
+                    "All",
+                    "Helpdesk"
+                  ],
+                  "default": "All"
+                },
+                "TimeoutSeconds": {
+                  "description": "Connecting to a VDA takes longer than a Broker call, so process requests get their own time limit.",
+                  "type": "integer",
+                  "default": 60
+                },
+                "ProfileInfo": {
+                  "description": "Shows the profile type and size in the expert view (the \"Get-SssProfile\" command of the JEA endpoint).",
+                  "type": "boolean",
+                  "default": true
+                },
+                "ProfileScanSeconds": {
+                  "description": "Time limit of the profile folder scan on the VDA; 0 = type only, no size.",
+                  "type": "integer",
+                  "default": 20
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        "Helpdesk": {
+          "description": "Helpdesk behaviour: group, ticket requirement, limits.",
+          "type": "object",
+          "properties": {
+            "Group": {
+              "description": "AD group whose members have all helpdesk rights (level 3), e.g. CORP\\SSS-Helpdesk. Kept for existing installations; Sss:Roles allows finer levels. Empty = not used. Resolved to a SID at startup.",
+              "type": "string",
+              "default": ""
+            },
+            "ReasonRequired": {
+              "description": "Require a ticket number or reason for every helpdesk action that changes something or reads processes or profiles (log-off, message, end process). Free text; the content is not checked, it is written to the audit log.",
+              "type": "boolean",
+              "default": true
+            },
+            "BulkAlertThreshold": {
+              "description": "A helpdesk request that logs off this many sessions or more is reported as an alert event (audit sinks can notify).",
+              "type": "integer",
+              "default": 5
+            },
+            "MaxSessions": {
+              "description": "Upper limit for the farm-wide session overview.",
+              "type": "integer",
+              "default": 1000
+            },
+            "MessageTitle": {
+              "description": "Title of messages the helpdesk sends to a session.",
+              "type": "string",
+              "default": "IT Helpdesk"
+            }
+          },
+          "additionalProperties": false
+        },
+        "Roles": {
+          "description": "AD groups for the helpdesk levels and the auditor and admin roles.",
+          "type": "object",
+          "properties": {
+            "Level1Group": {
+              "description": "Looks at users, sessions and the expert view; changes nothing.",
+              "type": "string",
+              "default": ""
+            },
+            "Level2Group": {
+              "description": "Level 1 plus: log off sessions and send messages.",
+              "type": "string",
+              "default": ""
+            },
+            "Level3Group": {
+              "description": "Level 2 plus: processes and profile of other users, end processes.",
+              "type": "string",
+              "default": ""
+            },
+            "AuditorGroup": {
+              "description": "Reads the audit trail and its evaluation. Not part of any helpdesk level.",
+              "type": "string",
+              "default": ""
+            },
+            "AdminGroup": {
+              "description": "Status, controllers and the list of SSS servers. Empty = every helpdesk member (as before roles existed).",
+              "type": "string",
+              "default": ""
+            }
+          },
+          "additionalProperties": false
+        },
+        "Instances": {
+          "description": "Server list for several SSS servers (shared folder).",
+          "type": "object",
+          "properties": {
+            "Directory": {
+              "description": "Shared folder (for example \\\\fs01\\sss-state) that every SSS server can write. Empty = single server, feature off.",
+              "type": "string",
+              "default": ""
+            },
+            "Expected": {
+              "description": "The names of all SSS servers (computer names). A listed server that does not report is shown as missing, a reporting server that is not listed as unexpected. Empty = no completeness check, the servers that report are the list.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": []
+            },
+            "HeartbeatSeconds": {
+              "description": "How often this server reports to the shared folder, in seconds.",
+              "type": "integer",
+              "default": 60
+            },
+            "StaleSeconds": {
+              "description": "A server that has not reported for this long counts as not running.",
+              "type": "integer",
+              "default": 180
+            }
+          },
+          "additionalProperties": false
+        },
+        "Metrics": {
+          "description": "Prometheus metrics endpoint.",
+          "type": "object",
+          "properties": {
+            "Enabled": {
+              "description": "Serve GET /metrics (Prometheus text format, no personal data).",
+              "type": "boolean",
+              "default": false
+            },
+            "AllowedIps": {
+              "description": "Addresses or networks (for example 10.0.5.0/24) that may read the metrics. Empty = only the server itself.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": []
+            }
+          },
+          "additionalProperties": false
+        },
+        "DataDirectory": {
+          "description": "Folder for state SSS keeps between restarts (forwarding positions, controller cache, drain flag). Relative paths are based on the app directory; the app pool identity needs write access.",
+          "type": "string",
+          "default": "data"
+        },
+        "PathBase": {
+          "type": "string",
+          "description": "Application path for local runs behind a prefix. Behind IIS the ASP.NET Core Module sets it; leave it empty."
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

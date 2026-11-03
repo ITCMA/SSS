@@ -28,9 +28,25 @@
   Optional AD group (e.g. CORP\SSS-Helpdesk) whose members may find users and log off their sessions.
   Written to a new sss.config.json only; for an existing configuration edit Sss:Helpdesk:Group yourself.
 
+.PARAMETER AuditorGroup
+  AD group that may read the audit trail (Sss:Roles:AuditorGroup). Written to a new sss.config.json only.
+
+.PARAMETER AdminGroup
+  AD group that sees the Status tab (Sss:Roles:AdminGroup). Without it every helpdesk member does. Written to a new sss.config.json only.
+
+.PARAMETER AuditShare
+  Shared folder (UNC path) that receives a copy of the audit trail from every server (Sss:Audit:Sinks:Unc). Written to a new sss.config.json only.
+
+.PARAMETER Discovery
+  Find the other Delivery Controllers of the site automatically (Sss:Citrix:Discovery) from the controllers given. Written to a new sss.config.json only.
+
 .PARAMETER HealthEndpoint
   Opens GET <app>/healthz for anonymous access so a load balancer can probe it (answers only {"status":"ok"} or 503).
   Works together with -Update.
+
+.PARAMETER MetricsEndpoint
+  Opens GET <app>/metrics for anonymous access so Prometheus can scrape it. SSS answers only to the addresses in Sss:Metrics:AllowedIps
+  (and only when Sss:Metrics:Enabled is true). Works together with -Update.
 
 .EXAMPLE
   .\install.ps1 -Controllers ddc01.corp.local,ddc02.corp.local -ServiceAccount 'CORP\svc-sss$' -HelpdeskGroup 'CORP\SSS-Helpdesk'
@@ -56,11 +72,16 @@ param(
     [string]$ServiceAccount = '',
     [string[]]$Controllers = @(),
     [string]$HelpdeskGroup = '',
+    [string]$AuditorGroup = '',
+    [string]$AdminGroup = '',
+    [string]$AuditShare = '',
+    [switch]$Discovery,
     [switch]$Interactive,
     [switch]$Update,
     [switch]$Uninstall,
     [switch]$SkipSmokeTest,
-    [switch]$HealthEndpoint
+    [switch]$HealthEndpoint,
+    [switch]$MetricsEndpoint
 )
 
 $ErrorActionPreference = 'Stop'
@@ -81,6 +102,10 @@ if ($Interactive -and -not $Update -and -not $Uninstall) {
     }
     if (-not $ServiceAccount) { $ServiceAccount = Ask 'Service account (gMSA, e.g. CORP\svc-sss$; empty = app pool identity)' '' }
     if (-not $HelpdeskGroup) { $HelpdeskGroup = Ask 'Helpdesk AD group (e.g. CORP\SSS-Helpdesk; empty = no helpdesk)' '' }
+    if (-not $AuditorGroup) { $AuditorGroup = Ask 'Auditor AD group that may read the audit trail (e.g. CORP\SSS-Auditors; empty = none)' '' }
+    if (-not $AdminGroup) { $AdminGroup = Ask 'Admin AD group for the Status tab (empty = every helpdesk member)' '' }
+    if (-not $AuditShare) { $AuditShare = Ask 'Shared folder for a central copy of the audit trail (e.g. \\fs01\sss-audit; empty = none)' '' }
+    if (-not $Discovery -and $Controllers.Count -gt 0) { $Discovery = (Ask 'Find the other controllers of the site automatically? (y/N)' 'N') -match '^(y|j)' }
     if (-not $HealthEndpoint) { $HealthEndpoint = (Ask 'Open /healthz for a load balancer probe without credentials? (y/N)' 'N') -match '^(y|j)' }
     $SiteName = Ask 'IIS site' $SiteName
     $AppPath = Ask 'Application path' $AppPath
@@ -152,7 +177,7 @@ if ($Update -and -not $exists) { throw "-Update needs an existing installation i
 $previous = "$PhysicalPath.previous"
 if ($exists -and -not $WhatIfPreference) {
     # keep the running version so a failed update can be undone
-    & robocopy $PhysicalPath $previous /MIR /XD logs /NFL /NDL /NJH /NJS /NP | Out-Null
+    & robocopy $PhysicalPath $previous /MIR /XD logs data /NFL /NDL /NJH /NJS /NP | Out-Null
     if ($LASTEXITCODE -ge 8) { Warn "Could not back up the current version to $previous (robocopy exit code $LASTEXITCODE)." }
 }
 if ($PSCmdlet.ShouldProcess($PhysicalPath, 'Copy application files')) {
@@ -162,12 +187,13 @@ if ($PSCmdlet.ShouldProcess($PhysicalPath, 'Copy application files')) {
         Start-Sleep -Seconds 3
     }
     try {
-        & robocopy $SourcePath $PhysicalPath /MIR /XF sss.config.json app_offline.htm /XD logs /NFL /NDL /NJH /NJS /NP | Out-Null
+        & robocopy $SourcePath $PhysicalPath /MIR /XF sss.config.json sss.local.json app_offline.htm /XD logs data /NFL /NDL /NJH /NJS /NP | Out-Null
         if ($LASTEXITCODE -ge 8) { throw "robocopy failed with exit code $LASTEXITCODE" }
     } finally {
         Remove-Item $offline -Force -ErrorAction SilentlyContinue
     }
     New-Item -ItemType Directory -Force -Path (Join-Path $PhysicalPath 'logs') | Out-Null
+    New-Item -ItemType Directory -Force -Path (Join-Path $PhysicalPath 'data') | Out-Null
     Ok "Files copied to $PhysicalPath"
 }
 
@@ -185,12 +211,33 @@ elseif (-not (Test-Path $configPath)) {
             Warn 'No -Controllers given: SSS starts in demo mode (sample data). Edit sss.config.json and set Provider to "Citrix".'
         }
         if ($HelpdeskGroup) { $cfg.Sss.Helpdesk = @{ Group = $HelpdeskGroup } }
+        if ($AuditorGroup -or $AdminGroup) {
+            $cfg.Sss.Roles = @{}
+            if ($AuditorGroup) { $cfg.Sss.Roles.AuditorGroup = $AuditorGroup }
+            if ($AdminGroup) { $cfg.Sss.Roles.AdminGroup = $AdminGroup }
+        }
+        if ($Discovery -and $Controllers.Count -gt 0) { $cfg.Sss.Citrix.Discovery = @{ Enabled = $true } }
+        if ($AuditShare) { $cfg.Sss.Audit = @{ PerServerFiles = $true; Sinks = @{ Unc = @(@{ Path = $AuditShare }) } } }
         $json = ConvertTo-Json -InputObject $cfg -Depth 6
         [System.IO.File]::WriteAllText($configPath, $json, (New-Object System.Text.UTF8Encoding($false)))
         Ok "Wrote $configPath"
     }
 } else {
     Ok 'Existing sss.config.json kept'
+}
+
+# The same checks SSS runs at startup, plus warnings; an error here would make the application refuse to start.
+$checker = Join-Path $PhysicalPath 'Sss.Web.exe'
+if ((Test-Path $checker) -and -not $WhatIfPreference) {
+    Step 'Checking the configuration'
+    $checkOutput = & $checker --check-config 2>&1
+    $checkCode = $LASTEXITCODE
+    foreach ($l in $checkOutput) {
+        if ([string]$l -like '`[ERROR`]*') { Write-Host "    $l" -ForegroundColor Red }
+        elseif ([string]$l -like '`[WARN*') { Write-Host "    $l" -ForegroundColor Yellow }
+        else { Write-Host "    $l" }
+    }
+    if ($checkCode -ne 0) { Warn 'The configuration has errors; SSS would not start. Fix sss.config.json and run .\Test-SssConfig.ps1 to check it again.' }
 }
 
 # ---------------------------------------------------------------------------------------------
@@ -236,10 +283,24 @@ if ($PSCmdlet.ShouldProcess($PhysicalPath, "Grant $identity access")) {
     if ($LASTEXITCODE -ne 0) { throw "icacls failed for $identity on $PhysicalPath" }
     & icacls (Join-Path $PhysicalPath 'logs') /grant "${identity}:(OI)(CI)M" | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "icacls failed for $identity on logs" }
-    Ok "${identity}: read on the application, modify on logs (audit trail)"
+    & icacls (Join-Path $PhysicalPath 'data') /grant "${identity}:(OI)(CI)M" | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "icacls failed for $identity on data" }
+    Ok "${identity}: read on the application, modify on logs (audit trail) and data (controller list, forwarding positions)"
 }
 
 }   # end of "if (-not $Update)"
+
+if ($MetricsEndpoint -and -not $Uninstall) {
+    Step 'Metrics endpoint'
+    # Only /metrics is opened; SSS itself restricts it to the addresses in Sss:Metrics:AllowedIps and it is off unless Sss:Metrics:Enabled is true.
+    $metricsLocation = "$SiteName/$AppPath/metrics"
+    $authSection = '/system.webServer/security/authentication'
+    if ($PSCmdlet.ShouldProcess($metricsLocation, 'Allow anonymous access to /metrics')) {
+        Set-WebConfigurationProperty -Filter "$authSection/anonymousAuthentication" -Name enabled -Value $true -PSPath 'MACHINE/WEBROOT/APPHOST' -Location $metricsLocation
+        Set-WebConfigurationProperty -Filter "$authSection/windowsAuthentication" -Name enabled -Value $false -PSPath 'MACHINE/WEBROOT/APPHOST' -Location $metricsLocation
+        Ok "GET /$AppPath/metrics is open without credentials (SSS checks the caller address)"
+    }
+}
 
 if ($HealthEndpoint -and -not $Uninstall) {
     Step 'Load balancer probe'
@@ -292,7 +353,7 @@ if (-not $SkipSmokeTest -and -not $WhatIfPreference) {
     if (-not $passed -and $Update -and (Test-Path $previous)) {
         Warn 'The updated version does not answer. Restoring the previous version.'
         Set-Content -Path $offline -Value '<html><body>SSS is being restored.</body></html>' -Encoding UTF8
-        try { & robocopy $previous $PhysicalPath /MIR /XF sss.config.json app_offline.htm /XD logs /NFL /NDL /NJH /NJS /NP | Out-Null }
+        try { & robocopy $previous $PhysicalPath /MIR /XF sss.config.json sss.local.json app_offline.htm /XD logs data /NFL /NDL /NJH /NJS /NP | Out-Null }
         finally { Remove-Item $offline -Force -ErrorAction SilentlyContinue }
         Restart-WebAppPool -Name $AppPoolName
         throw 'Update failed and was rolled back. The previous version is running again.'
@@ -304,4 +365,4 @@ if (-not $SkipSmokeTest -and -not $WhatIfPreference) {
 
 Write-Host ''
 Write-Host "Done. SSS: $SiteName/$AppPath  |  files: $PhysicalPath  |  config: $configPath" -ForegroundColor Green
-Write-Host 'Next: run .\Test-SssSetup.ps1 (checks the wiring and prints a fix for each finding), then Test-SssCitrix.ps1 as the service account.'
+Write-Host 'Next: run .\Test-SssConfig.ps1 (checks the configuration), .\Test-SssSetup.ps1 (checks the wiring and prints a fix for each finding), then Test-SssCitrix.ps1 as the service account.'

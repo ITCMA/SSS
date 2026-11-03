@@ -1,0 +1,14 @@
+{
+  "$schema": "../sss.config.schema.json",
+  "Sss": {
+    "Provider": "Citrix",
+    "StoreFrontUrl": "https://storefront.corp.local/Citrix/StoreWeb/",
+    "Citrix": {
+      "Controllers": [ "ddc01.corp.local", "ddc02.corp.local" ]
+    },
+    "Roles": {
+      "Level2Group": "CORP\\SSS-Helpdesk",
+      "AuditorGroup": "CORP\\SSS-Auditors"
+    }
+  }
+}

@@ -7,7 +7,7 @@ Das Verhalten mit mehreren Controllern und Servern ist umgesetzt und durch Unit-
 
 ## Mehrere Delivery Controller
 
-Alle Controller in der gewünschten Reihenfolge eintragen:
+SSS kann die Controller der Site auch selbst finden und die Anfragen auf sie verteilen: siehe [Delivery Controller: Erkennung und Lastverteilung](CONTROLLERS.de.md). Die einfache Form ist eine Liste, in der gewünschten Reihenfolge:
 
 ```json
 "Citrix": { "Controllers": [ "ddc01.corp.local", "ddc02.corp.local" ] }
@@ -39,9 +39,36 @@ Auf jedem Server dieselbe Installation (gleiche `sss.config.json`, gleiches Dien
 | Kerberos hinter einem Alias | SPN für den Alias an der gMSA registrieren (`setspn -S HTTP/sss.corp.local CORP\svc-sss$`), `useAppPoolCredentials` auf true setzen und die Kernelmodus-Authentifizierung der Site ausschalten. Sonst fällt der Browser hinter dem Load Balancer auf NTLM zurück oder scheitert. |
 | CSRF-Schlüssel | Jeder Server erzeugt eigene Schlüssel. Bei einem Load Balancer **ohne** feste Zuordnung (Sticky Sessions) lehnt Server B ein Token von Server A ab. Entweder Sticky Sessions einschalten oder den Schlüsselring teilen: `Sss:DataProtection:KeyDirectory` = Ordner auf einer Dateifreigabe, den das Dienstkonto ändern darf. Optional verschlüsselt `ProtectToSid` (SID der gMSA) die Schlüssel mit DPAPI-NG. |
 | Health-Probe | `GET /<App>/healthz` antwortet `{"status":"ok"}`, `degraded` (Monitor nicht erreichbar, alles andere läuft) oder HTTP 503 (Broker nicht erreichbar). Es braucht keine Anmeldung: `.\install.ps1 -Update -HealthEndpoint` gibt genau diesen Pfad anonym frei. Ohne das bekommt die Probe `401`, was viele Load Balancer ebenfalls als „lebt“ werten. |
-| Audit-Protokoll | Jeder Server schreibt sein eigenes Protokoll. Mit `Sss:Audit:PerServerFiles` = `true` und `Sss:Audit:Directory` auf einen gemeinsamen Ordner landet alles an einer Stelle (`audit-YYYYMMDD-SERVER.jsonl`, jede Zeile enthält zusätzlich `server`). Weiterleiten mit eurem üblichen Log-Shipper oder der Windows-Ereignisweiterleitung. |
+| Audit-Protokoll | Jeder Server schreibt sein eigenes Protokoll und kopiert es an zentrale Ziele (UNC-Ordner, Syslog/CEF, HTTP, SNMP). Der Audit-Reiter zeigt dann die Ereignisse aller Server. Siehe [Audit-Protokoll und zentrales Logging](AUDIT.de.md). |
 | Zustand pro Server | Ratenbegrenzung, Namens-Cache und PowerShell-Worker gibt es je Server. Die Limits gelten also pro Server, und der Controller sieht `Workers` × Anzahl Server Verbindungen. Das ist unkritisch, aber bei `Citrix:Workers` zu bedenken. |
-| Updates | Server nacheinander aktualisieren (`.\install.ps1 -Update`); die anderen bedienen weiter. |
+| Updates | Server nacheinander aktualisieren (`.\install.ps1 -Update`); die anderen bedienen weiter. Den Server vorher aus dem Load Balancer nehmen, siehe *Ausleiten* unten. |
+| Konfiguration | `sss.config.json` auf allen Servern **identisch** halten und Einstellungen, die nur zu einem Server gehören (Pfade, ein lokaler Bootstrap-Controller), in `sss.local.json` daneben legen. `install.ps1 -Update` behält beide. Siehe *Serverliste und Konfiguration* unten. |
+
+## Serverliste und Konfiguration
+
+Server, die einander nicht kennen, laufen unbemerkt auseinander: einer hat eine alte Version, einer einen anderen Schwellenwert, einer ist ausgefallen. SSS kann deshalb eine **Liste aller seiner Server** führen.
+
+```json
+"Instances": {
+  "Directory": "\\\\fs01\\sss-state",
+  "Expected": [ "IIS01", "IIS02", "IIS03" ]
+}
+```
+
+- Jeder Server schreibt jede Minute eine kleine Statusdatei in den gemeinsamen Ordner (Name, Version, Startzeit, ein Fingerabdruck von `sss.config.json` und jedes ihrer Abschnitte, die Schlüsselnamen aus `sss.local.json`, Gesundheit, Ausleiten) und liest die der anderen. Die App-Pool-Identität braucht auf dem Ordner *Ändern*.
+- **Status-Reiter (Admin), „SSS-Server“:** jeder Server mit seinem Zustand. `online`; `draining` (wird ausgeleitet); `stale` (seit `StaleSeconds` keine Meldung, Standard 180, vermutlich ausgefallen); `missing` (in `Expected` genannt, nie gemeldet: ein vergessener oder noch nicht installierter Server); `unexpected` (meldet sich, steht aber nicht in `Expected`: ein Server, den niemand eingeplant hat). Mit `Expected` ist die Liste per Definition vollständig, ohne sind die sich meldenden Server die Liste.
+- **Abweichung:** Die Konfiguration, die die meisten Online-Server haben, ist die Referenz; ein Server mit einer anderen wird markiert, samt den **Abschnitten, die sich unterscheiden** (`Citrix`, `Quality` ...). Leerraum und Schlüsselreihenfolge spielen keine Rolle, die Reihenfolge von Listeneinträgen schon (sie ist die Failover-Reihenfolge). Dasselbe gilt für eine andere Version.
+- Aus `sss.local.json` werden nur Schlüssel*namen* gezeigt, nie Werte.
+
+`.\Sync-SssConfig.ps1 -Servers iis01,iis02,iis03` vergleicht die Dateien auf den Servern (ändert nichts). Mit `-Apply` (und `-ReferenceFile` für eine Datei aus deinem Konfigurations-Repository) rollt es die Referenz Server für Server aus: Sicherung, Ausleiten, Kopieren, App-Pool recyceln. Es braucht die administrative Freigabe (`\\Server\C$`) und WinRM für das Recyceln. Eine Alternative ist jede Konfigurationsverwaltung, die ihr schon habt (DSC, Ansible, eine Datei-Einstellung per GPO): der Fingerabdruck zeigt, ob es geklappt hat.
+
+### Ausleiten
+
+Solange die Datei `data\drain.flag` existiert, antwortet `GET /healthz` mit `503 {"status":"draining"}`, der Load Balancer nimmt den Server also heraus, bevor du aktualisierst. Datei anlegen, ein paar Probe-Intervalle warten, aktualisieren (`install.ps1 -Update` oder `Sync-SssConfig.ps1`); der Neustart der Anwendung beendet das Ausleiten. `Sync-SssConfig.ps1 -DrainSeconds` macht das selbst.
+
+### Metriken
+
+`Sss:Metrics:Enabled` = `true` stellt `GET /metrics` im Prometheus-Textformat bereit (Controller up/Latenz/Fehler, Zustand der Audit-Ziele, Server online/fehlend/abweichend, Audit-Ereignisse je Art). Es enthält keine personenbezogenen Daten. Der IIS muss für den Pfad anonymen Zugriff erlauben (`install.ps1 -Update -MetricsEndpoint`), und SSS antwortet nur den Adressen in `Sss:Metrics:AllowedIps` (und dem Server selbst).
 
 ## Weitere Abhängigkeiten
 

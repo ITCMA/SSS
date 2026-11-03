@@ -59,6 +59,7 @@ The API behind it is `GET /api/helpdesk/status` (helpdesk only).
 - IIS settings of the application live in the shipped `web.config` (handler outside a `location path="."` block), so the extra rule for `/healthz` inherits them.
 - It needs **no sign-in**, but IIS requires one for the whole application. `install.ps1 -HealthEndpoint` (also together with `-Update`) opens exactly the path `<application>/healthz` for anonymous access, nothing else, and tests it. To undo it, `install.ps1 -Uninstall` removes the rule; by hand: `Clear-WebConfiguration -Filter /system.webServer/security/authentication -PSPath MACHINE/WEBROOT/APPHOST -Location "Default Web Site/sss/healthz"`.
 - Without that rule a probe gets `401`. Many load balancers accept `401` as "alive" (it proves IIS and the application pool respond), but then they do not notice a lost Broker connection. Use the rule if you want real health checks.
+- While the file `data\drain.flag` exists the probe answers `503 {"status":"draining"}`, so a load balancer takes the server out before an update ([Draining](MULTI-SERVER.md#draining)).
 - Turn the endpoint off in the application with `Sss:Health:Enabled = false`.
 - `Test-SssSetup.ps1` calls the path without credentials and tells you whether a probe would succeed.
 
@@ -66,41 +67,11 @@ Example for a monitor that expects `200` and the text `ok`: probe `https://sss.c
 
 ## Audit trail
 
-Every action that changes something or looks at someone else's data is written to a JSON-lines file, one file per day: `logs\audit-YYYYMMDD.jsonl` (with `Audit:PerServerFiles`: `audit-YYYYMMDD-SERVER.jsonl`).
-
-```json
-{"time":"2026-11-01T09:12:44+00:00","action":"helpdesk-logoff:selected","user":"CORP\\alice","sid":"S-1-5-21-...","session":"4711","result":"success","ip":"10.0.0.5","actor":"CORP\\helpdesk.bob","actorSid":"S-1-5-21-...","reason":"Frozen application","server":"IIS01"}
-```
-
-| Field | Meaning |
-|---|---|
-| `time` | UTC time |
-| `action` | what happened (table below) |
-| `user`, `sid` | the user the action is about (the owner of the session) |
-| `session` | the Broker session id (`uid`) when one is involved |
-| `result` | `success`, `failed`, `rejected-not-owned-or-not-live`, a hit count for searches, or the outcome of an end-process request |
-| `ip` | the client address |
-| `actor`, `actorSid` | the helpdesk member, when someone else acted |
-| `reason` | the helpdesk's free text, the search text, the message text, or the process (`pid 123`, `pid 123 force`) |
-| `server` | the SSS server that wrote the line |
-
-| `action` | Written when |
-|---|---|
-| `logoff:selected` / `:disconnected` / `:all` | a user logs off own sessions |
-| `helpdesk-logoff:...` | the helpdesk logs off a user's sessions |
-| `helpdesk-message` | the helpdesk sends a message to a session |
-| `helpdesk:search`, `helpdesk:list-all`, `helpdesk:view`, `helpdesk:details` | the helpdesk searches, lists the farm, opens a user or the expert view (view entries at most once per 5 minutes per target) |
-| `list-processes`, `end-process`, `profile-info` | processes of a session are listed or ended, or the profile type and size are read, by the user or the helpdesk |
-
-Notes:
-
-- The audit trail is append-only from the application's point of view, but the app pool identity can modify the folder. Protect and forward it like any security log: copy it with your log shipper, or use Windows Event Forwarding tooling that reads files. Keep it as long as your policy requires; SSS never deletes it.
-- Rejected requests (a session that is not the user's) are logged too, with `result = rejected-not-owned-or-not-live`.
-- Free text is stripped of control characters and limited in length.
+Every action that changes something or looks at somebody else's data is written to `logs\audit-YYYYMMDD.jsonl` (with hash chain, who, whom, when, from where, which server, ticket or reason), copied to central destinations and evaluated in the **Audit** tab (role *Auditor*). Fields, actions, destinations (UNC, Syslog/CEF, HTTP, SNMP), integrity check, retention and privacy: [Audit trail and central logging](AUDIT.md). Roles: [Roles](ROLES.md).
 
 ## Backup and restore
 
-The only state is `sss.config.json` and the `logs` folder. Back up both (and keep the release zip you installed). Restoring is installing the same release again and copying the two back. `install.ps1 -Update` leaves a rollback copy in `<install folder>.previous`.
+The state is `sss.config.json`, `sss.local.json` (if you use it) and the `logs` folder; the `data` folder only holds a cache and forwarding positions (losing it is harmless: a destination then starts with new events). Back up these (and keep the release zip you installed). Restoring is installing the same release again and copying them back. `install.ps1 -Update` leaves a rollback copy in `<install folder>.previous`.
 
 ## Logs and troubleshooting
 

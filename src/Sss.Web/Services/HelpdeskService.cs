@@ -45,7 +45,7 @@ public sealed partial class HelpdeskService(
     public async Task<IReadOnlyList<HelpdeskUser>> FindUsersAsync(UserIdentity actor, string query, string? ip, CancellationToken ct)
     {
         var users = await provider.FindUsersAsync(query, 50, ct);
-        audit.Write(new AuditEntry("helpdesk:search", actor, null, $"{users.Count} hit(s)", ip, actor, query));
+        audit.Write(new AuditEntry("helpdesk:search", actor, null, $"{users.Count} hit(s)", ip, actor, Detail: query));
         return users;
     }
 
@@ -82,7 +82,7 @@ public sealed partial class HelpdeskService(
     /// <summary>Shows a message in the chosen live sessions of the user. The uids are checked against the user's own
     /// live sessions here and once more inside the worker.</summary>
     public async Task<LogoffResult> SendMessageAsync(UserIdentity actor, string sid, IReadOnlyCollection<string> uids,
-        string text, string? ip, CancellationToken ct)
+        string text, string? reason, string? ip, CancellationToken ct)
     {
         var target = new UserIdentity(sid, directory.NameOf(sid));
         var live = (await sessions.GetAsync(target, TimeSpan.Zero, ct)).Live.Select(s => s.Uid).ToHashSet();
@@ -91,9 +91,9 @@ public sealed partial class HelpdeskService(
 
         var sent = allowed.Count == 0 ? [] : await provider.SendMessageAsync(sid, allowed, options.Helpdesk.MessageTitle, text, ct);
         foreach (var uid in allowed)
-            audit.Write(new AuditEntry("helpdesk-message", target, uid, sent.Contains(uid) ? "success" : "failed", ip, actor, text));
+            audit.Write(new AuditEntry("helpdesk-message", target, uid, sent.Contains(uid) ? "success" : "failed", ip, actor, reason, text));
         foreach (var uid in rejected)
-            audit.Write(new AuditEntry("helpdesk-message", target, uid, "rejected-not-owned-or-not-live", ip, actor, text));
+            audit.Write(new AuditEntry("helpdesk-message", target, uid, "rejected-not-owned-or-not-live", ip, actor, reason, text));
         return new LogoffResult(allowed.Count + rejected.Count, sent, rejected);
     }
 
@@ -103,6 +103,6 @@ public sealed partial class HelpdeskService(
         var now = clock.GetUtcNow();
         if (_lastViewAudit.TryGetValue(key, out var last) && now - last < AuditViewEvery) return;
         _lastViewAudit[key] = now;
-        audit.Write(new AuditEntry(action, target, null, "success", ip, actor, note));
+        audit.Write(new AuditEntry(action, target, null, "success", ip, actor, Detail: note));
     }
 }

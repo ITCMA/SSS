@@ -42,9 +42,35 @@ Check '-Redact masks user, host, SID, IP and GUID' {
 Check 'unknown-key hint and install parameters exist' {
     $ast = Parse (Join-Path $root 'scripts\install.ps1')
     $names = $ast.ParamBlock.Parameters | ForEach-Object { $_.Name.VariablePath.UserPath }
-    foreach ($p in 'Update', 'Interactive', 'Uninstall', 'HealthEndpoint', 'ServiceAccount', 'Controllers', 'HelpdeskGroup') { Assert ($names -contains $p) "install.ps1 lacks -$p" }
+    foreach ($p in 'Update', 'Interactive', 'Uninstall', 'HealthEndpoint', 'MetricsEndpoint', 'AuditorGroup', 'AdminGroup', 'AuditShare', 'Discovery', 'ServiceAccount', 'Controllers', 'HelpdeskGroup') { Assert ($names -contains $p) "install.ps1 lacks -$p" }
     $jea = (Parse (Join-Path $root 'scripts\Install-SssJea.ps1')).ParamBlock.Parameters | ForEach-Object { $_.Name.VariablePath.UserPath }
     foreach ($p in 'Principal', 'AllowedFrom', 'TranscriptDirectory', 'ConfigurationName', 'Remove') { Assert ($jea -contains $p) "Install-SssJea.ps1 lacks -$p" }
+}
+
+Check 'Sync-SssConfig compares configurations independent of layout and key order' {
+    $syncAst = Parse (Join-Path $root 'scripts\Sync-SssConfig.ps1')
+    $names = $syncAst.ParamBlock.Parameters | ForEach-Object { $_.Name.VariablePath.UserPath }
+    foreach ($p in 'Servers', 'ReferenceFile', 'RemoteFolder', 'AppPoolName', 'Apply', 'DrainSeconds', 'NoRestart') { Assert ($names -contains $p) "Sync-SssConfig.ps1 lacks -$p" }
+    $defs = $syncAst.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -in 'ConvertTo-Canonical', 'Read-Config', 'Get-Differences' }, $true)
+    Assert ($defs.Count -eq 3) 'comparison functions not found'
+    foreach ($d in $defs) { Invoke-Expression $d.Extent.Text }
+    $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ('sss-sync-' + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path $tmp | Out-Null
+    try {
+        Set-Content (Join-Path $tmp 'a.json') '{ "Sss": { "Provider": "Citrix", "Quality": { "RttWarnMs": 80, "RttCritMs": 150 }, "Citrix": { "Controllers": ["a","b"] } } }'
+        Set-Content (Join-Path $tmp 'b.json') "{`n  `"Sss`": { `"citrix`": { `"controllers`": [`"a`", `"b`"] }, `"Quality`": { `"RttCritMs`": 150, `"RttWarnMs`": 80 }, `"Provider`": `"Citrix`" }`n}"
+        Set-Content (Join-Path $tmp 'c.json') '{ "Sss": { "Provider": "Citrix", "Quality": { "RttWarnMs": 90, "RttCritMs": 150 }, "Citrix": { "Controllers": ["a","b"] } } }'
+        $a = Read-Config (Join-Path $tmp 'a.json'); $b = Read-Config (Join-Path $tmp 'b.json'); $c = Read-Config (Join-Path $tmp 'c.json')
+        Assert (@(Get-Differences $a $b).Count -eq 0) 'layout and key order must not matter'
+        $diff = @(Get-Differences $a $c)
+        Assert ($diff.Count -eq 1 -and $diff[0] -eq 'Quality') "expected only Quality to differ, got: $($diff -join ',')"
+        Assert (@(Get-Differences $a $null) -contains '(file missing)') 'missing file not reported'
+    } finally { Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue }
+}
+
+Check 'Test-SssConfig takes a path and an install folder' {
+    $names = (Parse (Join-Path $root 'scripts\Test-SssConfig.ps1')).ParamBlock.Parameters | ForEach-Object { $_.Name.VariablePath.UserPath }
+    foreach ($p in 'Path', 'InstallFolder') { Assert ($names -contains $p) "Test-SssConfig.ps1 lacks -$p" }
 }
 
 if ($env:OS -ne 'Windows_NT') { Write-Host 'Not Windows: JEA command checks skipped.'; if ($script:failed) { exit 1 } else { exit 0 } }

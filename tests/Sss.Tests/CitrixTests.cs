@@ -16,6 +16,7 @@ public class CitrixSessionProviderTests
 
     private sealed class FakeBroker(params BrokerSession[] sessions) : IBrokerClient
     {
+        public Task<IReadOnlyList<DiscoveredController>> DiscoverAsync(string via, CancellationToken ct) => Task.FromResult<IReadOnlyList<DiscoveredController>>([]);
         public List<string> LoggedOff { get; } = [];
         public Task<IReadOnlyList<BrokerSession>> ListAsync(string sid, CancellationToken ct) => Task.FromResult<IReadOnlyList<BrokerSession>>(sessions);
         public Task<(IReadOnlyList<BrokerSession> Sessions, bool Truncated)> ListAllAsync(string? userFilter, int max, CancellationToken ct) =>
@@ -674,5 +675,197 @@ public class ConfigValidationTests
         // 0-5 s before the profile load and 15-20 s after it are not explained by any measured step
         Assert.Equal([5000, 5000], w.Steps.Where(s => s.Id == "Unaccounted").Select(s => s.DurationMs).ToArray());
         Assert.Null(LogonWaterfallBuilder.Build([Conn("""{"IsReconnect":true,"LogOnStartDate":"2026-10-31T19:34:00Z","LogOnEndDate":"2026-10-31T19:34:02Z"}""")], 2000));
+    }
+}
+
+public class ControllerWorkerTests
+{
+    private static bool PwshAvailable()
+    {
+        try
+        {
+            using var p = Process.Start(new ProcessStartInfo("pwsh", "-NoLogo -NoProfile -Command exit") { UseShellExecute = false, CreateNoWindow = true });
+            p!.WaitForExit(15000);
+            return p.ExitCode == 0;
+        }
+        catch { return false; }
+    }
+
+    private static BrokerWorkerPool Pool(CitrixOptions o, ControllerDirectory dir)
+    {
+        o.PowerShellPath = "pwsh";
+        o.WorkerScript = Path.Combine(AppContext.BaseDirectory, "Citrix", "sss-broker-worker.ps1");
+        o.SnapinOverride = Path.Combine(AppContext.BaseDirectory, "Fixtures", "FakeBroker.ps1");
+        o.Workers = 1;
+        o.RequestTimeoutSeconds = 30;
+        return new BrokerWorkerPool(o, NullLogger<BrokerWorkerPool>.Instance, dir);
+    }
+
+    [Fact]
+    public async Task A_dead_controller_is_skipped_and_remembered_by_the_health_statistics()
+    {
+        if (!PwshAvailable()) return;
+        using var d = new TempDir();
+        var o = new CitrixOptions { Controllers = ["dead1.demo.local", "ddc2.demo.local"] };
+        var dir = new ControllerDirectory(o, d.Sub("data"), TimeProvider.System);
+        using var pool = Pool(o, dir);
+
+        var list = await pool.ListAsync("S-1-5-21-1-1-1-1001", default);
+
+        Assert.Equal(2, list.Count);
+        Assert.Equal(1, dir.HealthOf("dead1.demo.local").Failed);
+        Assert.Equal(1, dir.HealthOf("ddc2.demo.local").Ok);
+        Assert.Equal("ddc2.demo.local", dir.Order()[0]);   // the controller that answered goes first next time
+    }
+
+    [Fact]
+    public async Task The_request_order_decides_which_controller_is_asked_first()
+    {
+        if (!PwshAvailable()) return;
+        using var d = new TempDir();
+        var o = new CitrixOptions { Controllers = ["ddc1.demo.local", "ddc2.demo.local"], Balancing = new BalancingOptions { Strategy = "RoundRobin" } };
+        var dir = new ControllerDirectory(o, d.Sub("data"), TimeProvider.System);
+        using var pool = Pool(o, dir);
+
+        for (var i = 0; i < 4; i++) await pool.ListAsync("S-1-5-21-1-1-1-1001", default);
+
+        Assert.True(dir.HealthOf("ddc1.demo.local").Ok >= 2);
+        Assert.True(dir.HealthOf("ddc2.demo.local").Ok >= 2);
+    }
+
+    [Fact]
+    public async Task Discovery_reads_the_site_controllers_and_filters_foreign_names()
+    {
+        if (!PwshAvailable()) return;
+        using var d = new TempDir();
+        var o = new CitrixOptions { Controllers = ["ddc1.demo.local"], Discovery = new DiscoveryOptions { Enabled = true } };
+        var dir = new ControllerDirectory(o, d.Sub("data"), TimeProvider.System);
+        using var pool = Pool(o, dir);
+
+        var svc = new ControllerDiscoveryService(dir, pool, o, NullLogger<ControllerDiscoveryService>.Instance);
+        await svc.RefreshAsync(default);
+
+        Assert.Null(svc.LastError);
+        Assert.Equal(["ddc1.demo.local", "ddc2.demo.local"], dir.Names);   // evil.example.com is outside .demo.local, ddc3 is Failed
+        Assert.Equal("Primary", dir.All[1].Zone);
+    }
+
+    [Fact]
+    public async Task The_status_ping_really_asks_a_controller()
+    {
+        if (!PwshAvailable()) return;
+        using var d = new TempDir();
+        var o = new CitrixOptions { Controllers = ["dead1.demo.local"] };
+        using var pool = Pool(o, new ControllerDirectory(o, d.Sub("data"), TimeProvider.System));
+        await Assert.ThrowsAsync<ProviderUnavailableException>(() => pool.PingAsync(default));
+    }
+}
+
+public class ControllerDirectoryTests
+{
+    private sealed class Clock : TimeProvider
+    {
+        public DateTimeOffset Now { get; set; } = new(2026, 11, 3, 10, 0, 0, TimeSpan.Zero);
+        public override DateTimeOffset GetUtcNow() => Now;
+    }
+
+    private static ControllerDirectory Make(CitrixOptions o, TempDir d, Clock? clock = null, Func<int, int>? random = null) =>
+        new(o, d.Sub("data"), clock ?? new Clock(), null, random);
+
+    [Fact]
+    public void Failover_keeps_the_last_answering_controller_first()
+    {
+        using var d = new TempDir();
+        var dir = Make(new CitrixOptions { Controllers = ["a.corp.local", "b.corp.local", "c.corp.local"] }, d);
+        Assert.Equal(["a.corp.local", "b.corp.local", "c.corp.local"], dir.Order());
+        dir.RecordSuccess("b.corp.local", 20);
+        Assert.Equal(["b.corp.local", "a.corp.local", "c.corp.local"], dir.Order());
+    }
+
+    [Fact]
+    public void Round_robin_rotates_the_first_choice()
+    {
+        using var d = new TempDir();
+        var dir = Make(new CitrixOptions { Controllers = ["a", "b", "c"], Balancing = new BalancingOptions { Strategy = "RoundRobin" } }, d);
+        var firsts = Enumerable.Range(0, 6).Select(_ => dir.Order()[0]).ToArray();
+        Assert.Equal(3, firsts.Distinct().Count());
+    }
+
+    [Fact]
+    public void Least_latency_prefers_the_faster_of_two_candidates_and_slow_ones_come_last()
+    {
+        using var d = new TempDir();
+        var o = new CitrixOptions { Controllers = ["slow", "fast", "mid"], Balancing = new BalancingOptions { Strategy = "LeastLatency" } };
+        var dir = Make(o, d, random: n => 0);   // always picks the first candidate twice: deterministic
+        dir.RecordSuccess("slow", 400);
+        dir.RecordSuccess("fast", 20);
+        dir.RecordSuccess("mid", 90);
+        var order = dir.Order();
+        Assert.Equal("slow", order[0]);                      // the random draw picked "slow" twice
+        Assert.Equal(["fast", "mid"], order.Skip(1));        // fallbacks are sorted by latency
+        var picks = new Queue<int>([1, 2]);                  // fast against mid
+        var dir2 = Make(o, d, random: _ => picks.Dequeue());
+        dir2.RecordSuccess("slow", 400);
+        dir2.RecordSuccess("fast", 20);
+        dir2.RecordSuccess("mid", 90);
+        Assert.Equal("fast", dir2.Order()[0]);
+    }
+
+    [Fact]
+    public void A_controller_that_keeps_failing_is_skipped_for_a_while_and_comes_back()
+    {
+        using var d = new TempDir();
+        var clock = new Clock();
+        var dir = Make(new CitrixOptions { Controllers = ["a", "b"], Balancing = new BalancingOptions { FailureThreshold = 2, OpenSeconds = 30 } }, d, clock);
+        dir.RecordFailure("a");
+        Assert.Equal(["a", "b"], dir.Order());               // one failure is tolerated
+        dir.RecordFailure("a");
+        Assert.Equal(["b", "a"], dir.Order());               // skipped, but still listed as the last resort
+        clock.Now = clock.Now.AddSeconds(31);
+        Assert.Equal("a", dir.Order()[0]);                   // back after the pause
+    }
+
+    [Fact]
+    public void Preferred_controllers_or_zones_come_first_while_they_are_healthy()
+    {
+        using var d = new TempDir();
+        var dir = Make(new CitrixOptions { Controllers = ["far.corp.local", "near.corp.local"], Balancing = new BalancingOptions { Preferred = ["DC1"] } }, d);
+        dir.SetDiscovered([new("far.corp.local", "Active", "1", "DC2"), new("near.corp.local", "Active", "1", "DC1")]);
+        Assert.Equal("near.corp.local", dir.Order()[0]);
+    }
+
+    [Fact]
+    public void Discovery_adds_controllers_inside_the_allowed_domain_only_and_survives_a_restart()
+    {
+        using var d = new TempDir();
+        var o = new CitrixOptions { Controllers = ["ddc1.corp.local"], Discovery = new DiscoveryOptions { Enabled = true } };
+        var dir = Make(o, d);
+        var (added, removed, rejected) = dir.SetDiscovered(
+        [
+            new("ddc1.corp.local", "Active", "10.2507", "Z1"), new("ddc2.corp.local", "Active", "10.2507", "Z1"),
+            new("evil.example.com", "Active", "1", null), new("ddc3.corp.local", "Failed", "1", null), new("bad name!.corp.local", "Active", null, null),
+        ]);
+        Assert.Equal((1, 0, 3), (added, removed, rejected));
+        Assert.Equal(["ddc1.corp.local", "ddc2.corp.local"], dir.Names);
+        Assert.Equal("config", dir.All[0].Source);
+        Assert.Equal("discovered", dir.All[1].Source);
+
+        var restarted = Make(o, d);                          // cache in the data folder
+        Assert.Equal(["ddc1.corp.local", "ddc2.corp.local"], restarted.Names);
+
+        Assert.Equal((0, 0, 0), restarted.SetDiscovered([]));   // an empty answer changes nothing
+        Assert.Equal(2, restarted.Names.Count);
+        var (a2, r2, _) = restarted.SetDiscovered([new("ddc1.corp.local", "Active", "10.2507", "Z1")]);
+        Assert.Equal((0, 1, 1), (a2, r2, 1));                // ddc2 left the site
+    }
+
+    [Fact]
+    public void Bad_settings_are_rejected()
+    {
+        using var d = new TempDir();
+        Assert.Throws<InvalidOperationException>(() => Make(new CitrixOptions { Controllers = ["a b"] }, d));
+        Assert.Throws<InvalidOperationException>(() => Make(new CitrixOptions { Controllers = ["a"], Balancing = new BalancingOptions { Strategy = "Random" } }, d));
+        Assert.Throws<InvalidOperationException>(() => Make(new CitrixOptions(), d));
+        Assert.Equal(["boot"], Make(new CitrixOptions { Discovery = new DiscoveryOptions { Enabled = true, Bootstrap = "boot" } }, d).Names);
     }
 }

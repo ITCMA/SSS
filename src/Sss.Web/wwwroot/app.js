@@ -16,7 +16,7 @@ const state = {
   lang: 'en', dict: {}, fallback: {}, range: '24h', filter: '', csrf: null, data: null, timer: null,
   sort: { live: { key: 'started', dir: -1 }, hist: { key: 'ended', dir: -1 }, hd: { key: 'user', dir: 1 } },
   // view: 'mine' = own sessions, 'hdlist' = helpdesk search/overview, 'hduser' = sessions of the chosen user
-  view: 'mine', target: null, helpdesk: false, reasonRequired: false, hdFilter: '', hdLive: null, expert: false, detailsCtx: null, msgTarget: null, limits: { rttWarn: 80, loadWarn: 7000 }, quality: null,
+  view: 'mine', target: null, helpdesk: false, caps: {}, cfg: null, reasonRequired: false, hdFilter: '', hdLive: null, expert: false, detailsCtx: null, msgTarget: null, limits: { rttWarn: 80, loadWarn: 7000 }, quality: null,
 };
 
 const t = (key, vars = {}) => {
@@ -226,10 +226,10 @@ function sorted(list, cols, so) {
 }
 
 // Buttons of a row: log off (live sessions), expert details, and (helpdesk) a message to the session.
-function actions(s, logoffBtn) {
+function actions(s, logoffBtn, live = false) {
   const box = el('div', { class: 'rowactions' });
   if (logoffBtn) box.append(logoffBtn);
-  if (state.expert && state.processes && s.state !== 'ended' && s.uid && logoffBtn) {
+  if (state.expert && state.processes && s.state !== 'ended' && s.uid && live && (state.view !== 'hduser' || state.caps.deep)) {
     const p = el('button', { type: 'button', text: t('procButton'), 'aria-label': `${t('procButton')}: ${s.resourceName} (${s.machine})` });
     p.addEventListener('click', () => openProcesses(s));
     box.append(p);
@@ -239,7 +239,7 @@ function actions(s, logoffBtn) {
     b.addEventListener('click', () => openDetails(s));
     box.append(b);
   }
-  if (state.view === 'hduser' && logoffBtn) {
+  if (state.view === 'hduser' && live && state.caps.act) {
     const m = el('button', { type: 'button', text: t('hdMessage'), 'aria-label': `${t('hdMessage')}: ${s.resourceName}` });
     m.addEventListener('click', () => openMessage(s));
     box.append(m);
@@ -269,9 +269,10 @@ function render() {
 
   const lb = $('live').tBodies[0];
   lb.replaceChildren(...live.map((s) => {
-    const btn = el('button', { type: 'button', class: 'danger-outline', text: t('logoff'),
-      'aria-label': `${t('logoff')}: ${s.resourceName} (${s.machine})` });
-    btn.addEventListener('click', () => logoffSelected(s, t('confirmOne', { name: s.resourceName, machine: s.machine })));
+    const canAct = state.view !== 'hduser' || state.caps.act;
+    const btn = canAct ? el('button', { type: 'button', class: 'danger-outline', text: t('logoff'),
+      'aria-label': `${t('logoff')}: ${s.resourceName} (${s.machine})` }) : null;
+    btn?.addEventListener('click', () => logoffSelected(s, t('confirmOne', { name: s.resourceName, machine: s.machine })));
     return el('tr', {},
       resCell(s),
       cell(t('colGroup'), s.deliveryGroup),
@@ -282,7 +283,7 @@ function render() {
       cell(t('colIdle'), fmtDur(s.idleSeconds)),
       cell(t('colClient'), `${s.clientName ?? '–'}${s.clientAddress ? ` (${s.clientAddress})` : ''}`),
       cell(t('colQuality'), qualityCell(s.quality, true)),
-      cell(t('colAction'), actions(s, btn)));
+      cell(t('colAction'), actions(s, btn, true)));
   }));
   $('live-empty').hidden = live.length > 0;
   $('live').hidden = live.length === 0;
@@ -302,8 +303,9 @@ function render() {
   $('hist').hidden = hist.length === 0;
 
   const all = state.data.live;
-  $('logoff-disc').hidden = !all.some((s) => s.state === 'disconnected');
-  $('logoff-all').hidden = all.length === 0;
+  const mayAct = state.view !== 'hduser' || state.caps.act;
+  $('logoff-disc').hidden = !mayAct || !all.some((s) => s.state === 'disconnected');
+  $('logoff-all').hidden = !mayAct || all.length === 0;
   $('updated').textContent = t('lastUpdated', { time: new Intl.DateTimeFormat(state.lang, { timeStyle: 'medium' }).format(new Date(state.data.generatedAt)) });
   $('export').href = `api/sessions.csv?range=${encodeURIComponent(state.range)}`;
   $('export').hidden = state.view !== 'mine';
@@ -317,15 +319,35 @@ function showView(view) {
   const hdList = view === 'hdlist';
   $('hd').hidden = !hdList;
   $('sys').hidden = view !== 'sys';
-  $('panel').hidden = hdList || view === 'sys';
+  $('audit').hidden = view !== 'audit';
+  $('panel').hidden = hdList || view === 'sys' || view === 'audit';
   $('target').hidden = view !== 'hduser';
-  $('tabs').hidden = !state.helpdesk;
+  syncTabs();
   $('tab-mine').setAttribute('aria-pressed', String(view === 'mine'));
   $('tab-hd').setAttribute('aria-pressed', String(view === 'hdlist' || view === 'hduser'));
   $('tab-sys').setAttribute('aria-pressed', String(view === 'sys'));
+  $('tab-audit').setAttribute('aria-pressed', String(view === 'audit'));
   setStatus('');
   render();
   load();
+}
+
+// Tabs follow the roles of the caller (the server enforces them too).
+function syncTabs() {
+  $('tab-hd').hidden = !state.helpdesk;
+  $('tab-sys').hidden = !state.caps.admin;
+  $('tab-audit').hidden = !state.caps.audit;
+  $('tabs').hidden = !(state.helpdesk || state.caps.admin || state.caps.audit);
+}
+
+// Ticket number or reason for helpdesk actions. Required when the server says so; the content is not checked.
+function needReason(out) {
+  const v = $('reason').value.trim();
+  if (state.reasonRequired && !v) {
+    (out ?? { set textContent(m) { setStatus(m, true); } }).textContent = t('hdReasonRequired');
+    return null;
+  }
+  return v;
 }
 
 function openUser(sid, name) {
@@ -394,7 +416,7 @@ async function searchUsers(q) {
 }
 
 async function logoffHd(scope, uids, question) {
-  if (state.reasonRequired && !$('reason').value.trim()) { setStatus(t('hdReasonRequired'), true); $('reason').focus(); return; }
+  if (needReason() === null) { $('reason').focus(); return; }
   if (!(await confirmDialog(question))) return;
   setStatus('…');
   try {
@@ -420,7 +442,8 @@ const logoffSelected = (s, question) => state.view === 'hduser'
 
 // ---------- status page (helpdesk) ----------
 const CHECK_LABEL = { version: 'stVersion', provider: 'stProvider', identity: 'stIdentity', uptime: 'stUptime', audit: 'stAudit', config: 'stConfig',
-  helpdesk: 'stHelpdesk', broker: 'stBroker', monitor: 'stMonitor', 'monitor-https': 'stMonitorHttps' };
+  helpdesk: 'stHelpdesk', broker: 'stBroker', monitor: 'stMonitor', 'monitor-https': 'stMonitorHttps',
+  controllers: 'stControllers', controller: 'stController', sink: 'stSink', instances: 'stInstances', instance: 'stInstance' };
 
 async function loadSys() {
   const r = await fetch('api/helpdesk/status', { credentials: 'same-origin' });
@@ -434,11 +457,133 @@ async function loadSys() {
     const health = c.ok === true ? 'good' : c.ok === false ? 'critical' : 'warning';
     const word = c.ok === true ? 'statusOk' : c.ok === false ? 'statusFail' : 'statusWarn';
     return el('tr', {},
-      cell(t('colCheck'), t(CHECK_LABEL[c.id] ?? c.id)),
+      cell(t('colCheck'), t(CHECK_LABEL[c.id] ?? c.id) + (c.label ? `: ${c.label}` : '')),
       cell(t('colResult'), el('span', { class: `badge h-${health}` },
         el('span', { class: 'dot', 'aria-hidden': 'true', text: SYMBOL[health] }), el('span', { text: t(word) }))),
       cell('', c.detail));
   }));
+}
+
+
+// ---------- effective configuration (admin, read only) ----------
+async function loadCfg() {
+  if (state.cfg) { renderCfg(); return; }
+  const r = await fetch('api/helpdesk/config', { credentials: 'same-origin' });
+  if (!r.ok) { setStatus(t(r.status === 429 ? 'rateLimited' : 'error'), true); return; }
+  state.cfg = await r.json();
+  renderCfg();
+}
+
+const cfgSourceName = (src) => src === 'default' ? t('cfgDefault') : src === 'EnvironmentVariables' ? t('cfgEnv') : src;
+
+function renderCfg() {
+  // the source list: every file the values come from, kept apart (sss.config.json, sss.local.json, appsettings.json = shipped defaults ...)
+  const sel = $('cfg-source'), keep = sel.value;
+  const sources = [...new Set((state.cfg ?? []).map((c) => c.source))];
+  sel.replaceChildren(el('option', { value: '', text: t('cfgSourceAll') }), ...sources.map((s) => el('option', { value: s, text: cfgSourceName(s) })));
+  sel.value = sources.includes(keep) ? keep : '';
+  const f = $('cfg-filter').value.trim().toLowerCase(), onlyChanged = $('cfg-changed').checked && !sel.value;
+  const rows = (state.cfg ?? []).filter((c) => (!sel.value || c.source === sel.value) && (!onlyChanged || c.explicit) && (!f || `${c.path} ${c.value} ${c.source}`.toLowerCase().includes(f)));
+  $('cfg-table').tHead.replaceChildren(el('tr', {}, ...['colSetting', 'colValue', 'colSource'].map((k) => el('th', { scope: 'col', text: t(k) }))));
+  $('cfg-table').tBodies[0].replaceChildren(...rows.map((c) => el('tr', {},
+    cell(t('colSetting'), c.path), cell(t('colValue'), c.value),
+    cell(t('colSource'), cfgSourceName(c.source)))));
+  for (const td of $('cfg-table').querySelectorAll('td')) td.classList.add('wrap');
+  $('cfg-table').hidden = rows.length === 0;
+  $('cfg-none').hidden = rows.length > 0;
+}
+
+// ---------- audit trail (auditor role) ----------
+const auditQuery = () => {
+  const p = new URLSearchParams({ days: $('a-days').value });
+  for (const [id, key] of [['a-actor', 'actor'], ['a-target', 'target'], ['a-action', 'action'], ['a-result', 'result'], ['a-server', 'server'], ['a-q', 'q'], ['a-stream', 'stream']]) {
+    const v = $(id).value.trim();
+    if (v) p.set(key, v);
+  }
+  return p.toString();
+};
+
+// A short list whose entries fill a filter field when clicked.
+function topList(title, items, field) {
+  const ul = el('ul');
+  for (const i of items) {
+    const b = el('button', { type: 'button', text: i.key });
+    b.addEventListener('click', () => { $(field).value = i.key; loadAudit(); });
+    ul.append(el('li', {}, b, el('span', { text: String(i.n) })));
+  }
+  return el('div', {}, el('h3', { text: title }), items.length ? ul : el('p', { class: 'muted', text: '–' }));
+}
+
+function dayChart(days) {
+  const W = 360, H = 120, pad = 18, max = Math.max(1, ...days.map((d) => d.n));
+  const svg = svgEl('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': t('auditByDay') });
+  const bw = days.length ? Math.min(40, (W - pad) / days.length - 4) : 0;
+  days.forEach((d, i) => {
+    const h = Math.max(1, (H - 2 * pad) * d.n / max), x = pad + i * ((W - pad) / days.length);
+    const r = svgEl('rect', { class: 'bar', x: String(x), y: String(H - pad - h), width: String(bw), height: String(h) });
+    r.append(Object.assign(svgEl('title'), { textContent: `${d.key}: ${d.n}` }));
+    svg.append(r);
+    if (days.length <= 10 || i % Math.ceil(days.length / 8) === 0) {
+      const tx = svgEl('text', { x: String(x), y: String(H - 4) });
+      tx.textContent = d.key.slice(5);
+      svg.append(tx);
+    }
+  });
+  return el('div', {}, el('h3', { text: t('auditByDay') }), svg);
+}
+
+async function loadAudit() {
+  const r = await fetch(`api/audit?${auditQuery()}&limit=300`, { credentials: 'same-origin' });
+  if (r.status === 403) { state.caps.audit = false; syncTabs(); showView('mine'); return; }
+  if (r.status === 429) { setStatus(t('rateLimited'), true); return; }
+  if (!r.ok) throw new Error(String(r.status));
+  const d = await r.json();
+  $('a-export').href = `api/audit/export.csv?${auditQuery()}`;
+  $('a-summary').textContent = t('auditSummary', { n: d.matching, p: d.summary.problems, s: d.sources.length })
+    + (d.truncated ? ' ' + t('auditTruncated') : '') + (d.matching > d.events.length ? ' ' + t('auditShown', { n: d.events.length }) : '');
+  $('a-charts').replaceChildren(dayChart(d.summary.byDay), topList(t('auditByActor'), d.summary.byActor, 'a-actor'),
+    topList(t('auditByAction'), d.summary.byAction, 'a-action'), topList(t('auditByResult'), d.summary.byResult, 'a-result'),
+    topList(t('auditByServer'), d.summary.byServer, 'a-server'));
+  $('a-events').tHead.replaceChildren(el('tr', {}, ...['colTime', 'colActor', 'colRole', 'auditAction', 'colUser', 'colSession', 'auditResult', 'colTicket', 'colDetail', 'auditServer']
+    .map((k) => el('th', { scope: 'col', text: t(k) }))));
+  $('a-events').tBodies[0].replaceChildren(...d.events.map((e) => {
+    const bad = /^(fail|rejected|denied|error|warning)/i.test(e.result) || e.stream === 'ops' || e.action.startsWith('alert:');
+    return el('tr', {},
+      cell(t('colTime'), fmtDateMs(e.time)), cell(t('colActor'), e.actor ?? ''), cell(t('colRole'), e.role ?? ''), cell(t('auditAction'), e.action),
+      cell(t('colUser'), e.user ?? ''), cell(t('colSession'), e.session ?? ''),
+      cell(t('auditResult'), el('span', { class: bad ? 'state-disconnected' : '', text: (bad ? '✖ ' : '') + e.result })),
+      cell(t('colTicket'), e.reason ?? ''), cell(t('colDetail'), e.detail ?? ''), cell(t('auditServer'), e.server ?? ''));
+  }));
+  for (const td of $('a-events').querySelectorAll('td')) td.classList.add('wrap');
+  $('a-events').hidden = d.events.length === 0;
+  $('a-none').hidden = d.events.length > 0;
+  await loadSinks();
+}
+
+async function loadSinks() {
+  const r = await fetch('api/audit/sinks', { credentials: 'same-origin' });
+  if (!r.ok) return;
+  const sinks = await r.json();
+  $('a-nosinks').hidden = sinks.length > 0;
+  $('a-sinks').hidden = sinks.length === 0;
+  $('a-sinks').tHead.replaceChildren(el('tr', {}, ...['colName', 'colTarget', 'colResult', 'sinkSent', 'sinkPending'].map((k) => el('th', { scope: 'col', text: t(k) }))));
+  $('a-sinks').tBodies[0].replaceChildren(...sinks.map((s) => {
+    const failing = s.error && (!s.lastSuccess || new Date(s.lastError) > new Date(s.lastSuccess));
+    return el('tr', {},
+      cell(t('colName'), `${s.name} (${s.kind})`), cell(t('colTarget'), s.target),
+      cell(t('colResult'), el('span', { class: failing ? 'state-disconnected' : '', text: failing ? `✖ ${s.error}` : (s.lastSuccess ? `✔ ${fmtDate(s.lastSuccess)}` : '–') })),
+      cell(t('sinkSent'), String(s.sent)), cell(t('sinkPending'), `${Math.round((s.pendingBytes || 0) / 1024)} KB`));
+  }));
+}
+
+async function verifyAudit() {
+  $('a-integrity').textContent = '…';
+  const r = await fetch('api/audit/verify?days=30', { credentials: 'same-origin' });
+  if (!r.ok) { $('a-integrity').textContent = t('error'); return; }
+  const files = await r.json();
+  const bad = files.find((f) => !f.ok);
+  $('a-integrity').textContent = bad ? `✖ ${t('auditIntegrityBad', { file: bad.file, n: bad.firstBad })}`
+    : `✔ ${t('auditIntegrityOk', { n: files.reduce((a, f) => a + f.lines, 0), f: files.length })}`;
 }
 
 // ---------- expert details ----------
@@ -808,11 +953,12 @@ function renderProfile(ctx, out) {
 function buildProfileSection(ctx) {
   const out = el('div'), btn = el('button', { type: 'button', text: t('profileScan') });
   btn.addEventListener('click', async () => {
+    if (state.view === 'hduser' && state.reasonRequired && !$('reason').value.trim()) { out.replaceChildren(el('p', { class: 'muted', text: t('hdReasonFirst') })); return; }
     btn.disabled = true;
     out.replaceChildren(el('p', { class: 'muted', text: t('profileScanning') }));
     try {
       const hd = state.view === 'hduser';
-      const r = await fetch(hd ? `api/helpdesk/sessions/${encodeURIComponent(ctx.s.uid)}/profile?sid=${encodeURIComponent(state.target.sid)}` : `api/sessions/${encodeURIComponent(ctx.s.uid)}/profile`,
+      const r = await fetch(hd ? `api/helpdesk/sessions/${encodeURIComponent(ctx.s.uid)}/profile?sid=${encodeURIComponent(state.target.sid)}&reason=${encodeURIComponent($('reason').value.trim())}` : `api/sessions/${encodeURIComponent(ctx.s.uid)}/profile`,
         { credentials: 'same-origin' });
       if (state.detailsCtx !== ctx) return;
       if (r.status === 429) { out.replaceChildren(el('p', { class: 'muted', text: t('rateLimited') })); return; }
@@ -848,6 +994,7 @@ function supportText(s, d, profile) {
 const PROC_RESULT = { killed: 'procKilled', closed: 'procKilled', protected: 'procProtected', 'not-owned': 'procGone', 'not-found': 'procGone' };
 
 async function openProcesses(s) {
+  if (state.view === 'hduser' && needReason() === null) { $('reason').focus(); return; }
   const dlg = $('procs');
   const ctx = state.procsCtx = { s, items: [] };
   $('procs-sub').textContent = `${s.resourceName} · ${s.machine}`;
@@ -863,7 +1010,7 @@ const procsBase = (ctx) => state.view === 'hduser'
 
 async function loadProcesses(ctx) {
   try {
-    const url = state.view === 'hduser' ? `${procsBase(ctx)}?sid=${encodeURIComponent(state.target.sid)}` : procsBase(ctx);
+    const url = state.view === 'hduser' ? `${procsBase(ctx)}?sid=${encodeURIComponent(state.target.sid)}&reason=${encodeURIComponent($('reason').value.trim())}` : procsBase(ctx);
     const r = await fetch(url, { credentials: 'same-origin' });
     if (state.procsCtx !== ctx) return;
     if (r.status === 404) { $('procs-msg').textContent = t('detailsNone'); return; }
@@ -877,16 +1024,48 @@ async function loadProcesses(ctx) {
   }
 }
 
+// Which processes are programs the user started (like the "Apps" of the task manager). The endpoint on the VDA runs in session 0 and sees
+// no windows of other sessions, so this is a judgement from name and program path. It errs on the side of showing too much: a process
+// is hidden only when it is a known Windows or Citrix system process or its program lives in the Windows, Citrix or FSLogix folders.
+const APP_KNOWN = new Set(['explorer', 'notepad', 'mspaint', 'mstsc', 'wordpad', 'snippingtool', 'taskmgr', 'cmd', 'powershell', 'powershell_ise', 'regedit', 'mmc', 'charmap', 'osk', 'magnify']);
+const SYS_NOISE = new Set(['svchost', 'conhost', 'sihost', 'taskhostw', 'taskhost', 'taskhostex', 'ctfmon', 'runtimebroker', 'searchui', 'searchapp', 'searchindexer', 'shellexperiencehost', 'startmenuexperiencehost',
+  'smartscreen', 'dllhost', 'fontdrvhost', 'dwm', 'csrss', 'winlogon', 'wininit', 'services', 'lsass', 'lsm', 'smss', 'spoolsv', 'sipahost', 'vdaredirector', 'websocketagent', 'wfshell', 'ctxgfx', 'cmstart',
+  'rdpclip', 'rdpinput', 'wudfhost', 'backgroundtaskhost', 'applicationframehost', 'textinputhost', 'registry', 'system', 'idle', 'audiodg', 'dashost', 'wmiprvse', 'msdtc', 'sppsvc', 'userinit', 'logonui',
+  'unsecapp', 'wsmprovhost', 'msmpeng', 'tabtip', 'tabtip32', 'vmtoolsd', 'vmwaretray', 'vmwareuser', 'secure system', 'memory compression']);
+
+function looksLikeApp(p) {
+  if (p.window || p.isApp) return true;
+  const name = p.name.toLowerCase(), path = (p.path ?? '').toLowerCase();
+  if (APP_KNOWN.has(name) || name.includes('calc')) return true;   // the calculator has a different file name per Windows version
+  if (SYS_NOISE.has(name) || /^(ctx|citrix)/.test(name)) return false;
+  if (path) return !(/^[a-z]:\\windows\\/.test(path) || /\\(citrix|fslogix)\\/.test(path));
+  return true;   // program path unknown and not a known system process: most likely something the user started
+}
+
 function renderProcesses(ctx) {
-  const onlyWindows = $('procs-windows').checked;
-  const rows = ctx.items.filter((p) => !onlyWindows || p.window || p.isApp).sort((a, b) => ((b.window || b.isApp) ? 1 : 0) - ((a.window || a.isApp) ? 1 : 0) || a.name.localeCompare(b.name));
-  $('procs-msg').textContent = rows.length ? '' : t('procNone');
+  const showAll = $('procs-all').checked;
+  let rows;
+  if (showAll) {
+    rows = [...ctx.items].sort((a, b) => (looksLikeApp(b) ? 1 : 0) - (looksLikeApp(a) ? 1 : 0) || a.name.localeCompare(b.name));
+  } else {
+    // one row per program, like the task manager: the oldest process of a program is its main process (Chrome starts a dozen helpers)
+    const groups = new Map();
+    for (const p of ctx.items.filter(looksLikeApp).sort((a, b) => new Date(a.started ?? 0) - new Date(b.started ?? 0) || a.id - b.id)) {
+      const key = `${p.name.toLowerCase()}|${(p.path ?? '').toLowerCase()}`;
+      const g = groups.get(key);
+      if (g) { g.more += 1; g.memoryMb += p.memoryMb; } else groups.set(key, { ...p, more: 0 });
+    }
+    rows = [...groups.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }
+  $('procs-msg').textContent = rows.length ? '' : t(showAll ? 'procNone' : 'procNoApps');
   const head = el('tr', {}, ...['colProcess', 'colProgram', 'colPid', 'colStarted', 'colMemory', 'colAction'].map((k) => el('th', { scope: 'col', text: t(k) })));
   $('procs-table').replaceChildren(el('thead', {}, head), el('tbody', {}, ...rows.map((p) => {
     const kill = el('button', { type: 'button', class: 'danger-outline', text: t('procKill') });
     kill.addEventListener('click', () => endProcess(ctx, p));
+    const name = el('td', { 'data-label': t('colProcess'), text: p.name });
+    if (p.more) name.append(el('small', { class: 'muted', text: ` ${t('procMore', { n: p.more })}` }));
     return el('tr', {},
-      el('td', { 'data-label': t('colProcess'), text: p.name }), el('td', { 'data-label': t('colProgram'), class: 'tpath', title: p.path ?? '', text: p.path ?? '' }),
+      name, el('td', { 'data-label': t('colProgram'), class: 'tpath', title: p.path ?? '', text: p.path ?? '' }),
       el('td', { 'data-label': t('colPid'), text: String(p.id) }), el('td', { 'data-label': t('colStarted'), text: fmtDate(p.started) }),
       el('td', { 'data-label': t('colMemory'), text: `${p.memoryMb} MB` }),
       el('td', { 'data-label': t('colAction') }, el('div', { class: 'rowactions' }, kill)));
@@ -901,7 +1080,7 @@ async function endProcess(ctx, p) {
     const r = await fetch(`${procsBase(ctx)}/${p.id}/end`, {
       method: 'POST', credentials: 'same-origin',
       headers: { 'X-CSRF-TOKEN': await csrf(), 'Content-Type': 'application/json' },
-      body: JSON.stringify(hd ? { sid: state.target.sid, force: true } : { force: true }),
+      body: JSON.stringify(hd ? { sid: state.target.sid, force: true, reason: $('reason').value.trim() } : { force: true }),
     });
     if (r.status === 429) { $('procs-msg').textContent = t('rateLimited'); return; }
     if (r.status === 503) { $('procs-msg').textContent = t('procUnavailable'); return; }
@@ -976,6 +1155,7 @@ function setExpert(on) {
 
 // ---------- helpdesk: message to a session ----------
 function openMessage(s) {
+  if (needReason() === null) { $('reason').focus(); return; }
   state.msgTarget = s;
   $('message-target').textContent = `${state.target.name} · ${s.resourceName} (${s.machine})`;
   $('message-text').value = '';
@@ -991,7 +1171,7 @@ async function sendMessage() {
     const r = await fetch('api/helpdesk/message', {
       method: 'POST', credentials: 'same-origin',
       headers: { 'X-CSRF-TOKEN': await csrf(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sid: state.target.sid, uids: [s.uid], text }),
+      body: JSON.stringify({ sid: state.target.sid, uids: [s.uid], text, reason: $('reason').value.trim() }),
     });
     if (r.status === 429) { setStatus(t('rateLimited'), true); return; }
     if (!r.ok) throw new Error(String(r.status));
@@ -1014,6 +1194,7 @@ async function load() {
   try {
     if (state.view === 'hdlist') { await loadHdList(); return; }
     if (state.view === 'sys') { await loadSys(); return; }
+    if (state.view === 'audit') { await loadAudit(); return; }
     const url = state.view === 'hduser'
       ? `api/helpdesk/sessions?sid=${encodeURIComponent(state.target.sid)}&range=${encodeURIComponent(state.range)}`
       : `api/sessions?range=${encodeURIComponent(state.range)}`;
@@ -1093,7 +1274,7 @@ async function init() {
   $('details-close').addEventListener('click', () => $('details').close());
   $('procs-close').addEventListener('click', () => $('procs').close());
   $('procs-reload').addEventListener('click', () => state.procsCtx && loadProcesses(state.procsCtx));
-  $('procs-windows').addEventListener('change', () => state.procsCtx && renderProcesses(state.procsCtx));
+  $('procs-all').addEventListener('change', () => state.procsCtx && renderProcesses(state.procsCtx));
   $('details-copy').addEventListener('click', copySupport);
   $('sys-refresh').addEventListener('click', load);
   $('tab-sys').addEventListener('click', () => showView('sys'));
@@ -1102,6 +1283,13 @@ async function init() {
   $('expert').setAttribute('aria-pressed', String(state.expert));
   $('tab-mine').addEventListener('click', () => showView('mine'));
   $('tab-hd').addEventListener('click', () => showView('hdlist'));
+  $('tab-audit').addEventListener('click', () => showView('audit'));
+  $('cfg').addEventListener('toggle', () => { if ($('cfg').open) loadCfg().catch(() => setStatus(t('error'), true)); });
+  $('cfg-filter').addEventListener('input', renderCfg);
+  $('cfg-changed').addEventListener('change', renderCfg);
+  $('cfg-source').addEventListener('change', renderCfg);
+  $('audit-form').addEventListener('submit', (e) => { e.preventDefault(); loadAudit().catch(() => setStatus(t('error'), true)); });
+  $('a-verify').addEventListener('click', verifyAudit);
   $('target-back').addEventListener('click', () => showView('hdlist'));
   $('hd-search').addEventListener('submit', (e) => { e.preventDefault(); const q = $('hd-q').value.trim(); if (q.length >= 2) searchUsers(q); });
   $('hd-filter').addEventListener('input', (e) => { state.hdFilter = e.target.value; renderHd(); });
@@ -1119,10 +1307,11 @@ async function init() {
     state.quality = me.quality ?? null;
     if (me.storeFrontUrl) { $('storefront').href = me.storeFrontUrl; $('storefront').hidden = false; }
     state.helpdesk = !!me.helpdesk;
+    state.caps = me.caps ?? {};
     state.reasonRequired = !!me.reasonRequired;
     state.processes = !!me.processes;
     state.profile = !!me.profile;
-    $('tabs').hidden = !state.helpdesk;
+    syncTabs();
     refreshSeconds = me.refreshSeconds || 30;
   } catch {
     setStatus(t('error'), true);
@@ -1136,7 +1325,7 @@ async function init() {
     if (shot === 'processes') await openProcesses(state.data.live[0]);
     else { await openDetails(state.data.live[0], shot === 'profile' ? 'profile' : 'summary'); if (shot === 'profile') document.querySelector('.profile button')?.click(); }
   }
-  state.timer = setInterval(() => { if (!document.hidden && !$('confirm').open) load(); }, refreshSeconds * 1000);
+  state.timer = setInterval(() => { if (!document.hidden && !$('confirm').open && state.view !== 'audit') load(); }, refreshSeconds * 1000);
 }
 
 init();

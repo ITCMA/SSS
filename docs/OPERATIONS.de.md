@@ -59,6 +59,7 @@ Die API dahinter ist `GET /api/helpdesk/status` (nur Helpdesk).
 - Die IIS-Einstellungen der Anwendung stehen in der gelieferten `web.config` (Handler außerhalb eines `location path="."`-Blocks), die Zusatzregel für `/healthz` erbt sie also.
 - Er braucht **keine Anmeldung**, der IIS verlangt aber eine für die ganze Anwendung. `install.ps1 -HealthEndpoint` (auch zusammen mit `-Update`) öffnet genau den Pfad `<Anwendung>/healthz` für anonymen Zugriff, sonst nichts, und testet ihn. Zum Rückgängigmachen entfernt `install.ps1 -Uninstall` die Regel; von Hand: `Clear-WebConfiguration -Filter /system.webServer/security/authentication -PSPath MACHINE/WEBROOT/APPHOST -Location "Default Web Site/sss/healthz"`.
 - Ohne diese Regel bekommt eine Probe `401`. Viele Load Balancer werten `401` als „lebt“ (es beweist, dass IIS und App-Pool antworten), bemerken dann aber keine verlorene Broker-Verbindung. Nimm die Regel, wenn du echte Gesundheitsprüfungen willst.
+- Solange die Datei `data\drain.flag` existiert, antwortet die Probe `503 {"status":"draining"}`, ein Load Balancer nimmt den Server also vor einem Update heraus ([Ausleiten](MULTI-SERVER.de.md#ausleiten)).
 - Den Endpunkt in der Anwendung abschalten: `Sss:Health:Enabled = false`.
 - `Test-SssSetup.ps1` ruft den Pfad ohne Anmeldedaten auf und sagt dir, ob eine Probe Erfolg hätte.
 
@@ -66,41 +67,11 @@ Beispiel für einen Monitor, der `200` und den Text `ok` erwartet: Probe `https:
 
 ## Audit-Protokoll
 
-Jede Aktion, die etwas ändert oder fremde Daten ansieht, wird in eine JSON-Lines-Datei geschrieben, eine Datei pro Tag: `logs\audit-YYYYMMDD.jsonl` (mit `Audit:PerServerFiles`: `audit-YYYYMMDD-SERVER.jsonl`).
-
-```json
-{"time":"2026-11-01T09:12:44+00:00","action":"helpdesk-logoff:selected","user":"CORP\\alice","sid":"S-1-5-21-...","session":"4711","result":"success","ip":"10.0.0.5","actor":"CORP\\helpdesk.bob","actorSid":"S-1-5-21-...","reason":"Anwendung hängt","server":"IIS01"}
-```
-
-| Feld | Bedeutung |
-|---|---|
-| `time` | UTC-Zeit |
-| `action` | was geschah (Tabelle unten) |
-| `user`, `sid` | der Benutzer, um den es geht (der Besitzer der Sitzung) |
-| `session` | die Broker-Sitzungs-ID (`uid`), wenn eine beteiligt ist |
-| `result` | `success`, `failed`, `rejected-not-owned-or-not-live`, bei Suchen die Trefferzahl, oder das Ergebnis einer Prozess-beenden-Anfrage |
-| `ip` | die Client-Adresse |
-| `actor`, `actorSid` | das Helpdesk-Mitglied, wenn jemand anderes handelte |
-| `reason` | der Freitext des Helpdesks, der Suchtext, der Nachrichtentext oder der Prozess (`pid 123`, `pid 123 force`) |
-| `server` | der SSS-Server, der die Zeile geschrieben hat |
-
-| `action` | Geschrieben, wenn |
-|---|---|
-| `logoff:selected` / `:disconnected` / `:all` | ein Benutzer eigene Sitzungen abmeldet |
-| `helpdesk-logoff:...` | das Helpdesk Sitzungen eines Benutzers abmeldet |
-| `helpdesk-message` | das Helpdesk eine Nachricht an eine Sitzung sendet |
-| `helpdesk:search`, `helpdesk:list-all`, `helpdesk:view`, `helpdesk:details` | das Helpdesk sucht, die Farm auflistet, einen Benutzer oder die Expertenansicht öffnet (Ansichtseinträge höchstens einmal je 5 Minuten pro Ziel) |
-| `list-processes`, `end-process`, `profile-info` | Prozesse einer Sitzung aufgelistet oder beendet oder Profiltyp und Größe gelesen werden, durch den Benutzer oder das Helpdesk |
-
-Hinweise:
-
-- Das Audit-Protokoll ist aus Sicht der Anwendung nur anfügbar, die App-Pool-Identität kann den Ordner aber ändern. Schütze und leite es weiter wie jedes Sicherheitsprotokoll: mit eurem Log-Shipper kopieren, oder mit Werkzeugen der Windows-Ereignisweiterleitung, die Dateien lesen. Bewahre es so lange auf, wie eure Richtlinie verlangt; SSS löscht es nie.
-- Abgelehnte Anfragen (eine Sitzung, die dem Benutzer nicht gehört) werden ebenfalls protokolliert, mit `result = rejected-not-owned-or-not-live`.
-- Freitext wird von Steuerzeichen befreit und in der Länge begrenzt.
+Jede Aktion, die etwas ändert oder fremde Daten ansieht, wird nach `logs\audit-YYYYMMDD.jsonl` geschrieben (mit Hash-Kette, wer, an wem, wann, von wo, welcher Server, Ticket oder Grund), an zentrale Ziele kopiert und im Reiter **Audit** (Rolle *Auditor*) ausgewertet. Felder, Aktionen, Ziele (UNC, Syslog/CEF, HTTP, SNMP), Integritätsprüfung, Aufbewahrung und Datenschutz: [Audit-Protokoll und zentrales Logging](AUDIT.de.md). Rollen: [Rollen](ROLES.de.md).
 
 ## Sichern und Wiederherstellen
 
-Der einzige Zustand sind `sss.config.json` und der Ordner `logs`. Sichere beide (und das installierte Release-Zip). Wiederherstellen heißt dasselbe Release erneut installieren und die beiden zurückkopieren. `install.ps1 -Update` hinterlässt eine Rückfallkopie in `<Installationsordner>.previous`.
+Der Zustand sind `sss.config.json`, `sss.local.json` (falls genutzt) und der Ordner `logs`; der Ordner `data` enthält nur einen Zwischenspeicher und Weiterleitungs-Positionen (ihn zu verlieren ist harmlos: ein Ziel beginnt dann mit neuen Ereignissen). Sichere diese (und das installierte Release-Zip). Wiederherstellen heißt dasselbe Release erneut installieren und sie zurückkopieren. `install.ps1 -Update` hinterlässt eine Rückfallkopie in `<Installationsordner>.previous`.
 
 ## Protokolle und Fehlersuche
 

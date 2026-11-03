@@ -23,20 +23,20 @@ public sealed partial class BrokerWorkerPool : IBrokerClient, IHostedService, ID
 
     private readonly CitrixOptions _options;
 
-    public BrokerWorkerPool(CitrixOptions options, ILogger<BrokerWorkerPool> log)
+    private readonly ControllerDirectory _controllers;
+
+    public BrokerWorkerPool(CitrixOptions options, ILogger<BrokerWorkerPool> log, ControllerDirectory? controllers = null)
     {
         _options = options;
         _log = log;
-        if (options.Controllers.Length == 0) throw new InvalidOperationException("Sss:Citrix:Controllers must list at least one Delivery Controller.");
-        // The names end up on the PowerShell command line; the worker validates them again.
-        if (options.Controllers.Any(c => !ControllerRegex().IsMatch(c)))
-            throw new InvalidOperationException("Sss:Citrix:Controllers contains an invalid host name (allowed: letters, digits, '.', '_', '-').");
+        // The names end up on the PowerShell command line; the directory and the worker validate them again.
+        _controllers = controllers ?? new ControllerDirectory(options, Path.Combine(Path.GetTempPath(), "sss-unused"), TimeProvider.System);
         var script = options.WorkerScript ?? Path.Combine(AppContext.BaseDirectory, "Citrix", "sss-broker-worker.ps1");
         var n = Math.Clamp(options.Workers, 1, 16);
         _slots = new SemaphoreSlim(n, n);
         for (var i = 0; i < n; i++)
         {
-            var w = new PowerShellWorker(options, script, log);
+            var w = new PowerShellWorker(options, script, log, () => _controllers.Names);
             _all.Add(w);
             _free.Enqueue(w);
         }
@@ -51,12 +51,36 @@ public sealed partial class BrokerWorkerPool : IBrokerClient, IHostedService, ID
 
     public Task StopAsync(CancellationToken ct) => Task.CompletedTask;
 
+    // Operations whose duration says something about the controller (not the ones that wait for a VDA).
+    private static readonly HashSet<string> TimedOps = ["ping", "list", "listall", "controllers"];
+
     private async Task<JsonElement> RunAsync(Dictionary<string, object?> request, CancellationToken ct, int? timeoutSeconds = null)
     {
         await _slots.WaitAsync(ct);
         _free.TryDequeue(out var worker);
-        try { return await worker!.RequestAsync(request, ct, timeoutSeconds); }
+        request["controllers"] = _controllers.Order();   // the order decides which controller is asked first (load balancing)
+        var timed = TimedOps.Contains(request["op"] as string ?? "");
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        try { return await worker!.RequestAsync(request, ct, timeoutSeconds, root => Observe(root, timed ? sw.Elapsed.TotalMilliseconds : null)); }
         finally { _free.Enqueue(worker!); _slots.Release(); }
+    }
+
+    private void Observe(JsonElement root, double? ms)
+    {
+        foreach (var failed in Strings(root, "failed")) _controllers.RecordFailure(failed);
+        if (Str(root, "controller") is { Length: > 0 } used) _controllers.RecordSuccess(used, ms);
+    }
+
+    public async Task<IReadOnlyList<DiscoveredController>> DiscoverAsync(string via, CancellationToken ct)
+    {
+        if (!ControllerRegex().IsMatch(via)) throw new ArgumentException("Invalid controller name.", nameof(via));
+        var res = await RunAsync(new() { ["op"] = "controllers", ["via"] = via }, ct);
+        var list = new List<DiscoveredController>();
+        if (res.TryGetProperty("controllers", out var arr) && arr.ValueKind == JsonValueKind.Array)
+            foreach (var c in arr.EnumerateArray())
+                if (Str(c, "name") is { Length: > 0 } name)
+                    list.Add(new DiscoveredController(name, Str(c, "state"), Str(c, "version"), Str(c, "zone")));
+        return list;
     }
 
     public async Task<IReadOnlyList<BrokerSession>> ListAsync(string userSid, CancellationToken ct)
@@ -166,7 +190,7 @@ public sealed partial class BrokerWorkerPool : IBrokerClient, IHostedService, ID
         return Str(res, "result") ?? "failed";
     }
 
-    public async Task PingAsync(CancellationToken ct) => await RunAsync(new() { ["op"] = "ping" }, ct);
+    public async Task PingAsync(CancellationToken ct) => await RunAsync(new() { ["op"] = "ping", ["deep"] = true }, ct);
 
     private static List<string> Strings(JsonElement e, string name) =>
         e.TryGetProperty(name, out var p) && p.ValueKind == JsonValueKind.Array

@@ -19,39 +19,39 @@ public sealed partial class ProcessService(IProcessProvider provider, SessionSer
     public bool ProfileAvailable(bool isHelpdesk) =>
         Available(isHelpdesk) && (options.Citrix.Processes.ProfileInfo || options.Provider.Equals("Mock", StringComparison.OrdinalIgnoreCase));
 
-    public async Task<ProfileInfo?> ProfileAsync(UserIdentity target, string uid, UserIdentity? actor, string? ip, CancellationToken ct)
+    public async Task<ProfileInfo?> ProfileAsync(UserIdentity target, string uid, UserIdentity? actor, string? reason, string? ip, CancellationToken ct)
     {
         if (!await OwnsAsync(target, uid, ct)) return null;
         var info = await provider.GetProfileAsync(target.Sid, uid, options.Citrix.Processes.ProfileScanSeconds, ct);
-        audit.Write(new AuditEntry("profile-info", target, uid, "success", ip, actor));
+        audit.Write(new AuditEntry("profile-info", target, uid, "success", ip, actor, reason));
         return info with { Hints = ProfileAdvisor.Analyze(info) };
     }
 
-    public async Task<ProcessListResult?> ListAsync(UserIdentity target, string uid, UserIdentity? actor, string? ip, CancellationToken ct)
+    public async Task<ProcessListResult?> ListAsync(UserIdentity target, string uid, UserIdentity? actor, string? reason, string? ip, CancellationToken ct)
     {
         if (!await OwnsAsync(target, uid, ct)) return null;
         var list = await provider.ListProcessesAsync(target.Sid, uid, ct);
-        audit.Write(new AuditEntry("list-processes", target, uid, "success", ip, actor));
+        audit.Write(new AuditEntry("list-processes", target, uid, "success", ip, actor, reason));
         return list;
     }
 
     /// <summary>Returns the outcome (closed, killed, no-window, ...) or null when the session is not one of the target's live sessions.</summary>
-    public async Task<string?> EndAsync(UserIdentity target, string uid, int processId, bool force, UserIdentity? actor, string? ip, CancellationToken ct)
+    public async Task<string?> EndAsync(UserIdentity target, string uid, int processId, bool force, UserIdentity? actor, string? reason, string? ip, CancellationToken ct)
     {
         if (processId < 1) return null;
         if (!await OwnsAsync(target, uid, ct))
         {
-            audit.Write(new AuditEntry("end-process", target, uid, "rejected-not-owned-or-not-live", ip, actor, $"pid {processId}"));
+            audit.Write(new AuditEntry("end-process", target, uid, "rejected-not-owned-or-not-live", ip, actor, reason, $"pid {processId}"));
             return null;
         }
         string result;
         try { result = await provider.EndProcessAsync(target.Sid, uid, processId, force, ct); }
         catch
         {
-            audit.Write(new AuditEntry("end-process", target, uid, "failed", ip, actor, $"pid {processId}{(force ? " force" : "")}"));
+            audit.Write(new AuditEntry("end-process", target, uid, "failed", ip, actor, reason, $"pid {processId}{(force ? " force" : "")}"));
             throw;
         }
-        audit.Write(new AuditEntry("end-process", target, uid, result, ip, actor, $"pid {processId}{(force ? " force" : "")}"));
+        audit.Write(new AuditEntry("end-process", target, uid, result, ip, actor, reason, $"pid {processId}{(force ? " force" : "")}"));
         return result;
     }
 

@@ -87,7 +87,10 @@ ASPNETCORE_ENVIRONMENT=Development ASPNETCORE_URLS=http://localhost:5080 dotnet 
 | [Berechtigungen auf einen Blick](docs/PERMISSIONS.de.md) | wer braucht welches Recht, wo und warum |
 | [Betrieb](docs/OPERATIONS.de.md) | Update, Health-Probe, Statusseite, Audit-Protokoll, Fehlersuche |
 | [Anwendungen, Prozesse und Profile](docs/PROCESSES.de.md) | der JEA-Endpunkt auf den VDAs, Einrichtung, Sicherheit |
-| [Mehrere Controller und Server](docs/MULTI-SERVER.de.md) | Failover, Load Balancer, Kerberos-Alias, Monitor über HTTPS |
+| [Rollen](docs/ROLES.de.md) | Helpdesk-Stufen, Auditor, Admin, Pflicht-Ticketnummer |
+| [Audit-Protokoll und zentrales Logging](docs/AUDIT.de.md) | wer hat was getan, Ziele (UNC, Syslog/CEF, HTTP, SNMP), Integrität |
+| [Delivery Controller](docs/CONTROLLERS.de.md) | Erkennung, Lastverteilung, virtuelle Adresse |
+| [Mehrere Controller und Server](docs/MULTI-SERVER.de.md) | Serverliste, Konfigurationsabgleich, Ausleiten, Load Balancer, Kerberos-Alias, Monitor über HTTPS |
 | [Datenquellen](docs/DATA-SOURCES.de.md) | woher die Daten kommen und wie die Qualität bewertet wird |
 | [Architektur](docs/ARCHITECTURE.de.md) | Bausteine und Abläufe |
 | [Versionierung und Kompatibilität](docs/COMPATIBILITY.de.md), [Changelog](CHANGELOG.md) | was stabil ist, wie du aktualisierst |

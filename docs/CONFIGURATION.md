@@ -16,8 +16,22 @@ SSS reads `appsettings.json` (defaults, shipped with the application) and then `
 
 - Keys are case-insensitive. A key SSS does not know is ignored but reported: the **Status** tab shows it as "Configuration keys", `Test-SssSetup.ps1` warns, and the application log names it (usually a wrong nesting, for example `Sss:UseHttps` instead of `Sss:Citrix:Monitor:UseHttps`).
 - Environment variables work as well, with `__` as separator: `Sss__Citrix__Workers=4`. They override the files.
+- `sss.local.json` (optional, next to it) is read after `sss.config.json` and overrides it. Keep `sss.config.json` identical on all servers of a [multi-server setup](MULTI-SERVER.md#server-list-and-configuration) and put settings that belong to one server only (paths, a local bootstrap controller) here. `install.ps1 -Update` keeps both files.
 - A change takes effect after the app pool is recycled (`Restart-WebAppPool SSS`).
 - Values are validated at startup. A wrong value stops the application with a clear message in the Windows event log (source *IIS AspNetCore Module V2*) instead of running in an unsafe state.
+
+## Editing and checking the configuration
+
+SSS has no configuration GUI on purpose: a web page that writes its own configuration would give an attacker who reaches the application a way to change roles and audit settings, and it would cause drift between servers. These tools help instead:
+
+| Tool | What it does |
+|---|---|
+| **Examples** in `docs\examples` | complete starting points: `sss.config.single-server.json`, `sss.config.enterprise.json` (roles, discovery, balancing, audit destinations, metrics), `sss.config.multi-server.json` (server list, shared key ring) and `sss.local.example.json` (settings of one server only). Copy one, replace the names. |
+| **Schema** `docs\sss.config.schema.json` | describes every setting with type, default, allowed values and description. In Visual Studio Code add `"$schema": "<path>/sss.config.schema.json"` as the first key (the examples do) and you get completion, the description of each setting and a warning for an unknown or wrongly typed key. The file is generated from the program and checked by the tests, so it always matches the version. |
+| **`Test-SssConfig.ps1`** | checks a configuration without starting SSS: the errors that would stop it, and warnings (for example no auditor group, HTTP-only Monitor, several servers without a shared key ring, unknown keys). `.\Test-SssConfig.ps1` checks what is installed, `.\Test-SssConfig.ps1 -Path .\new.json` checks a file before you copy it to a server. Exit code 0 = no errors. `install.ps1` runs the same check after every install and update. |
+| **Status tab, "Effective configuration"** (Admin) | every setting SSS runs with, and where the value comes from: `sss.config.json`, `sss.local.json`, an environment variable or the default. Read only, secrets masked. The quickest way to see why one server behaves differently from another. |
+
+`install.ps1 -Interactive` also asks for the auditor and admin groups, a central audit folder and controller discovery and writes them into the first `sss.config.json` (the same as `-AuditorGroup`, `-AdminGroup`, `-AuditShare`, `-Discovery`).
 
 ## General
 
@@ -33,22 +47,29 @@ SSS reads `appsettings.json` (defaults, shipped with the application) and then `
 | Key | Default | Meaning |
 |---|---|---|
 | `Mode` | `Iis` | `Iis` = the Windows authentication of IIS identifies the user (production). `Dev` = fixed demo user, only accepted when `ASPNETCORE_ENVIRONMENT=Development`. |
-| `DevUserName`, `DevUserSid`, `DevIsHelpdesk` | demo values | Development mode only. |
+| `DevUserName`, `DevUserSid`, `DevIsHelpdesk`, `DevRoles` | demo values | Development mode only. `DevRoles` is a list such as `"L2,Auditor"` (`L1`, `L2`, `L3`, `Auditor`, `Admin`). |
 
 ## Helpdesk (`Sss:Helpdesk`)
 
 | Key | Default | Meaning |
 |---|---|---|
-| `Group` | `""` | AD group (`DOMAIN\Group`) whose members may find users, see and log off their sessions, send messages and see the expert view and status. Empty = helpdesk off. Resolved to a SID at startup; if it cannot be resolved the feature stays off and the Status tab says so. |
-| `ReasonRequired` | `false` | Require a free-text reason for every helpdesk log-off (written to the audit log). |
+| `Group` | `""` | AD group (`DOMAIN\Group`) whose members have all helpdesk rights (level 3: find users, see and log off their sessions, send messages, processes, profile, expert view, status). Kept for existing installations; finer levels are in `Sss:Roles`. Resolved to a SID at startup; if it cannot be resolved the group grants nothing. |
+| `ReasonRequired` | `true` | Require a ticket number or reason (any text, not checked) for every helpdesk log-off, message, process list, profile and end-process; it is written to the audit trail. See [Roles](ROLES.md#ticket-number-or-reason-mandatory). |
+| `BulkAlertThreshold` | `5` | A helpdesk request that logs off this many sessions or more also writes the event `alert:bulk-logoff`. 0 = off. |
 | `MaxSessions` | `1000` | Upper limit of the farm-wide session overview. |
 | `MessageTitle` | `IT Helpdesk` | Title of messages sent to a session. |
+
+## Roles (`Sss:Roles`)
+
+AD groups (`DOMAIN\Group`) for `Level1Group`, `Level2Group`, `Level3Group`, `AuditorGroup` and `AdminGroup`; all empty by default. What each role may do: [Roles](ROLES.md).
 
 ## Citrix (`Sss:Citrix`)
 
 | Key | Default | Meaning |
 |---|---|---|
-| `Controllers` | `[]` | Delivery Controller host names, tried in order (failover). Required for `Provider = Citrix`. Letters, digits, `.`, `_`, `-` only. |
+| `Controllers` | `[]` | Delivery Controller host names, tried in order (failover). Required for `Provider = Citrix` (or set `Discovery:Bootstrap`). Letters, digits, `.`, `_`, `-` only. |
+| `Discovery` | off | Finds all controllers of the site from one of them: `Enabled`, `Bootstrap`, `RefreshMinutes` (15), `AllowedSuffixes`, `IncludeInactive`. See [Controllers](CONTROLLERS.md#discovery). |
+| `Balancing` | `Failover` | `Strategy` (`Failover`, `RoundRobin`, `LeastLatency`), `Preferred` (controllers or zones), `FailureThreshold` (3), `OpenSeconds` (30). See [Controllers](CONTROLLERS.md#spreading-the-requests). |
 | `Workers` | `2` | Warm PowerShell workers (1-16). Each holds the loaded Citrix snap-in (about 60-100 MB). |
 | `RequestTimeoutSeconds` | `20` | Time limit of one Broker or Monitor request. |
 | `PowerShellPath` | `powershell.exe` | Windows PowerShell 5.1 host with the Citrix snap-ins. |
@@ -113,8 +134,33 @@ Per user (per IP when no user is known), per server.
 |---|---|---|
 | `Directory` | `logs` | Folder of the audit trail; relative paths are based on the application folder. The app pool identity needs *modify* on it. |
 | `PerServerFiles` | `false` | `true` = `audit-YYYYMMDD-SERVER.jsonl`, so several servers can write into one shared folder. |
+| `OpsStream` | `true` | Warnings and errors of SSS itself go into a second stream `ops-YYYYMMDD.jsonl` and through the same destinations. |
+| `RetentionDays` | `0` | Delete local files older than this once every destination has passed them. 0 = keep. |
+| `Sinks` | none | Central destinations: `Unc`, `Syslog`, `Http`, `Snmp` (each a list). Every destination has `Enabled`, `Name`, `Streams`, `Include`, `OnlyProblems`, `BatchSize` and its own keys. All of it is described in [Audit trail and central logging](AUDIT.md#destinations). |
 
-Format and fields: [Operations](OPERATIONS.md#audit-trail).
+Format and fields: [Audit trail](AUDIT.md#the-record).
+
+## Data folder (`Sss:DataDirectory`)
+
+Default `data` next to the application. Holds what SSS keeps between restarts: the forwarding positions of the audit destinations, the cached controller list and the drain flag. The app pool identity needs *modify* on it (`install.ps1` sets it). Kept on updates.
+
+## SSS servers (`Sss:Instances`)
+
+| Key | Default | Meaning |
+|---|---|---|
+| `Directory` | `""` | Shared folder every SSS server can write; each server reports there and reads the others. Empty = single server. |
+| `Expected` | `[]` | Computer names of all SSS servers. A listed server that does not report is `missing`, a reporting one that is not listed `unexpected`. |
+| `HeartbeatSeconds` | `60` | How often a server reports. |
+| `StaleSeconds` | `180` | A server that has not reported for this long counts as not running. |
+
+See [Server list and configuration](MULTI-SERVER.md#server-list-and-configuration).
+
+## Metrics (`Sss:Metrics`)
+
+| Key | Default | Meaning |
+|---|---|---|
+| `Enabled` | `false` | Serves `GET /metrics` (Prometheus text format, no personal data). IIS must allow anonymous access to the path (`install.ps1 -MetricsEndpoint`). |
+| `AllowedIps` | `[]` | Addresses or networks (`10.0.5.0/24`) that may read it. The server itself is always allowed. |
 
 ## Health probe (`Sss:Health`)
 

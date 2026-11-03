@@ -181,3 +181,20 @@ progress { width: 100%; height: 10px; accent-color: var(--accent); }
 .stats { font-size: .8rem; margin-top: 2px; }
 .morecharts > summary { cursor: pointer; margin: 8px 0; }
 @media (max-width: 760px) { dialog.wide { width: 100vw; height: 100vh; max-height: none; border-radius: 0; } }
+
+/* audit trail */
+.auditform { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: end; }
+.auditform label { display: flex; flex-direction: column; gap: 2px; min-width: 9rem; font-size: .85rem; }
+.auditform label.grow { flex: 1 1 14rem; }
+.auditgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); gap: 12px; margin: 12px 0; }
+.auditgrid > div { border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; min-width: 0; }
+.auditgrid h3 { font-size: .9rem; margin: 0 0 6px; }
+.auditgrid ul { list-style: none; margin: 0; padding: 0; }
+.auditgrid li { display: flex; justify-content: space-between; gap: 8px; }
+.auditgrid li button { background: none; border: 0; padding: 0; text-align: left; color: var(--accent); cursor: pointer; text-decoration: underline; overflow-wrap: anywhere; }
+.auditgrid svg { width: 100%; height: auto; display: block; }
+.auditgrid .bar { fill: var(--accent); } .auditgrid .barbad { fill: var(--crit); }
+.auditgrid text { fill: var(--muted); font-size: 11px; }
+td.wrap { overflow-wrap: anywhere; max-width: 28rem; }
+.cfg { margin-top: 16px; }
+.cfg > summary { cursor: pointer; font-weight: 600; padding: 6px 0; }

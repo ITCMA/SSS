@@ -109,6 +109,38 @@ What is never possible, with or without the endpoint: closing an application pol
 
 The feature is off by default (`Sss:Citrix:Processes:Enabled`). New SSS releases may add commands to the endpoint; re-run `Install-SssJea.ps1` on the VDAs after such an update.
 
+## Roles, central logging and the server list
+
+```mermaid
+flowchart TB
+  subgraph web1["SSS server 1 (IIS)"]
+    A1[API + role check] --> L1[audit log<br/>local file, hash chain]
+    A1 --> D1[controller directory<br/>health, order]
+    L1 --> F1[forwarder]
+    R1[server list heartbeat]
+  end
+  subgraph web2["SSS server 2 (IIS)"]
+    A2[API + role check] --> L2[audit log]
+    L2 --> F2[forwarder]
+    R2[server list heartbeat]
+  end
+  F1 --> UNC[(UNC folder<br/>append only)]
+  F2 --> UNC
+  F1 --> SIEM[SIEM<br/>Syslog / CEF / HTTP]
+  F2 --> SIEM
+  F1 -.->|problems only| CHAT[chat webhook / SNMP]
+  R1 --> ST[(shared state folder)]
+  R2 --> ST
+  UNC --> AUD[Audit tab<br/>role Auditor]
+  D1 --> DDC[Delivery Controllers<br/>discovered or configured]
+  D1 -.->|Get-BrokerController| DDC
+```
+
+- Every server writes the audit trail itself and copies it to the destinations; the Audit tab reads the local and the UNC folders, so it shows all servers: [Audit trail](AUDIT.md).
+- The controller directory decides which controller each Broker and Monitor request tries first and learns from the answers: [Controllers](CONTROLLERS.md).
+- The servers report to a shared folder and see each other (version, configuration fingerprint, health): [Several servers](MULTI-SERVER.md#server-list-and-configuration).
+- Roles (levels 1 to 3, Auditor, Admin) are checked on every API call: [Roles](ROLES.md).
+
 ## Software layers inside SSS
 
 ```
@@ -147,11 +179,14 @@ Browser ──HTTPS──> IIS (Windows authentication, anonymous off)
 | Pipeline & API | `Program.cs` | configuration checks, headers, auth, CSRF, rate limits, endpoints |
 | Rules | `Services/SessionService.cs` | ownership checks, bulk scopes, history ranges |
 | Quality | `Services/QualityEvaluator.cs` | traffic lights from metrics and thresholds |
-| Audit | `Services/AuditLog.cs` | append-only JSON lines, one file per day |
+| Audit | `Services/AuditLog.cs`, `Audit/` | hash-chained JSON lines, forwarder and destinations (UNC, Syslog/CEF, HTTP, SNMP), reader for the Audit tab, ops stream |
+| Roles | `Services/HelpdeskAccess.cs` | level 1-3, Auditor, Admin from AD groups |
+| Controllers | `Citrix/ControllerDirectory.cs` | discovery, balancing and health of the Delivery Controllers |
+| Servers | `Services/InstanceRegistry.cs` | server list, configuration fingerprint, drain flag |
 | CSV | `Services/CsvWriter.cs` | export with spreadsheet-formula neutralisation |
 | Provider interface | `Providers/ISessionProvider.cs` | what the app needs from a backend |
 | Demo backend | `Providers/MockSessionProvider.cs` | sample data of two users |
-| Broker | `Citrix/BrokerWorkerPool.cs`, `PowerShellWorker.cs`, `sss-broker-worker.ps1` | warm workers, JSON-lines protocol, only `ping`/`list`/`logoff` |
+| Broker | `Citrix/BrokerWorkerPool.cs`, `PowerShellWorker.cs`, `sss-broker-worker.ps1` | warm workers, JSON-lines protocol (ping, controllers, list, logoff, message, processes, profile) |
 | Monitor | `Citrix/ODataMonitorClient.cs` | user lookup by SID, live and ended sessions, latest metrics |
 | Merge | `Citrix/CitrixSessionProvider.cs` | combines Broker and Monitor data |
 | UI | `wwwroot/` | dependency-free SPA, relative URLs, `i18n/*.json` |

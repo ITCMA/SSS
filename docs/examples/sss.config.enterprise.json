@@ -1,0 +1,42 @@
+{
+  "$schema": "../sss.config.schema.json",
+  "Sss": {
+    "Provider": "Citrix",
+    "Citrix": {
+      "Controllers": [ "ddc01.corp.local" ],
+      "Discovery": { "Enabled": true, "RefreshMinutes": 15 },
+      "Balancing": { "Strategy": "LeastLatency", "Preferred": [ "DC1" ] },
+      "Processes": { "Enabled": true, "Audience": "Helpdesk" }
+    },
+    "Roles": {
+      "Level1Group": "CORP\\SSS-Helpdesk-L1",
+      "Level2Group": "CORP\\SSS-Helpdesk-L2",
+      "Level3Group": "CORP\\SSS-Helpdesk-L3",
+      "AuditorGroup": "CORP\\SSS-Auditors",
+      "AdminGroup": "CORP\\SSS-Admins"
+    },
+    "Helpdesk": { "ReasonRequired": true, "BulkAlertThreshold": 5 },
+    "Audit": {
+      "PerServerFiles": true,
+      "RetentionDays": 90,
+      "Sinks": {
+        "Unc": [
+          { "Path": "\\\\fs01.corp.local\\sss-audit" }
+        ],
+        "Syslog": [
+          { "Host": "siem01.corp.local", "Protocol": "Tls", "Format": "Cef" }
+        ],
+        "Http": [
+          {
+            "Name": "teams-alerts",
+            "Url": "https://example.webhook.office.com/webhookb2/replace-me",
+            "Format": "Text",
+            "Include": [ "alert:" ],
+            "OnlyProblems": true
+          }
+        ]
+      }
+    },
+    "Metrics": { "Enabled": true, "AllowedIps": [ "10.0.5.0/24" ] }
+  }
+}

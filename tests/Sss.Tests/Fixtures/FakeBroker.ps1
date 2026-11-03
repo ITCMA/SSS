@@ -12,9 +12,28 @@ $script:FakeSessions = @(
 )
 $script:Stopped = New-Object System.Collections.ArrayList
 
+# Controllers: "dead" ones fail, every call is remembered so tests can see the order.
+$script:Contacted = New-Object System.Collections.ArrayList
+function Get-BrokerSite {
+    [CmdletBinding()]
+    param([string]$AdminAddress)
+    [void]$script:Contacted.Add($AdminAddress)
+    if ($AdminAddress -like 'dead*') { throw "The Broker Service on $AdminAddress is not reachable." }
+}
+function Get-BrokerController {
+    [CmdletBinding()]
+    param([string]$AdminAddress)
+    [pscustomobject]@{ DNSName = 'ddc1.demo.local'; State = 'Active'; ControllerVersion = '10.2507.0'; ZoneName = 'Primary' }
+    [pscustomobject]@{ DNSName = 'ddc2.demo.local'; State = 'Active'; ControllerVersion = '10.2507.0'; ZoneName = 'Primary' }
+    [pscustomobject]@{ DNSName = 'evil.example.com'; State = 'Active'; ControllerVersion = '10.2507.0'; ZoneName = 'Other' }
+    [pscustomobject]@{ DNSName = 'ddc3.demo.local'; State = 'Failed'; ControllerVersion = '10.2507.0'; ZoneName = 'Primary' }
+}
+
 function Get-BrokerSession {
     [CmdletBinding()]
     param([string]$AdminAddress, [string]$UserSID, [int64]$Uid, [int]$MaxRecordCount)
+    [void]$script:Contacted.Add($AdminAddress)
+    if ($AdminAddress -like 'dead*') { throw "The Broker Service on $AdminAddress is not reachable." }
     $r = $script:FakeSessions
     if ($UserSID) { $r = @($r | Where-Object { $_.UserSID -eq $UserSID }) }
     if ($Uid) { $r = @($r | Where-Object { $_.Uid -eq $Uid }) }

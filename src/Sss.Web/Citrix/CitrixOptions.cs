@@ -3,8 +3,15 @@ namespace Sss.Web.Citrix;
 /// <summary>Settings for Sss:Provider = "Citrix" (section "Sss:Citrix").</summary>
 public sealed class CitrixOptions
 {
-    /// <summary>Delivery Controller host names, tried in order (failover).</summary>
+    /// <summary>Delivery Controller host names, tried in order (failover). With <see cref="Discovery"/> this may be empty or
+    /// only a few names; the rest of the site is found automatically.</summary>
     public string[] Controllers { get; set; } = [];
+
+    /// <summary>Finds all Delivery Controllers of the site from one of them and keeps the list up to date.</summary>
+    public DiscoveryOptions Discovery { get; set; } = new();
+
+    /// <summary>How requests are spread over the controllers.</summary>
+    public BalancingOptions Balancing { get; set; } = new();
 
     /// <summary>Windows PowerShell 5.1 host that has the Citrix snap-ins (or the Remote PowerShell SDK) installed.</summary>
     public string PowerShellPath { get; set; } = "powershell.exe";
@@ -18,16 +25,56 @@ public sealed class CitrixOptions
     /// <summary>Number of warm PowerShell workers (each holds one loaded snap-in, roughly 60-100 MB).</summary>
     public int Workers { get; set; } = 2;
 
+    /// <summary>Time limit of one Broker or Monitor request in seconds.</summary>
     public int RequestTimeoutSeconds { get; set; } = 20;
 
+    /// <summary>History, quality data and the expert view (Monitor OData).</summary>
     public MonitorOptions Monitor { get; set; } = new();
 
+    /// <summary>Ending processes and profile analysis through the JEA endpoint on the VDAs.</summary>
     public ProcessOptions Processes { get; set; } = new();
+}
+
+/// <summary>Controller discovery: ask one controller (Get-BrokerController) for all others of its site.</summary>
+public sealed class DiscoveryOptions
+{
+    /// <summary>Turn controller discovery on.</summary>
+    public bool Enabled { get; set; }
+
+    /// <summary>Controller to ask. Empty = the first entry of <c>Controllers</c>. If it is down, the cached and configured controllers are tried.</summary>
+    public string Bootstrap { get; set; } = "";
+
+    /// <summary>How often the controller list is refreshed, in minutes.</summary>
+    public int RefreshMinutes { get; set; } = 15;
+
+    /// <summary>Only controllers whose name ends with one of these suffixes are accepted (for example ".corp.local").
+    /// Empty = the domain part of the bootstrap controller. A manipulated answer can therefore not send requests elsewhere.</summary>
+    public string[] AllowedSuffixes { get; set; } = [];
+
+    /// <summary>Also use controllers the Broker reports as not active (for example failed or in maintenance).</summary>
+    public bool IncludeInactive { get; set; }
+}
+
+public sealed class BalancingOptions
+{
+    /// <summary>"Failover" (default: the controller that answered last, the others as fallback), "RoundRobin" or
+    /// "LeastLatency" (the faster of two random healthy controllers; spreads load and avoids slow ones).</summary>
+    public string Strategy { get; set; } = "Failover";
+
+    /// <summary>Controllers (or, if discovered, their zone) that are used first while they are healthy, for example the ones in the same data center.</summary>
+    public string[] Preferred { get; set; } = [];
+
+    /// <summary>A controller that failed this many times in a row is skipped for <see cref="OpenSeconds"/>.</summary>
+    public int FailureThreshold { get; set; } = 3;
+
+    /// <summary>How long a controller that keeps failing is skipped, in seconds.</summary>
+    public int OpenSeconds { get; set; } = 30;
 }
 
 /// <summary>Listing and ending the processes of a session. Needs the JEA endpoint on the VDAs (scripts/Install-SssJea.ps1).</summary>
 public sealed class ProcessOptions
 {
+    /// <summary>Turn process control and profile analysis on (needs the JEA endpoint on the VDAs).</summary>
     public bool Enabled { get; set; }
 
     /// <summary>Name of the JEA session configuration on the VDAs.</summary>
@@ -73,5 +120,6 @@ public sealed class MonitorOptions
     /// <summary>Converts the bandwidth field to kbit/s (1000 for bit/s).</summary>
     public int BandwidthDivisor { get; set; } = 1000;
 
+    /// <summary>Maximum number of pages read for one history query.</summary>
     public int MaxPages { get; set; } = 5;
 }

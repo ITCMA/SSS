@@ -9,7 +9,10 @@
     <InvariantGlobalization>true</InvariantGlobalization>
     <TieredPGO>false</TieredPGO>
     <TieredCompilationQuickJitForLoops>true</TieredCompilationQuickJitForLoops>
-    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <!-- the XML comments of the option classes are the source of the configuration schema (see Services/ConfigSchema.cs) -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <PublishDocumentationFile>false</PublishDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591;CS1573;CS1572;CS1574;CS1584;CS1658</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

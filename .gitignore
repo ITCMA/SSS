@@ -14,6 +14,8 @@ dist/
 # Local config & secrets
 appsettings.Local.json
 sss.local.*
+!docs/examples/sss.local.example.json
+/src/Sss.Web/data/
 *.pfx
 # Logs
 logs/

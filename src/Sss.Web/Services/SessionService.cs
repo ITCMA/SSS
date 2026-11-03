@@ -5,7 +5,7 @@ namespace Sss.Web.Services;
 
 /// <summary>Business rules: a user only ever sees and affects their own sessions, and every
 /// log-off target is re-verified against the user's own live sessions before the provider is called.</summary>
-public sealed class SessionService(ISessionProvider provider, AuditLog audit, TimeProvider clock)
+public sealed class SessionService(ISessionProvider provider, AuditLog audit, TimeProvider clock, SssOptions? options = null)
 {
     public static readonly IReadOnlyDictionary<string, TimeSpan> Ranges = new Dictionary<string, TimeSpan>
     {
@@ -57,6 +57,10 @@ public sealed class SessionService(ISessionProvider provider, AuditLog audit, Ti
                 done.Contains(uid) ? "success" : "failed", remoteIp, actor, reason));
         foreach (var uid in rejected)
             audit.Write(new AuditEntry($"{prefix}:selected", user, uid, "rejected-not-owned-or-not-live", remoteIp, actor, reason));
+
+        // One helpdesk request that ends many sessions at once is reported separately, so a sink can notify someone.
+        if (actor is not null && options is not null && options.Helpdesk.BulkAlertThreshold > 0 && done.Count >= options.Helpdesk.BulkAlertThreshold)
+            audit.Write(new AuditEntry("alert:bulk-logoff", user, null, $"{done.Count} sessions", remoteIp, actor, reason));
 
         return new LogoffResult(targets.Count + rejected.Count, done, rejected);
     }

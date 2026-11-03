@@ -11,16 +11,18 @@ SSS needs very few rights, and only one account holds Citrix rights: the **servi
 | **Service account** (gMSA, e.g. `CORP\svc-sss$`) | is the identity of the app pool | IIS | SSS talks to Citrix as this account | `install.ps1 -ServiceAccount` |
 | | allowed to retrieve its password on the IIS server | Active Directory | gMSA technique | `New-ADServiceAccount ... -PrincipalsAllowedToRetrieveManagedPassword` |
 | | **Citrix administrator** with role *Help Desk Administrator*, scope *All* | Delivery Controller (Delegated Administration) | read sessions (Broker), log off, send messages, read Monitor data | `New-AdminAdministrator` + `Add-AdminRight` |
-| | read on the application folder, **modify** on `logs` | IIS server file system | audit trail | `install.ps1` (icacls) |
+| | read on the application folder, **modify** on `logs` and `data` | IIS server file system | audit trail, controller list, forwarding positions | `install.ps1` (icacls) |
+| | write on the central audit folder (UNC destination) and on the shared server-list folder (`Sss:Instances:Directory`) | file server | central logging, server list (only when used) | file server administrator; give it *append/write*, no delete, on the audit folder |
 | | network access to the controller (Broker SDK, Monitor OData, usually TCP 80/443) | firewall | queries | network team |
 | **End users** | may reach the SSS URL (Windows authentication) | IIS | sign-in | nothing to do: all domain users |
 | | no Citrix rights | - | users only see and affect their own sessions; SSS enforces that | - |
-| **Helpdesk** | member of the AD group in `Sss:Helpdesk:Group` | Active Directory | find users, see and log off their sessions, send messages, expert view | `New-ADGroup` + `Add-ADGroupMember`, then log on again |
+| **Helpdesk** | member of an AD group of [`Sss:Roles`](ROLES.md) (level 1 looks, level 2 also logs off and sends messages, level 3 also processes and profiles) or of the older `Sss:Helpdesk:Group` (= level 3) | Active Directory | find users, see and log off their sessions, send messages, expert view | `New-ADGroup` + `Add-ADGroupMember`, then log on again |
+| **Auditor**, **Admin** | member of `Sss:Roles:AuditorGroup` / `AdminGroup` | Active Directory | read the audit trail / see the status, controllers and servers | same |
 | **Installing administrator** | local administrator on the IIS server | IIS server | `install.ps1` | - |
 | | Domain Admin (once) | Active Directory | KDS root key and gMSA | - |
 | | full Citrix administrator (once) | Delivery Controller | create the administrator entry | - |
 
-Helpdesk members need no extra Citrix role: the helpdesk acts through the service account. Keep the helpdesk group small, because its members see all users' sessions.
+Helpdesk members need no extra Citrix role: the helpdesk acts through the service account. Keep the helpdesk groups small, because their members see all users' sessions; give the Auditor role to as few people as possible.
 
 ## All steps in one block
 

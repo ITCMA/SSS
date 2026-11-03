@@ -42,7 +42,7 @@ public interface IMonitorClient
     Task PingAsync(CancellationToken ct);
 }
 
-public sealed partial class ODataMonitorClient(HttpClient http, CitrixOptions options) : IMonitorClient
+public sealed partial class ODataMonitorClient(HttpClient http, CitrixOptions options, ControllerDirectory? directory = null) : IMonitorClient
 {
     [GeneratedRegex(@"^S-1-\d+(-\d+)+$")] private static partial Regex SidRegex();
     [GeneratedRegex(@"^[A-Za-z][A-Za-z0-9_]{0,63}$")] private static partial Regex FieldRegex();
@@ -164,28 +164,44 @@ public sealed partial class ODataMonitorClient(HttpClient http, CitrixOptions op
 
     private async Task<JsonDocument> GetJsonAsync(string relative, CancellationToken ct) => (await GetJsonWithBaseAsync(relative, ct)).Doc;
 
-    // Delivery Controllers are tried in order; the one that answered last goes first, like in the Broker worker.
+    // Delivery Controllers are tried in order. With a controller directory the order comes from the balancing strategy and the
+    // answer times and failures feed its statistics; with explicit Monitor:BaseUrl(s) the fixed list is used, last answering one first.
     private Uri[]? _bases;
     private int _active;
 
-    private Uri[] Bases => _bases ??= (http.BaseAddress is { } b && !BuildBaseAddresses(options).Any(u => u == b)
+    private Uri[] FixedBases => _bases ??= (http.BaseAddress is { } b && !BuildBaseAddresses(options).Any(u => u == b)
         ? [b, .. BuildBaseAddresses(options)]
         : BuildBaseAddresses(options).ToArray());
 
+    private bool UsesDirectory => directory is not null && options.Monitor.BaseUrls.Length == 0 && options.Monitor.BaseUrl is null;
+
+    private IReadOnlyList<(Uri Uri, string? Controller)> Candidates()
+    {
+        if (!UsesDirectory) return FixedBases.Select(u => (u, (string?)null)).ToList();
+        var scheme = options.Monitor.UseHttps ? "https" : "http";
+        return directory!.Order().Select(n => (new Uri($"{scheme}://{n}/Citrix/Monitor/OData/v4/Data/"), (string?)n)).ToList();
+    }
+
     private async Task<(JsonDocument Doc, Uri Base)> GetJsonWithBaseAsync(string relative, CancellationToken ct)
     {
-        var bases = Bases;
+        var bases = Candidates();
         ProviderUnavailableException? last = null;
-        for (var n = 0; n < bases.Length; n++)
+        for (var n = 0; n < bases.Count; n++)
         {
-            var i = (Volatile.Read(ref _active) + n) % bases.Length;
+            var i = UsesDirectory ? n : (Volatile.Read(ref _active) + n) % bases.Count;
+            var sw = System.Diagnostics.Stopwatch.StartNew();
             try
             {
-                var doc = await GetJsonAsync(new Uri(bases[i], relative), ct);
+                var doc = await GetJsonAsync(new Uri(bases[i].Uri, relative), ct);
                 Volatile.Write(ref _active, i);
-                return (doc, bases[i]);
+                if (bases[i].Controller is { } ok) directory!.RecordSuccess(ok, sw.Elapsed.TotalMilliseconds);
+                return (doc, bases[i].Uri);
             }
-            catch (ProviderUnavailableException ex) { last = ex; }
+            catch (ProviderUnavailableException ex)
+            {
+                last = ex;
+                if (bases[i].Controller is { } bad) directory!.RecordFailure(bad);
+            }
         }
         throw last!;
     }

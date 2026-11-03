@@ -1,0 +1,26 @@
+{
+  "$schema": "../sss.config.schema.json",
+  "Sss": {
+    "Provider": "Citrix",
+    "Citrix": {
+      "Controllers": [ "ddc01.corp.local" ],
+      "Discovery": { "Enabled": true }
+    },
+    "Roles": {
+      "Level2Group": "CORP\\SSS-Helpdesk",
+      "AuditorGroup": "CORP\\SSS-Auditors",
+      "AdminGroup": "CORP\\SSS-Admins"
+    },
+    "DataProtection": { "KeyDirectory": "\\\\fs01.corp.local\\sss-keys" },
+    "Instances": {
+      "Directory": "\\\\fs01.corp.local\\sss-state",
+      "Expected": [ "IIS01", "IIS02", "IIS03" ]
+    },
+    "Audit": {
+      "PerServerFiles": true,
+      "Sinks": {
+        "Unc": [ { "Path": "\\\\fs01.corp.local\\sss-audit" } ]
+      }
+    }
+  }
+}

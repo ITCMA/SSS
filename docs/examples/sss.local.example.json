@@ -1,0 +1,8 @@
+{
+  "$schema": "../sss.config.schema.json",
+  "Sss": {
+    "Audit": { "Directory": "D:\\sss-logs" },
+    "DataDirectory": "D:\\sss-data",
+    "Citrix": { "Discovery": { "Bootstrap": "ddc02.corp.local" } }
+  }
+}

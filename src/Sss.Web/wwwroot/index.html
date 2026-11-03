@@ -47,6 +47,7 @@
     <button type="button" id="tab-mine" aria-pressed="true" data-i18n="tabMine">My sessions</button>
     <button type="button" id="tab-hd" aria-pressed="false" data-i18n="tabHelpdesk">Helpdesk</button>
     <button type="button" id="tab-sys" aria-pressed="false" data-i18n="tabStatus">Status</button>
+    <button type="button" id="tab-audit" aria-pressed="false" data-i18n="tabAudit" hidden>Audit</button>
   </nav>
 
   <main id="main">
@@ -84,6 +85,47 @@
         <button type="button" id="sys-refresh" data-i18n="refresh">Refresh</button>
       </div>
       <div class="table-wrap"><table id="sys-table"><caption class="sr" data-i18n="statusTitle"></caption><thead></thead><tbody></tbody></table></div>
+      <details id="cfg" class="cfg">
+        <summary data-i18n="cfgTitle">Effective configuration</summary>
+        <p class="muted" data-i18n="cfgHint">The settings SSS runs with and where each value comes from. Read only.</p>
+        <div class="toolbar">
+          <label class="grow"><span class="sr" data-i18n="filter">Filter</span><input id="cfg-filter" type="search" autocomplete="off" data-i18n-ph="filterPlaceholder"></label>
+          <label class="inline"><span class="sr" data-i18n="colSource">Source</span><select id="cfg-source"></select></label>
+          <label class="inline"><input id="cfg-changed" type="checkbox" checked> <span data-i18n="cfgOnlyChanged">Only settings that were changed</span></label>
+        </div>
+        <div class="table-wrap"><table id="cfg-table"><caption class="sr" data-i18n="cfgTitle"></caption><thead></thead><tbody></tbody></table></div>
+        <p id="cfg-none" class="muted" hidden data-i18n="auditNone">Nothing found.</p>
+      </details>
+    </section>
+
+    <!-- Audit trail (auditor role) -->
+    <section id="audit" hidden aria-labelledby="audit-h">
+      <h2 id="audit-h" data-i18n="auditTitle">Audit trail</h2>
+      <form id="audit-form" class="toolbar auditform">
+        <label><span data-i18n="auditPeriod">Period</span>
+          <select id="a-days"><option value="1" data-i18n="auditP1">24 hours</option><option value="7" selected data-i18n="auditP7">7 days</option><option value="30" data-i18n="auditP30">30 days</option><option value="90" data-i18n="auditP90">90 days</option></select></label>
+        <label><span data-i18n="auditActor">Who</span><input id="a-actor" type="search" maxlength="100" autocomplete="off"></label>
+        <label><span data-i18n="auditTarget">Affected user</span><input id="a-target" type="search" maxlength="100" autocomplete="off"></label>
+        <label><span data-i18n="auditAction">Action</span><input id="a-action" type="search" maxlength="100" autocomplete="off"></label>
+        <label><span data-i18n="auditResult">Result</span><input id="a-result" type="search" maxlength="100" autocomplete="off"></label>
+        <label><span data-i18n="auditServer">Server</span><input id="a-server" type="search" maxlength="100" autocomplete="off"></label>
+        <label class="grow"><span data-i18n="auditText">Free text (ticket, detail, session ...)</span><input id="a-q" type="search" maxlength="100" autocomplete="off"></label>
+        <label><span data-i18n="auditStream">Stream</span>
+          <select id="a-stream"><option value="" data-i18n="auditStreamAll">All</option><option value="audit" data-i18n="auditStreamAudit">Audit trail</option><option value="ops" data-i18n="auditStreamOps">Operations</option></select></label>
+        <button type="submit" data-i18n="auditApply">Apply</button>
+        <a id="a-export" class="btn" href="#" data-i18n="auditExport">Export CSV</a>
+      </form>
+      <p id="a-summary" class="muted" role="status" aria-live="polite"></p>
+      <div id="a-charts" class="auditgrid"></div>
+      <div class="table-wrap"><table id="a-events"><caption class="sr" data-i18n="auditTitle"></caption><thead></thead><tbody></tbody></table></div>
+      <p id="a-none" class="muted" hidden data-i18n="auditNone">No events for this filter.</p>
+      <div class="section-head">
+        <h3 data-i18n="auditSinks">Central destinations and integrity</h3>
+        <button type="button" id="a-verify" data-i18n="auditVerify">Check integrity</button>
+      </div>
+      <p id="a-integrity" class="muted" role="status" aria-live="polite"></p>
+      <div class="table-wrap"><table id="a-sinks"><caption class="sr" data-i18n="auditSinks"></caption><thead></thead><tbody></tbody></table></div>
+      <p id="a-nosinks" class="muted" hidden data-i18n="auditNoSinks">No central destination is configured; the events exist on this server only.</p>
     </section>
 
     <!-- Sessions of one user: the own sessions, or (helpdesk) those of the chosen user -->
@@ -150,7 +192,7 @@
     </div>
     <div class="dlg-body">
       <p id="procs-msg" class="status" role="status" aria-live="polite"></p>
-      <label class="check"><input type="checkbox" id="procs-windows" checked> <span data-i18n="procOnlyWindows">Only applications with a window</span></label>
+      <label class="check"><input type="checkbox" id="procs-all"> <span data-i18n="procAll">Show all processes (also Windows and Citrix system processes)</span></label>
       <div class="table-wrap"><table class="smalltable" id="procs-table"></table></div>
     </div>
   </dialog>
