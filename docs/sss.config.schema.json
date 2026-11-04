@@ -628,6 +628,42 @@
               "type": "integer",
               "default": 20
             },
+            "Cloud": {
+              "description": "Citrix Cloud (DaaS) instead of an on-premises site: read-only, through the Monitor service in the cloud.",
+              "type": "object",
+              "properties": {
+                "Enabled": {
+                  "description": "Use Citrix Cloud (DaaS) instead of Delivery Controllers: read-only, no snap-in and no VDA access.",
+                  "type": "boolean",
+                  "default": false
+                },
+                "Region": {
+                  "description": "\"eu\" (api-eu.cloud.com), \"us\" (api.cloud.com), \"ap-s\" (api-ap-s.cloud.com) or \"jp\" (api.citrixcloud.jp).",
+                  "type": "string",
+                  "default": "eu"
+                },
+                "CustomerId": {
+                  "description": "Customer id of the Citrix Cloud account (shown with the API clients).",
+                  "type": "string",
+                  "default": ""
+                },
+                "ClientId": {
+                  "description": "Id of a Citrix Cloud API client (Identity and Access Management > API access). Give it the least rights that allow reading the Monitor data.",
+                  "type": "string",
+                  "default": ""
+                },
+                "ClientSecret": {
+                  "description": "Secret of that API client.",
+                  "type": "string",
+                  "default": ""
+                },
+                "ApiBase": {
+                  "description": "Overrides the address derived from the region (testing); an https:// address without a trailing path.",
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
             "Monitor": {
               "description": "History, quality data and the expert view (Monitor OData).",
               "type": "object",

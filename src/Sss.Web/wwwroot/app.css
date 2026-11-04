@@ -269,3 +269,28 @@ td.wrap { overflow-wrap: anywhere; max-width: 28rem; }
 #env th:first-child, #env td:first-child { width: 24%; }
 #env p.muted { margin: 4px 0 10px; }
 .delta { color: var(--muted); font-size: .85em; }
+
+/* world map */
+.mapbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0; }
+.mapbar input[type=search] { flex: 1 1 260px; min-width: 0; }
+.mapzoom { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.mapbox { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--surface); }
+#map-svg { display: block; width: 100%; height: auto; aspect-ratio: 3600 / 1390; touch-action: none; cursor: grab; background: color-mix(in srgb, var(--accent) 7%, var(--surface)); }
+#map-svg:active { cursor: grabbing; }
+#map-svg:focus-visible { outline: 3px solid var(--focus); outline-offset: -3px; }
+.map-country { fill: color-mix(in srgb, var(--muted) 22%, var(--surface)); stroke: var(--muted); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.map-dot { cursor: pointer; }
+.map-dot circle { fill: var(--accent); fill-opacity: 1; stroke: var(--surface); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.map-dot.approx circle { fill: var(--warn); }
+.map-dot.hit circle { fill: var(--crit); fill-opacity: 1; stroke: var(--text); }
+.map-dot.dim { opacity: .35; }
+.map-dot text { fill: var(--on-accent); font-weight: 700; pointer-events: none; }
+.map-dot:focus-visible circle { stroke: var(--focus); stroke-width: 4; }
+.map-label { fill: var(--text); paint-order: stroke; stroke: var(--surface); stroke-width: 3px; vector-effect: non-scaling-stroke; pointer-events: none; }
+.mapplace { margin: 12px 0; padding: 12px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); display: grid; gap: 8px; justify-items: start; }
+.mapplace h3 { margin: 0; }
+.mapres { list-style: none; margin: 4px 0 8px; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.mapcredit { font-size: .8rem; margin-top: 8px; }
+
+/* Citrix Cloud: read-only, no log-off or message */
+body.cloud .danger-outline, body.cloud .needs-broker { display: none !important; }

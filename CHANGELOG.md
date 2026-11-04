@@ -2,9 +2,12 @@
 
 All notable changes to SSS. The project follows [Semantic Versioning](docs/COMPATIBILITY.md); versions below 1.0.0 may still change configuration keys between minor versions, and every such change is listed here.
 
-## Unreleased
+## 0.4.3 - 2026-11-04 (beta)
 
 ### Added
+- **Citrix Cloud (DaaS), read-only** ([docs/CLOUD.md](docs/CLOUD.md)): `Sss:Citrix:Cloud` signs in with an API client and reads the cloud Monitor service instead of the Delivery Controller and the PowerShell Broker. Sessions, history, expert view, Insights, Map and Environment work; log-off, messages and processes are hidden and answered with 501. Not yet tested against a real tenant.
+- **Map tab**: all live sessions on a world map (zoom with the wheel, buttons or keys, move by dragging). Each place shows its number of sessions; far zoomed in, every session is its own dot with the user name. Search by user, device, machine, delivery group or city highlights and zooms to the matches; a click on a place lists its sessions with an Open user button. The outlines and a list of about 5,700 places are bundled (Natural Earth, public domain) and the position is found in the browser, so no address or name goes to a map service. Cities missing from the list are shown in the middle of the country (marked as approximate); sessions without a country are listed below the map. For every helpdesk level.
+- Insights: the Details of application crashes name the user in more cases (the session lookup covers up to 600 sessions instead of 200).
 - **Insights: crashes and failures in depth**: period switch (1, 3, 6, 12, 24 hours), users, machines, first and last time per application or reason, and a Details dialog with every single record (when, user, machine, delivery group, client, version, path, description) and a hint on the pattern; a table of all disconnected sessions with the time since the disconnect (new `stateChange` from the Broker worker).
 - **Insights, more depth**: application crashes and connection failures of the last 24 hours (by application or reason, machines affected, machine with most), sessions disconnected for hours, machines running 14 days or more, a 7-day curve of the logon time per delivery group (groups with fewer than 5 sessions are not rated), the machine's running time.
 - **Insights tab** ([docs/INSIGHTS.md](docs/INSIGHTS.md)) for every helpdesk level: conspicuous slow connections and logons, machines not registered or busy, each with a button to open the user or the filtered session list; logon time per delivery group (average, median, 90 %); machine overview with load index.
@@ -13,6 +16,10 @@ All notable changes to SSS. The project follows [Semantic Versioning](docs/COMPA
 - **Cards for users**: the own sessions as cards (one sentence on whether all is fine, quality lights, log off, technical data under "Details"); the helpdesk and the expert view keep the table. History period and export moved to the history section.
 
 ### Changed
+- **Event log**: on a single server the data protection keys (CSRF) now live in `data\keys` and are encrypted with DPAPI (machine scope). Before, ASP.NET Core wrote them in clear text and logged the warning "No XML encryptor configured" (event 1000, `XmlKeyManager`) at every start of the app pool. The first start after the update creates new keys, so an open page needs one reload. With a shared `KeyDirectory`, set `ProtectToSid` to avoid the warning.
+- Citrix Cloud: one polite retry after HTTP 429; `scripts/Test-SssCloud.ps1` checks the sign-in and the reading of the Monitor service.
+- Screenshots: light mode only, all recreated by `scripts/Make-Screenshots.sh`; new gallery ([docs/GALLERY.md](docs/GALLERY.md)).
+- Expert view, Diagnosis: a connection counts as direct only when the "connected via" host is the client or the VDA itself (without a host name the address decides). Anything else, for example a NetScaler whose address Citrix also records as the client address, is shown as gateway. A direct connection shows only the arrow with "Direct", without a gateway box.
 - `web.config` sends `X-Frame-Options: DENY` (the CSP `frame-ancestors 'none'` was already there); closes the code-scanning alert about missing clickjacking protection.
 - Accessibility and feedback: the message field has a visible label, the area names "Views" and "Controls" are translated, a log-off says "Logging off the session …" and locks the row actions until it is done, an empty filter says "No sessions match the filter" with a button to reset it (instead of "no sessions"), and the keyboard focus stays on the same button when the tables refresh.
 

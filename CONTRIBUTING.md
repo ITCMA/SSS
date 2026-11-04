@@ -29,7 +29,7 @@ A release is created by pushing a tag `vMAJOR.MINOR.PATCH` (`git tag -a v0.5.0 -
 
 ## Screenshots
 
-README screenshots come only from the built-in demo mode, never from a real site. With the development server running (`ASPNETCORE_ENVIRONMENT=Development`), headless Chrome reproduces them: `?lang=en&theme=light` for the overview and `&shot=details`, `&shot=profile` or `&shot=processes` for the expert dialogs (these parameters work in demo mode only). Look at every image before committing: it must show demo data (`DEMO\demo.user`, `10.20.x.x`, `*.demo.local`) and nothing else.
+README screenshots come only from the built-in demo mode, never from a real site. `scripts/Make-Screenshots.sh` recreates all of them in light mode (see [docs/GALLERY.md](docs/GALLERY.md)). With the development server running (`ASPNETCORE_ENVIRONMENT=Development`), headless Chrome reproduces them: `?lang=en&theme=light` for the overview and `&shot=details`, `&shot=profile` or `&shot=processes` for the expert dialogs (these parameters work in demo mode only). Look at every image before committing: it must show demo data (`DEMO\demo.user`, `10.20.x.x`, `*.demo.local`) and nothing else.
 
 ## Reporting a problem with a real Citrix site
 

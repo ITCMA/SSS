@@ -8,9 +8,9 @@ SSS is a small, fast web portal for **Citrix Virtual Apps and Desktops (CVAD)**.
 
 <p align="center">
   <img src="docs/img/overview-light.png" alt="Self-service overview with session quality traffic lights" width="49%">
-  <img src="docs/img/overview-dark.png" alt="Dark mode" width="49%">
+  <img src="docs/img/map-light.png" alt="World map of the live sessions with search" width="49%">
 </p>
-<p align="center"><em>Demo data, light and dark mode</em></p>
+<p align="center"><em>Demo data: the overview of a user and the world map of the helpdesk. <a href="docs/GALLERY.md">More pictures</a></em></p>
 
 > **Status: beta.** Tested end to end on Citrix Virtual Apps and Desktops **2203, 2402, 2507 and 2607 (LTSR)** test sites (single Delivery Controller). Several Delivery Controllers and several web servers are implemented ([docs](docs/MULTI-SERVER.md)) but not yet verified on a real site. Try it without Citrix: the built-in demo mode needs only the .NET SDK.
 
@@ -44,13 +44,16 @@ Members of the AD groups of the [roles](docs/ROLES.md) get a **Helpdesk** tab an
 - **End applications and processes** of a session through a restricted endpoint on the VDAs (off by default).
 - **"Copy support info"** puts the key facts of a session into the clipboard for a ticket.
 - **Insights tab**: what is conspicuous right now (slow connections and logons, machines not registered or busy), logon time per delivery group, a machine overview, and the last 30 days of a user at a glance ([docs/INSIGHTS.md](docs/INSIGHTS.md)). Users see their own sessions as clear cards.
+- **Map tab**: all live sessions on a world map with zoom down to the single session and a search for users, devices and cities; the map data is bundled, nothing goes to a map service ([docs/MAP.md](docs/MAP.md)).
 - **Environment tab** for admins, with charts and tables: Workspace app versions and platforms of all live sessions, sessions per location, VDA machines by state and agent version, the most started applications, plus a hint for users with an outdated client.
+- **Citrix Cloud (DaaS)**: a read-only mode that reads the cloud Monitor service instead of a Delivery Controller ([docs/CLOUD.md](docs/CLOUD.md)), not yet tested against a real tenant.
 - **Status page** with live health checks instead of digging through event logs; **audit trail** of every search, view, log-off, message and process action: who did what to whom, with a hash chain, an **Audit tab** for the auditor and copies to a **central place** (UNC folder, Syslog/CEF, HTTP/SIEM, SNMP).
 
 <p align="center">
-  <img src="docs/img/processes-light.png" alt="Applications and processes of a session" width="49%">
+  <img src="docs/img/insights-light.png" alt="Insights tab with conspicuous findings, logon time per group and disconnected sessions" width="49%">
   <img src="docs/img/environment-light.png" alt="Environment tab with charts for platforms, locations, VDA machines and applications" width="49%">
 </p>
+<p align="center"><em>Insights: what is conspicuous right now; and the Environment tab</em></p>
 
 ## Why SSS
 
@@ -97,6 +100,9 @@ Open <http://localhost:5080> and add `?shot=profile` or `?shot=processes` to the
 | [Roles](docs/ROLES.md) | helpdesk levels, auditor, admin, optional ticket number |
 | [Audit trail and central logging](docs/AUDIT.md) | who did what, destinations (UNC, Syslog/CEF, HTTP, SNMP), integrity |
 | [Insights](docs/INSIGHTS.md) | what is conspicuous, delivery group comparison, user history, cards |
+| [Map](docs/MAP.md) | live sessions on a world map, search, privacy |
+| [Gallery](docs/GALLERY.md) | all pictures, recreated by one script |
+| [Citrix Cloud](docs/CLOUD.md) | DaaS, read-only: setup, limits |
 | [Environment](docs/ENVIRONMENT.md) | client versions and locations, outdated-client hint |
 | [Delivery Controllers](docs/CONTROLLERS.md) | discovery, load balancing, virtual address |
 | [Several controllers and servers](docs/MULTI-SERVER.md) | server list, configuration sync, draining, load balancer, Kerberos alias, Monitor over HTTPS |
@@ -121,7 +127,10 @@ Open <http://localhost:5080> and add `?shot=profile` or `?shot=processes` to the
 - [ ] Several Citrix sites in one view
 - [ ] Polite "close" of an application (needs a helper inside the user's session)
 - [ ] Stricter custom Citrix role for the service account ([how to derive it](docs/PERMISSIONS.md#narrowing-the-role-open-item-before-10))
-- [ ] Citrix Cloud (DaaS) backend
+- [x] Citrix Cloud (DaaS) backend, read-only ([description](docs/CLOUD.md)), not yet tested against a real tenant
+- [ ] Citrix Cloud: log-off and messages through the DaaS REST API
+- [ ] Next: timeline "what changed" from the audit trail, health score per user and machine, machine utilisation and application usage, cost view, application start times
+- [ ] Long-term history (weeks and months) with an optional small database (SQL) in addition to the file-only setup
 - [ ] 1.0 after a public beta period
 
 ## License

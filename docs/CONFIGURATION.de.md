@@ -183,7 +183,7 @@ Details und Datenschutzhinweise: [Umgebung](ENVIRONMENT.de.md). Die Feldnamen vo
 | Schlüssel | Standard | Bedeutung |
 |---|---|---|
 | `KeyDirectory` | `""` | Gemeinsamer Ordner für den Schlüsselring, damit CSRF-Tokens eines Servers von den anderen akzeptiert werden. Leer = Schlüssel bleiben auf dem Server. |
-| `ProtectToSid` | `""` | Optionale SID (z. B. der gMSA), für die die Schlüssel mit DPAPI-NG verschlüsselt werden. Nur Windows. |
+| `ProtectToSid` | `""` | Optionale SID (z. B. der gMSA), für die die Schlüssel mit DPAPI-NG verschlüsselt werden. Nur Windows. Ohne `KeyDirectory` liegen die Schlüssel in `data\keys` und werden automatisch mit DPAPI (Computerbereich) verschlüsselt. |
 
 Mehr zu Setups mit mehreren Servern: [Mehrere Controller und Server](MULTI-SERVER.de.md).
 

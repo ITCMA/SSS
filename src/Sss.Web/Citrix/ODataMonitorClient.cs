@@ -27,7 +27,9 @@ public sealed record MonitorSession(
     string? ClientCity = null,
     string? ClientNetwork = null,
     string? MachineId = null,
-    int? LoadIndex = null);
+    int? LoadIndex = null,
+    int? ConnectionState = null,
+    DateTimeOffset? StateChanged = null);
 
 /// <summary>One locally started application as the Monitor counts it (uberAgent data): launches, peak and users per day over the last days.</summary>
 public sealed record AppUsage(string Name, int Launches, int PeakConcurrent, int UsersPerDay, int Machines, string? Process = null);
@@ -256,11 +258,11 @@ public sealed partial class ODataMonitorClient(HttpClient http, CitrixOptions op
 
     public async Task<IReadOnlyList<MonitorSession>> GetSessionsByKeyAsync(IEnumerable<string> sessionKeys, CancellationToken ct)
     {
-        var keys = sessionKeys.Where(k => Guid.TryParse(k, out _)).Select(k => Guid.Parse(k).ToString("D")).Distinct().Take(200).ToList();
+        var keys = sessionKeys.Where(k => Guid.TryParse(k, out _)).Select(k => Guid.Parse(k).ToString("D")).Distinct().Take(600).ToList();
         var result = new List<MonitorSession>();
         try
         {
-            foreach (var batch in keys.Chunk(15))
+            foreach (var batch in keys.Chunk(25))
                 result.AddRange(await PagedAsync($"Sessions?$filter={Esc(string.Join(" or ", batch.Select(k => $"SessionKey eq {k}")))}&$expand={Esc(await ExpandAsync(ct))}", ct));
         }
         catch (ProviderUnavailableException) { /* names are optional */ }
@@ -310,7 +312,7 @@ public sealed partial class ODataMonitorClient(HttpClient http, CitrixOptions op
         try
         {
             if (!(await MetaAsync(ct)).ContainsKey(recordSet)) return counts;
-            foreach (var batch in keys.Chunk(15))
+            foreach (var batch in keys.Chunk(25))
                 foreach (var r in await PagedJsonAsync($"{recordSet}?$filter={Esc(string.Join(" or ", batch.Select(k => $"SessionKey eq {k}")))}&$select=SessionKey&$top=500", ct))
                     if (Str(r, "SessionKey") is { } key) counts[key] = counts.GetValueOrDefault(key) + 1;
         }
@@ -545,7 +547,9 @@ public sealed partial class ODataMonitorClient(HttpClient http, CitrixOptions op
         var (rtt, bandwidth, at) = LatestMetrics(s);
         long? userId = TryGet(s, "UserId", out var uidEl) && uidEl.ValueKind == JsonValueKind.Number && uidEl.TryGetInt64(out var uidValue) ? uidValue : null;
         return new MonitorSession(key, machine, group, isDesktop, Date(s, "StartDate"), Date(s, "EndDate"),
-            logon, client, address, rtt, bandwidth, at, version, platform, userId, country, city, network, Str(s, "MachineId"));
+            logon, client, address, rtt, bandwidth, at, version, platform, userId, country, city, network, Str(s, "MachineId"),
+            ConnectionState: TryGet(s, "ConnectionState", out var cs) && cs.ValueKind == JsonValueKind.Number && cs.TryGetInt32(out var csv) ? csv : null,
+            StateChanged: Date(s, "ConnectionStateChangeDate"));
     }
 
     /// <summary>Newest usable value per metric. 0 means "not measured" in Monitor, so it never counts as a (perfect or

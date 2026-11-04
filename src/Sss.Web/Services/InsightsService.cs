@@ -6,6 +6,10 @@ using Sss.Web.Providers;
 namespace Sss.Web.Services;
 
 /// <summary>One thing the helpdesk should look at. Severity is "crit", "warn" or "info"; the user (when there is one) lets the interface open the user's sessions.</summary>
+/// <summary>One live session on the world map: who, from which device, where Citrix locates the client and where the session runs.</summary>
+public sealed record MapPoint(string User, string? Sid, string? Device, string Country, string City, string? Machine, string? Group, string? Platform, bool Desktop);
+public sealed record MapView(DateTimeOffset At, IReadOnlyList<MapPoint> Points, bool Demo);
+
 public sealed record InsightFinding(string Severity, string Kind, string Subject, string Detail, string? UserName = null, string? UserSid = null,
     string? Machine = null, string? Group = null, int? Value = null);
 
@@ -64,6 +68,58 @@ public sealed class InsightsService(SssOptions options, IMonitorClient? monitor,
             return view;
         }
         finally { _gate.Release(); }
+    }
+
+    private (DateTimeOffset At, MapView View)? _map;
+
+    /// <summary>All live sessions of the site with the location Citrix reports for the client, for the world map (cached for a minute). The coordinates are
+    /// looked up in the browser from a bundled place list, so no address leaves the server.</summary>
+    public async Task<MapView> MapAsync(CancellationToken ct)
+    {
+        if (_map is { } c && clock.GetUtcNow() - c.At < CacheFor) return c.View;
+        await _gate.WaitAsync(ct);
+        try
+        {
+            if (_map is { } c2 && clock.GetUtcNow() - c2.At < CacheFor) return c2.View;
+            var now = clock.GetUtcNow();
+            MapView view;
+            if (demo) view = new MapView(now, DemoMapPoints(), true);
+            else if (monitor is null) view = new MapView(now, [], false);
+            else
+            {
+                var live = await monitor.GetFarmLiveAsync(ct);
+                var users = await monitor.GetUsersByIdAsync(live.Select(x => x.UserId).OfType<long>().Distinct(), ct);
+                view = new MapView(now, MapPoints(live, users), false);
+            }
+            _map = (now, view);
+            return view;
+        }
+        finally { _gate.Release(); }
+    }
+
+    /// <summary>One point per live session (at most 3000), the sessions of one user next to each other.</summary>
+    public static IReadOnlyList<MapPoint> MapPoints(IReadOnlyList<MonitorSession> live, IReadOnlyDictionary<long, MonitorUser> users) => live
+        .Select(s => new MapPoint(s.UserId is { } id && users.TryGetValue(id, out var u) ? u.Name : "", s.UserId is { } id2 && users.TryGetValue(id2, out var u2) ? u2.Sid : null,
+            s.ClientName, (s.ClientCountry ?? "").Trim(), (s.ClientCity ?? "").Trim(), s.Machine, s.DesktopGroup, s.ClientPlatform, s.IsDesktop))
+        .OrderBy(p => p.User, StringComparer.OrdinalIgnoreCase).Take(3000).ToList();
+
+    private static IReadOnlyList<MapPoint> DemoMapPoints()
+    {
+        (string Country, string City, int Count)[] spots =
+        [
+            ("Germany", "Berlin", 9), ("Germany", "Munich", 6), ("Germany", "Hamburg", 4), ("Germany", "Frankfurt", 5), ("United Kingdom", "London", 5), ("France", "Paris", 3),
+            ("Poland", "Warsaw", 3), ("Spain", "Madrid", 2), ("United States", "New York", 4), ("United States", "Chicago", 2), ("United States", "San Francisco", 2),
+            ("Brazil", "Sao Paulo", 2), ("India", "Mumbai", 3), ("India", "Bangalore", 2), ("China", "Shanghai", 2), ("Japan", "Tokyo", 2), ("Singapore", "Singapore", 2),
+            ("Australia", "Sydney", 2), ("South Africa", "Johannesburg", 1), ("United Arab Emirates", "Dubai", 1), ("Canada", "Toronto", 1), ("Mexico", "", 1),
+        ];
+        string[] first = ["Alex", "Sam", "Robin", "Kim", "Jo", "Max", "Lee", "Chris", "Pat", "Mika", "Dana", "Eli"], last = ["Example", "Sample", "Demo", "Test", "Muster", "Probe"];
+        var list = new List<MapPoint>();
+        var n = 0;
+        foreach (var (country, city, count) in spots)
+            for (var i = 0; i < count; i++, n++)
+                list.Add(new MapPoint($"{first[n % first.Length]} {last[n / first.Length % last.Length]}", $"S-1-5-21-0-0-0-{1000 + n}", $"DEMO-PC-{n:000}", country, city,
+                    $"vdi-{1 + n % 4:00}.demo.local", n % 3 == 0 ? "DG-Apps" : "DG-Desktops", n % 9 == 0 ? "Mac" : "Windows", n % 3 != 0));
+        return list.OrderBy(p => p.User, StringComparer.OrdinalIgnoreCase).ToList();
     }
 
     public static readonly int[] Periods = [1, 3, 6, 12, 24];

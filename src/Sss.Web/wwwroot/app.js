@@ -241,7 +241,7 @@ function actions(s, logoffBtn, live = false) {
     box.append(b);
   }
   if (state.view === 'hduser' && live && state.caps.act) {
-    const m = el('button', { type: 'button', text: t('hdMessage'), 'aria-label': `${t('hdMessage')}: ${s.resourceName}` });
+    const m = el('button', { type: 'button', class: 'needs-broker', text: t('hdMessage'), 'aria-label': `${t('hdMessage')}: ${s.resourceName}` });
     m.addEventListener('click', () => openMessage(s));
     box.append(m);
   }
@@ -372,7 +372,8 @@ function showView(view) {
   $('audit').hidden = view !== 'audit';
   $('env').hidden = view !== 'env';
   $('insights').hidden = view !== 'insights';
-  $('panel').hidden = hdList || view === 'sys' || view === 'audit' || view === 'env' || view === 'insights';
+  $('map').hidden = view !== 'map';
+  $('panel').hidden = hdList || view === 'sys' || view === 'audit' || view === 'env' || view === 'insights' || view === 'map';
   $('target').hidden = view !== 'hduser';
   syncTabs();
   $('tab-mine').setAttribute('aria-pressed', String(view === 'mine'));
@@ -381,6 +382,7 @@ function showView(view) {
   $('tab-audit').setAttribute('aria-pressed', String(view === 'audit'));
   $('tab-env').setAttribute('aria-pressed', String(view === 'env'));
   $('tab-insights').setAttribute('aria-pressed', String(view === 'insights'));
+  $('tab-map').setAttribute('aria-pressed', String(view === 'map'));
   setStatus('');
   render();
   load();
@@ -393,6 +395,7 @@ function syncTabs() {
   $('tab-audit').hidden = !state.caps.audit;
   $('tab-env').hidden = !state.caps.admin;
   $('tab-insights').hidden = !state.helpdesk;
+  $('tab-map').hidden = !state.helpdesk;
   $('tabs').hidden = !(state.helpdesk || state.caps.admin || state.caps.audit);
 }
 
@@ -1177,10 +1180,14 @@ function buildTopology(d, s) {
   const node = (title, ...lines) => el('div', { class: 'node' }, el('h4', { text: title }), ...lines.filter(Boolean).map((l) => el('small', { text: l })));
   const ms = (x) => `${Math.round(x)} ms`;
   const link = (head, ...parts) => el('div', { class: 'link' }, ...(head ? [el('strong', { text: head })] : []), ...parts.filter(([, x]) => x != null).map(([label, x]) => el('div', { text: `${label}: ${ms(x)}` })));
-  // without a gateway Citrix records the client itself as the "connected via" address: that is a direct connection
+  // Direct or via a gateway: a gateway shows up as a "connected via" host that is neither the client nor the VDA itself. Without a host name the
+  // address decides (a direct connection records the client's own address). A gateway pop (Citrix Cloud) is always a gateway.
   const same = (a, b) => a && b && a.toLowerCase().split('.')[0] === b.toLowerCase().split('.')[0];
   const viaHost = v('ConnectedViaHostName'), viaIp = v('ConnectedViaIPAddress');
-  const direct = (viaHost || viaIp) && !v('GatewayPopName') && (same(viaHost, v('ClientName')) || same(viaIp, v('ClientAddress')) || same(viaIp, v('ClientPublicIP')));
+  const vdaName = s.machine, vdaIp = v('Machine.IPAddress') ?? v('IPAddress');
+  const isClientOrVda = viaHost ? same(viaHost, v('ClientName')) || same(viaHost, vdaName)
+    : same(viaIp, v('ClientAddress')) || same(viaIp, v('ClientPublicIP')) || (viaIp && vdaIp && viaIp === vdaIp);
+  const direct = !v('GatewayPopName') && (viaHost || viaIp) && isClientOrVda;
   const via = direct ? null : viaHost ?? viaIp;
   const popName = v('GatewayPopName');
   const rtt = last('IcaRttMS'), wan = last('WanLatency'), dc = last('DcLatency'), net = last('IcaLatency');
@@ -1189,13 +1196,13 @@ function buildTopology(d, s) {
   if (!endpoint.some(Boolean) && !via) return el('div');
   const nodes = [node(t('topoClient'), ...endpoint)];
   if (via) nodes.push(link(null, [t('topoWan'), wan], [t('topoNetwork'), net]), node(t('topoGateway'), v('ConnectedViaHostName'), v('ConnectedViaIPAddress'), popName && `${t('topoPop')}: ${popName}`), link(null, [t('topoDc'), dc]));
-  else nodes.push(link(t('topoDirect'), [t('topoNetwork'), net ?? wan], [t('topoDc'), dc]), node(t('topoGateway'), t('topoNoGateway')));
+  else nodes.push(link(t('topoDirect'), [t('topoNetwork'), net ?? wan], [t('topoDc'), dc]));
   nodes.push(node(t('topoVda'), s.machine, v('DesktopGroup.Name')));
   const hdx = v('HdxProtocolName') ? `${v('HdxProtocolName')}${v('EdtMtu') ? ` (MTU ${v('EdtMtu')})` : ''}` : v('Protocol');
   const facts = [rtt != null && `ICARTT ${ms(rtt)}`, hdx && `${t('topoProtocol')}: ${hdx}`, all.get('IsSecureIca')?.value === 'true' && t('topoSecure'), /\D/.test(v('WorkspaceType') ?? '0') && v('WorkspaceType'),
     v('LaunchedViaHostName') && `${t('topoLaunched')}: ${v('LaunchedViaHostName')}`].filter(Boolean).join(' · ');
   return el('section', { class: 'group' }, el('h3', { text: t('topoTitle') }), el('div', { class: 'topo' }, ...nodes),
-    el('p', { class: 'muted', text: via ? facts : [t('topoDirectNote'), facts].filter(Boolean).join(' · ') }));
+    el('p', { class: 'muted', text: facts }));
 }
 const ctxMachine = (s) => s.machine;
 
@@ -1704,6 +1711,7 @@ async function load() {
     if (state.view === 'audit') { await loadAudit(); return; }
     if (state.view === 'env') { await loadEnv(); return; }
     if (state.view === 'insights') { await loadInsights(); return; }
+    if (state.view === 'map') { await loadMap(); return; }
     const url = state.view === 'hduser'
       ? `api/helpdesk/sessions?sid=${encodeURIComponent(state.target.sid)}&range=${encodeURIComponent(state.range)}`
       : `api/sessions?range=${encodeURIComponent(state.range)}`;
@@ -1795,6 +1803,7 @@ async function init() {
   $('tab-audit').addEventListener('click', () => showView('audit'));
   $('tab-env').addEventListener('click', () => showView('env'));
   $('tab-insights').addEventListener('click', () => showView('insights'));
+  $('tab-map').addEventListener('click', () => showView('map'));
   for (const kind of ['faults', 'failures']) {
     const sel = $(`ins-${kind}-hours`);
     for (const h of [1, 3, 6, 12, 24]) sel.append(el('option', { value: String(h), text: t('insLastHours', { n: h }) }));
@@ -1830,6 +1839,8 @@ async function init() {
     state.caps = me.caps ?? {};
     state.reasonRequired = !!me.reasonRequired;
     state.processes = !!me.processes;
+    document.body.classList.toggle('cloud', !!me.cloud);
+    $('cloud').hidden = !me.cloud;
     state.profile = !!me.profile;
     syncTabs();
     refreshSeconds = me.refreshSeconds || 30;
@@ -1847,6 +1858,7 @@ async function init() {
   }
   if (!$('demo').hidden && shot === 'env' && state.caps.admin) { showView('env'); await loadEnv(); }
   if (!$('demo').hidden && shot === 'insights' && state.helpdesk) { showView('insights'); await loadInsights(); }
+  if (!$('demo').hidden && shot === 'map' && state.helpdesk) { showView('map'); await loadMap(); }
   state.timer = setInterval(() => { if (!document.hidden && !$('confirm').open && state.view !== 'audit' && state.view !== 'env') load(); }, refreshSeconds * 1000);
 }
 

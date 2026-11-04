@@ -183,7 +183,7 @@ Details and privacy notes: [Environment](ENVIRONMENT.md). The field names of the
 | Key | Default | Meaning |
 |---|---|---|
 | `KeyDirectory` | `""` | Shared folder for the key ring, so CSRF tokens issued by one server are accepted by the others. Empty = keys stay on the server. |
-| `ProtectToSid` | `""` | Optional SID (for example of the gMSA) the keys are encrypted for with DPAPI-NG. Windows only. |
+| `ProtectToSid` | `""` | Optional SID (for example of the gMSA) the keys are encrypted for with DPAPI-NG. Windows only. Without a `KeyDirectory`, the keys are kept in `data\keys` and encrypted with DPAPI (machine scope) automatically. |
 
 More on multi-server setups: [Several controllers and servers](MULTI-SERVER.md).
 

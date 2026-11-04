@@ -182,6 +182,27 @@ public class InsightsApiTests : IClassFixture<HelpdeskOnFactory>, IClassFixture<
     }
 
     [Fact]
+    public async Task The_map_lists_sessions_with_their_location_for_the_helpdesk_only()
+    {
+        var map = await (await _helpdesk.GetAsync("/api/helpdesk/insights/map")).Json();
+        Assert.True(map.GetProperty("demo").GetBoolean());
+        var points = map.GetProperty("points");
+        Assert.True(points.GetArrayLength() > 20);
+        Assert.Contains(points.EnumerateArray(), p => p.GetProperty("city").GetString() == "Berlin" && p.GetProperty("user").GetString()!.Length > 0);
+        Assert.DoesNotContain("clientAddress", map.ToString());
+        Assert.Equal(System.Net.HttpStatusCode.Forbidden, (await _auditor.GetAsync("/api/helpdesk/insights/map")).StatusCode);
+    }
+
+    [Fact]
+    public void Map_points_carry_the_user_name_and_location_without_the_address()
+    {
+        var live = new[] { new Sss.Web.Citrix.MonitorSession("k1", "vdi.demo.local", "DG", true, null, null, null, "PC1", "10.1.2.3", null, UserId: 7, ClientCountry: " Germany ", ClientCity: "Munich") };
+        var users = new Dictionary<long, Sss.Web.Citrix.MonitorUser> { [7] = new("Alex Demo", "S-1-5-21-1-1-1-7") };
+        var p = Assert.Single(InsightsService.MapPoints(live, users));
+        Assert.Equal(("Alex Demo", "Germany", "Munich", "PC1"), (p.User, p.Country, p.City, p.Device));
+    }
+
+    [Fact]
     public async Task The_auditor_has_no_insights()
     {
         Assert.Equal(System.Net.HttpStatusCode.Forbidden, (await _auditor.GetAsync("/api/helpdesk/insights")).StatusCode);

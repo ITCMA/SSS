@@ -65,30 +65,54 @@ else
     var citrix = options.Citrix;
     builder.Services.AddSingleton(citrix);
 
+    var cloud = citrix.Cloud;
+    if (cloud.Problem() is { } cloudProblem) throw new InvalidOperationException(cloudProblem);
+    if (cloud.Enabled)
+    {
+        citrix.Monitor.BaseUrl = cloud.MonitorBase.AbsoluteUri;   // the only address that is ever asked (and signed)
+        citrix.Monitor.BaseUrls = [];
+        citrix.Monitor.Enabled = true;
+        citrix.Processes.Enabled = false;
+    }
     // The Delivery Controllers: configured and discovered ones, their health, and the order requests try them in.
     var controllerDirectory = new ControllerDirectory(citrix, dataDir, TimeProvider.System);
     builder.Services.AddSingleton(controllerDirectory);
-    builder.Services.AddSingleton<ControllerDiscoveryService>();
-    builder.Services.AddHostedService(sp => sp.GetRequiredService<ControllerDiscoveryService>());
-
-    // Live sessions and log-off: warm PowerShell workers (also a hosted service so they start with the app).
-    builder.Services.AddSingleton<BrokerWorkerPool>();
-    builder.Services.AddSingleton<IBrokerClient>(sp => sp.GetRequiredService<BrokerWorkerPool>());
-    builder.Services.AddHostedService(sp => sp.GetRequiredService<BrokerWorkerPool>());
-
-    // History and quality metrics: Monitor OData, authenticated as the app pool identity (Windows auth).
-    if (citrix.Monitor.Enabled)
+    if (cloud.Enabled)
     {
+        // Citrix Cloud (DaaS): read-only through the Monitor service in the cloud; there is no Broker snap-in and no controller to discover.
         builder.Services.AddSingleton<IMonitorClient>(sp => new ODataMonitorClient(
-            new HttpClient(new SocketsHttpHandler
+            new HttpClient(new CloudAuthHandler(cloud, new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(5) }, TimeProvider.System))
             {
-                Credentials = System.Net.CredentialCache.DefaultCredentials,
-                PooledConnectionLifetime = TimeSpan.FromMinutes(5),
-            })
-            {
-                BaseAddress = ODataMonitorClient.BuildBaseAddress(citrix),
-                Timeout = TimeSpan.FromSeconds(citrix.RequestTimeoutSeconds),
-            }, citrix, controllerDirectory));
+                BaseAddress = cloud.MonitorBase,
+                Timeout = TimeSpan.FromSeconds(Math.Max(citrix.RequestTimeoutSeconds, 30)),
+            }, citrix, null));
+        builder.Services.AddSingleton<IBrokerClient>(sp => new CloudBrokerClient(sp.GetRequiredService<IMonitorClient>()));
+    }
+    else
+    {
+        builder.Services.AddSingleton(controllerDirectory);
+        builder.Services.AddSingleton<ControllerDiscoveryService>();
+        builder.Services.AddHostedService(sp => sp.GetRequiredService<ControllerDiscoveryService>());
+
+        // Live sessions and log-off: warm PowerShell workers (also a hosted service so they start with the app).
+        builder.Services.AddSingleton<BrokerWorkerPool>();
+        builder.Services.AddSingleton<IBrokerClient>(sp => sp.GetRequiredService<BrokerWorkerPool>());
+        builder.Services.AddHostedService(sp => sp.GetRequiredService<BrokerWorkerPool>());
+
+        // History and quality metrics: Monitor OData, authenticated as the app pool identity (Windows auth).
+        if (citrix.Monitor.Enabled)
+        {
+            builder.Services.AddSingleton<IMonitorClient>(sp => new ODataMonitorClient(
+                new HttpClient(new SocketsHttpHandler
+                {
+                    Credentials = System.Net.CredentialCache.DefaultCredentials,
+                    PooledConnectionLifetime = TimeSpan.FromMinutes(5),
+                })
+                {
+                    BaseAddress = ODataMonitorClient.BuildBaseAddress(citrix),
+                    Timeout = TimeSpan.FromSeconds(citrix.RequestTimeoutSeconds),
+                }, citrix, controllerDirectory));
+        }
     }
 
     builder.Services.AddSingleton(sp => new CitrixSessionProvider(
@@ -149,6 +173,13 @@ if (options.DataProtection.KeyDirectory is { Length: > 0 } keyDir)
         if (!OperatingSystem.IsWindows()) throw new InvalidOperationException("Sss:DataProtection:ProtectToSid needs Windows.");
         dp.ProtectKeysWithDpapiNG($"SID={sid}", Microsoft.AspNetCore.DataProtection.XmlEncryption.DpapiNGProtectionDescriptorFlags.None);
     }
+}
+else if (OperatingSystem.IsWindows())
+{
+    // Keys of a single server: in the data folder and encrypted for the account of the app pool (DPAPI). Without an encryptor ASP.NET Core writes
+    // the keys in clear text and logs a warning to the Windows event log at every start of the app pool (event 35).
+    dp.PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(dataDir, "keys")));
+    dp.ProtectKeysWithDpapi(protectToLocalMachine: true);   // machine scope: works whether or not the app pool loads a user profile
 }
 
 // CSRF: the token travels in a header, the matching secret in a SameSite=Strict, HttpOnly cookie.
@@ -222,7 +253,7 @@ if (!app.Environment.IsDevelopment()) app.UseHsts();
 app.UseExceptionHandler(errorApp => errorApp.Run(ctx =>
 {
     var ex = ctx.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerFeature>()?.Error;
-    ctx.Response.StatusCode = ex is ProviderUnavailableException ? StatusCodes.Status503ServiceUnavailable : StatusCodes.Status500InternalServerError;
+    ctx.Response.StatusCode = ex is ProviderUnavailableException ? StatusCodes.Status503ServiceUnavailable : ex is ActionNotSupportedException ? StatusCodes.Status501NotImplemented : StatusCodes.Status500InternalServerError;
     return Task.CompletedTask;
 }));
 
@@ -334,6 +365,7 @@ api.MapGet("/me", (HttpContext http, HelpdeskAccess helpdesk, ProcessService pro
             refreshSeconds = options.RefreshSeconds,
             ranges = SessionService.Ranges.Keys,
             demo = mockProvider,
+            cloud = !mockProvider && options.Citrix.Cloud.Enabled,
             helpdesk = helpdesk.IsHelpdesk(http),
             caps = new
             {
@@ -550,6 +582,7 @@ hd.MapGet("/config", (IConfigurationRoot root) => Results.Ok(EffectiveConfig.Bui
 // Environment tab: Workspace app versions and locations of all live sessions (counts only).
 // Insights: what is conspicuous right now, the logon time of each delivery group and a short history of one user (counts and times only).
 hd.MapGet("/insights", async (InsightsService svc, CancellationToken ct) => Results.Ok(await svc.GetAsync(ct))).RequireCap(Cap.View);
+hd.MapGet("/insights/map", async (InsightsService svc, CancellationToken ct) => Results.Ok(await svc.MapAsync(ct))).RequireCap(Cap.View);
 hd.MapGet("/insights/records", async (string? kind, int? hours, InsightsService svc, CancellationToken ct) =>
     kind is not ("faults" or "failures") || !InsightsService.Periods.Contains(hours ?? 24) ? Results.BadRequest("Unknown kind or period.") : Results.Ok(await svc.RecordsAsync(kind, hours ?? 24, ct))).RequireCap(Cap.View);
 hd.MapGet("/insights/group", async (string? name, InsightsService svc, CancellationToken ct) =>

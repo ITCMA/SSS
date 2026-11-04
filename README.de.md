@@ -8,9 +8,9 @@ SSS ist ein kleines, schnelles Web-Portal für **Citrix Virtual Apps and Desktop
 
 <p align="center">
   <img src="docs/img/overview-light.png" alt="Selbstbedienung: Übersicht mit Qualitäts-Ampeln" width="49%">
-  <img src="docs/img/overview-dark.png" alt="Dunkelmodus" width="49%">
+  <img src="docs/img/map-light.png" alt="Weltkarte der Live-Sitzungen mit Suche" width="49%">
 </p>
-<p align="center"><em>Demodaten, heller und dunkler Modus</em></p>
+<p align="center"><em>Demodaten: die Übersicht eines Benutzers und die Weltkarte des Helpdesks. <a href="docs/GALLERY.de.md">Mehr Bilder</a></em></p>
 
 > **Status: Beta.** Durchgängig getestet auf Testfarmen mit Citrix Virtual Apps and Desktops **2203, 2402, 2507 und 2607 (LTSR)** (jeweils ein Delivery Controller). Mehrere Delivery Controller und mehrere Webserver sind umgesetzt ([Doku](docs/MULTI-SERVER.de.md)), aber noch nicht in einer echten Umgebung geprüft. Ausprobieren geht ohne Citrix: Der eingebaute Demo-Modus braucht nur das .NET SDK.
 
@@ -44,13 +44,16 @@ Mitglieder der AD-Gruppen der [Rollen](docs/ROLES.de.md) bekommen einen **Helpde
 - **Anwendungen und Prozesse beenden** einer Sitzung über einen eingeschränkten Endpunkt auf den VDAs (standardmäßig aus).
 - **„Support-Info kopieren“** legt die wichtigsten Fakten einer Sitzung für ein Ticket in die Zwischenablage.
 - **Insights-Reiter**: was gerade auffällig ist (langsame Verbindungen und Anmeldungen, nicht registrierte oder ausgelastete Maschinen), Anmeldezeit je Bereitstellungsgruppe, Maschinenübersicht und die letzten 30 Tage eines Benutzers auf einen Blick ([docs/INSIGHTS.de.md](docs/INSIGHTS.de.md)). Benutzer sehen ihre Sitzungen als übersichtliche Karten.
+- **Karte**: alle Live-Sitzungen auf einer Weltkarte mit Zoom bis zur einzelnen Sitzung und Suche nach Benutzern, Geräten und Orten; die Kartendaten sind enthalten, nichts geht an einen Kartendienst ([docs/MAP.de.md](docs/MAP.de.md)).
 - **Umgebungs-Reiter** für Admins, mit Diagrammen und Tabellen: Workspace-App-Versionen und Plattformen aller Live-Sitzungen, Sitzungen je Standort, VDA-Maschinen nach Zustand und Agent-Version, die am häufigsten gestarteten Anwendungen, dazu ein Hinweis für Benutzer mit veraltetem Client.
+- **Citrix Cloud (DaaS)**: ein Nur-Lese-Modus, der statt eines Delivery Controllers den Monitor-Dienst der Cloud liest ([docs/CLOUD.de.md](docs/CLOUD.de.md)), noch nicht gegen einen echten Mandanten getestet.
 - **Statusseite** mit Live-Prüfungen statt Suche in der Ereignisanzeige; **Audit-Protokoll** für jede Suche, Ansicht, Abmeldung, Nachricht und Prozessaktion: wer was an wem getan hat, mit Hash-Kette, einem **Audit-Reiter** für den Auditor und Kopien an einen **zentralen Ort** (UNC-Ordner, Syslog/CEF, HTTP/SIEM, SNMP).
 
 <p align="center">
-  <img src="docs/img/processes-light.png" alt="Anwendungen und Prozesse einer Sitzung" width="49%">
+  <img src="docs/img/insights-light.png" alt="Insights-Reiter mit Auffälligkeiten, Anmeldezeit je Gruppe und getrennten Sitzungen" width="49%">
   <img src="docs/img/environment-light.png" alt="Reiter Umgebung mit Diagrammen zu Plattformen, Standorten, VDA-Maschinen und Anwendungen" width="49%">
 </p>
+<p align="center"><em>Insights: was gerade auffällt; und der Umgebungs-Reiter</em></p>
 
 ## Warum SSS
 
@@ -97,6 +100,9 @@ ASPNETCORE_ENVIRONMENT=Development ASPNETCORE_URLS=http://localhost:5080 dotnet 
 | [Rollen](docs/ROLES.de.md) | Helpdesk-Stufen, Auditor, Admin, optionale Ticketnummer |
 | [Audit-Protokoll und zentrales Logging](docs/AUDIT.de.md) | wer hat was getan, Ziele (UNC, Syslog/CEF, HTTP, SNMP), Integrität |
 | [Insights](docs/INSIGHTS.de.md) | Auffälligkeiten, Gruppenvergleich, Benutzer-Verlauf, Karten |
+| [Karte](docs/MAP.de.md) | Live-Sitzungen auf einer Weltkarte, Suche, Datenschutz |
+| [Bildergalerie](docs/GALLERY.de.md) | alle Bilder, mit einem Skript neu erzeugt |
+| [Citrix Cloud](docs/CLOUD.de.md) | DaaS, nur lesend: Einrichtung, Grenzen |
 | [Umgebung](docs/ENVIRONMENT.de.md) | Client-Versionen und Standorte, Hinweis bei veraltetem Client |
 | [Delivery Controller](docs/CONTROLLERS.de.md) | Erkennung, Lastverteilung, virtuelle Adresse |
 | [Mehrere Controller und Server](docs/MULTI-SERVER.de.md) | Serverliste, Konfigurationsabgleich, Ausleiten, Load Balancer, Kerberos-Alias, Monitor über HTTPS |
@@ -121,7 +127,10 @@ ASPNETCORE_ENVIRONMENT=Development ASPNETCORE_URLS=http://localhost:5080 dotnet 
 - [ ] Mehrere Citrix-Sites in einer Ansicht
 - [ ] Freundliches „Schließen“ einer Anwendung (braucht einen Helfer in der Sitzung des Benutzers)
 - [ ] Engere eigene Citrix-Rolle für das Dienstkonto ([so leitest du sie her](docs/PERMISSIONS.de.md#die-rolle-enger-fassen-offen-vor-10))
-- [ ] Citrix-Cloud-Backend (DaaS)
+- [x] Citrix-Cloud-Backend (DaaS), nur lesend ([Beschreibung](docs/CLOUD.de.md)), noch nicht gegen einen echten Mandanten getestet
+- [ ] Citrix Cloud: Abmelden und Nachrichten über die DaaS-REST-API
+- [ ] Als Nächstes: Zeitleiste „Was hat sich geändert“ aus dem Audit, Gesundheitswert je Benutzer und Maschine, Auslastung der Maschinen und Anwendungsnutzung, Kostenansicht, Anwendungsstartzeiten
+- [ ] Langzeitverlauf (Wochen und Monate) mit einer optionalen kleinen Datenbank (SQL) zusätzlich zur Variante nur mit Dateien
 - [ ] 1.0 nach einer öffentlichen Beta-Phase
 
 ## Lizenz

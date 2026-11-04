@@ -28,6 +28,9 @@ public sealed class CitrixOptions
     /// <summary>Time limit of one Broker or Monitor request in seconds.</summary>
     public int RequestTimeoutSeconds { get; set; } = 20;
 
+    /// <summary>Citrix Cloud (DaaS) instead of an on-premises site: read-only, through the Monitor service in the cloud.</summary>
+    public CloudOptions Cloud { get; set; } = new();
+
     /// <summary>History, quality data and the expert view (Monitor OData).</summary>
     public MonitorOptions Monitor { get; set; } = new();
 

@@ -6,6 +6,7 @@
   <meta name="color-scheme" content="light dark">
   <title>SSS – Session Self Service</title>
   <link rel="stylesheet" href="app.css">
+  <script src="worldmap.js" defer></script>
   <script src="app.js" defer></script>
 </head>
 <body>
@@ -41,12 +42,14 @@
     </div>
   </header>
 
+  <div id="cloud" class="banner" role="note" hidden data-i18n="cloudNote"></div>
   <div id="demo" class="banner" role="note" hidden data-i18n="demo"></div>
 
   <nav id="tabs" class="tabs" hidden data-i18n-aria="ariaViews" aria-label="Views">
     <button type="button" id="tab-mine" aria-pressed="true" data-i18n="tabMine">My sessions</button>
     <button type="button" id="tab-hd" aria-pressed="false" data-i18n="tabHelpdesk">Helpdesk</button>
     <button type="button" id="tab-insights" aria-pressed="false" data-i18n="tabInsights" hidden>Insights</button>
+    <button type="button" id="tab-map" aria-pressed="false" data-i18n="tabMap" hidden>Map</button>
     <button type="button" id="tab-sys" aria-pressed="false" data-i18n="tabStatus">Status</button>
     <button type="button" id="tab-env" aria-pressed="false" data-i18n="tabEnv" hidden>Environment</button>
     <button type="button" id="tab-audit" aria-pressed="false" data-i18n="tabAudit" hidden>Audit</button>
@@ -98,6 +101,32 @@
         <div class="table-wrap"><table id="cfg-table"><caption class="sr" data-i18n="cfgTitle"></caption><thead></thead><tbody></tbody></table></div>
         <p id="cfg-none" class="muted" hidden data-i18n="auditNone">Nothing found.</p>
       </details>
+    </section>
+
+    <!-- Map (helpdesk): live sessions on a world map -->
+    <section id="map" hidden aria-labelledby="map-h">
+      <div class="section-head">
+        <h2 id="map-h" data-i18n="mapTitle">Map</h2>
+        <button type="button" id="map-refresh" data-i18n="refresh">Refresh</button>
+      </div>
+      <p class="muted" data-i18n="mapIntro">Live sessions by the location Citrix reports for the client. Zoom with the wheel or the buttons, move the map by dragging.</p>
+      <p id="map-demo" class="muted" hidden></p>
+      <form id="map-search" class="mapbar" role="search">
+        <label class="sr" for="map-q" data-i18n="mapSearchLabel">Search user, device, city</label>
+        <input id="map-q" type="search" autocomplete="off" data-i18n-ph="mapSearchPh" placeholder="Search user, device, machine or city">
+        <button type="submit" data-i18n="mapGo">Show</button>
+        <span class="mapzoom">
+          <button type="button" id="map-zoom-in" data-i18n-aria="mapZoomIn" aria-label="Zoom in">+</button>
+          <button type="button" id="map-zoom-out" data-i18n-aria="mapZoomOut" aria-label="Zoom out">−</button>
+          <button type="button" id="map-reset" data-i18n="mapResetView">Whole world</button>
+        </span>
+      </form>
+      <div id="map-results"></div>
+      <div class="mapbox"><svg id="map-svg" viewBox="0 110 3600 1390" role="application" tabindex="0" data-i18n-aria="mapAria" aria-label="World map of live sessions; arrow keys move, plus and minus zoom"></svg></div>
+      <p id="map-total" class="muted"></p>
+      <div id="map-place" class="mapplace" hidden aria-live="polite"></div>
+      <div id="map-unlocated" hidden></div>
+      <p class="muted mapcredit" data-i18n="mapCredit">Map data: Natural Earth (public domain), bundled with SSS. No position data leaves the server.</p>
     </section>
 
     <!-- Environment (admin): Workspace app versions and locations of all live sessions -->
