@@ -446,5 +446,15 @@
   "sumReconnects": "{n} automatic reconnect(s)",
   "cardsAllGood": "Everything looks fine.",
   "cardsAttention": "A connection is not optimal.",
-  "cardsCount": "{n} session(s): {a} active, {d} disconnected."
+  "cardsCount": "{n} session(s): {a} active, {d} disconnected.",
+  "sumHeading": "History of the user",
+  "sumVerdict_ok": "Stable",
+  "sumVerdict_attention": "Worth a look",
+  "sumVerdict_poor": "Frequent problems",
+  "sumTileSessions": "Sessions",
+  "sumTileLogon": "Average logon time",
+  "sumTileFailures": "Connection failures",
+  "sumTileReconnects": "Automatic reconnects",
+  "sumYou": "User",
+  "sumGroupShort": "Group"
 }

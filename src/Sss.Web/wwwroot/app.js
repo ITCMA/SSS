@@ -782,9 +782,26 @@ async function loadUserSummary() {
   p.hidden = !d || d.sessions === 0;
   if (p.hidden) return;
   const sym = { ok: '✔', attention: '▲', poor: '✖' }[d.verdict] ?? '';
-  const logon = d.avgLogonSeconds == null ? '' : ` · ${t('sumLogon', { avg: d.avgLogonSeconds })}${d.groupAvgSeconds != null ? ` ${t('sumGroup', { avg: d.groupAvgSeconds })}` : ''}`;
+  const tile = (label, big, cls, ...more) => el('div', { class: `sumtile ${cls}` }, el('small', { text: label }), el('strong', { text: big }), ...more);
+  // the user's average logon time against the group's, as two bars on one scale
+  const scale = Math.max(d.avgLogonSeconds ?? 0, d.groupAvgSeconds ?? 0, 1);
+  const bar = (label, v, cls) => {
+    const w = 140, svg = svgEl('svg', { viewBox: `0 0 ${w} 8`, width: String(w), height: '8', 'aria-hidden': 'true' });
+    svg.append(svgEl('rect', { class: `slice ${cls}`, x: '0', y: '0', width: String(Math.max(2, w * v / scale)), height: '8', rx: '2' }));
+    return el('div', { class: 'cmpbar' }, el('span', { text: label }), svg, el('span', { text: `${v} s` }));
+  };
+  const slow = d.groupAvgSeconds != null && d.avgLogonSeconds != null && d.avgLogonSeconds >= d.groupAvgSeconds * 1.5;
+  const tiles = [
+    tile(t('sumTileSessions'), String(d.sessions), ''),
+    d.avgLogonSeconds == null ? null : tile(t('sumTileLogon'), `${d.avgLogonSeconds} s`, slow ? 'bad' : '',
+      ...(d.groupAvgSeconds != null ? [bar(t('sumYou'), d.avgLogonSeconds, slow ? 'cat4' : 'cat0'), bar(t('sumGroupShort'), d.groupAvgSeconds, 'cat1')] : [])),
+    tile(t('sumTileFailures'), String(d.failures), d.failures > 0 ? (d.failures >= 5 ? 'bad' : 'warn') : 'good'),
+    tile(t('sumTileReconnects'), String(d.reconnects), d.reconnects > 0 ? (d.reconnects >= 5 ? 'bad' : 'warn') : 'good'),
+  ].filter(Boolean);
   p.className = `usersummary ${d.verdict}`;
-  p.textContent = `${sym} ${t('sumTitle', { days: d.days })}: ${t('sumSessions', { n: d.sessions })}${logon} · ${t('sumFailures', { n: d.failures })} · ${t('sumReconnects', { n: d.reconnects })}`;
+  $('user-summary-body').replaceChildren(
+    el('p', { class: 'sumverdict' }, el('span', { class: 'sumsym', 'aria-hidden': 'true', text: sym }), el('strong', { text: ` ${t(`sumVerdict_${d.verdict}`)}` }), el('span', { class: 'muted', text: ` · ${t('sumTitle', { days: d.days })}` })),
+    el('div', { class: 'sumtiles' }, ...tiles));
 }
 
 // ---------- audit trail (auditor role) ----------

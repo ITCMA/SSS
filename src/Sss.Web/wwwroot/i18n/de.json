@@ -446,5 +446,15 @@
   "sumReconnects": "{n} automatische Wiederverbindung(en)",
   "cardsAllGood": "Alles in Ordnung.",
   "cardsAttention": "Eine Verbindung ist nicht optimal.",
-  "cardsCount": "{n} Sitzung(en): {a} aktiv, {d} getrennt."
+  "cardsCount": "{n} Sitzung(en): {a} aktiv, {d} getrennt.",
+  "sumHeading": "Verlauf des Benutzers",
+  "sumVerdict_ok": "Stabil",
+  "sumVerdict_attention": "Einen Blick wert",
+  "sumVerdict_poor": "Häufige Probleme",
+  "sumTileSessions": "Sitzungen",
+  "sumTileLogon": "Durchschnittliche Anmeldezeit",
+  "sumTileFailures": "Verbindungsfehler",
+  "sumTileReconnects": "Automatische Wiederverbindungen",
+  "sumYou": "Benutzer",
+  "sumGroupShort": "Gruppe"
 }
