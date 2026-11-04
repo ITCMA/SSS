@@ -2,7 +2,7 @@
 
 All notable changes to SSS. The project follows [Semantic Versioning](docs/COMPATIBILITY.md); versions below 1.0.0 may still change configuration keys between minor versions, and every such change is listed here.
 
-## Unreleased
+## 0.4.4 - 2026-11-05 (beta)
 
 ### Added
 - **Insights, more**: machine load of the last 7 days (CPU and memory, average and peak, from `ResourceUtilizationSummary`), start times of applications (average, 90th percentile and the machine where an application starts slowest, from `HistoricalApplicationLaunches`; user names are not read), costs and savings of the last 30 days per delivery group (`MachineCostAllocationSummaries`) and a timeline "What changed" (machine registered, lost its registration, switched on; for the auditor also log-offs, messages and ended processes from the audit trail). Each part says so when the site delivers no data.
