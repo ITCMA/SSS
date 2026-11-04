@@ -550,6 +550,8 @@ hd.MapGet("/config", (IConfigurationRoot root) => Results.Ok(EffectiveConfig.Bui
 // Environment tab: Workspace app versions and locations of all live sessions (counts only).
 // Insights: what is conspicuous right now, the logon time of each delivery group and a short history of one user (counts and times only).
 hd.MapGet("/insights", async (InsightsService svc, CancellationToken ct) => Results.Ok(await svc.GetAsync(ct))).RequireCap(Cap.View);
+hd.MapGet("/insights/records", async (string? kind, int? hours, InsightsService svc, CancellationToken ct) =>
+    kind is not ("faults" or "failures") || !InsightsService.Periods.Contains(hours ?? 24) ? Results.BadRequest("Unknown kind or period.") : Results.Ok(await svc.RecordsAsync(kind, hours ?? 24, ct))).RequireCap(Cap.View);
 hd.MapGet("/insights/group", async (string? name, InsightsService svc, CancellationToken ct) =>
     name is null || name.Length is 0 or > 80 ? Results.BadRequest("Invalid group.") : await svc.GroupAsync(name, ct) is { } g ? Results.Ok(g) : Results.NotFound()).RequireCap(Cap.View);
 hd.MapGet("/users/summary", async (string? sid, int? days, InsightsService svc, CancellationToken ct) =>

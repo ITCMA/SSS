@@ -15,7 +15,8 @@ public sealed record BrokerSession(
     string? ClientAddress,
     IReadOnlyList<string> Apps,
     string? UserName = null,
-    string? UserSid = null);
+    string? UserSid = null,
+    DateTimeOffset? StateChanged = null);
 
 public sealed record BrokerProcess(int Id, string Name, int SessionId, DateTimeOffset? Started, int MemoryMb, string? Window, bool IsApp = false, string? Path = null, string? Description = null);
 

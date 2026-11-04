@@ -91,7 +91,7 @@ public class InsightsTests
     {
         HelpdeskSession H(string user, SessionState state, int? idle) => new(new SessionInfo("1", "SAP", "Application", "DG1", "m1", DateTimeOffset.UtcNow, null, state, idle, null, null,
             new Sss.Web.Models.SessionQuality(null, null, null, null, Health.Unknown, Health.Unknown)), user, "S-1-5-21-1-1-1-1");
-        var f = InsightsService.DisconnectedFindings([H("a", SessionState.Disconnected, 9 * 3600), H("b", SessionState.Disconnected, 600), H("c", SessionState.Active, 99999)]);
+        var f = InsightsService.DisconnectedFindings([H("a", SessionState.Disconnected, 9 * 3600), H("b", SessionState.Disconnected, 600), H("c", SessionState.Active, 99999)], DateTimeOffset.UtcNow);
         Assert.Equal("a", f.Single().Subject);
         Assert.Equal(9, f.Single().Value);
 
@@ -107,6 +107,46 @@ public class InsightsTests
         var rows = InsightsService.Count([new("outlook", "m1"), new("outlook", "m1"), new("outlook", "m2"), new("excel", null)], names);
         Assert.Equal(("outlook", 3, 2, "vda1"), (rows[0].Name, rows[0].Count, rows[0].Machines, rows[0].TopMachine));
         Assert.Equal(("excel", 1, 0, null), (rows[1].Name, rows[1].Count, rows[1].Machines, rows[1].TopMachine));
+    }
+
+    [Fact]
+    public void Records_are_joined_with_session_user_and_machine_and_summarised_with_a_hint()
+    {
+        var m1 = new MachineInfo("vda1.corp.local", "DG1", "2507", "Windows", 1, 3, false, 1, null, null, "M1");
+        var sessions = new Dictionary<string, MonitorSession> { ["k1"] = S("k1", user: 5) with { MachineId = "M1", ClientName = "PC9" }, ["k2"] = S("k2", user: 6) with { MachineId = "M1" }, ["k3"] = S("k3", user: 5) with { MachineId = "M1" } };
+        var users = new Dictionary<long, MonitorUser> { [5] = new("CORP\\a", "S-1-5-21-1-1-1-5"), [6] = new("CORP\\b", "S-1-5-21-1-1-1-6") };
+        var at = DateTimeOffset.Parse("2026-11-04T10:00:00Z");
+        FaultRecord F(string name, string key, int min) => new(name, null, at.AddMinutes(min), key, null, [new DetailItem("Version", "1.2")]);
+        var rows = InsightsService.Rows([F("outlook", "k1", 0), F("outlook", "k2", 5), F("outlook", "k3", 9), F("excel", "k1", 3)], sessions, users, [m1]);
+
+        Assert.Equal("outlook", rows[0].Name);                                                   // newest first
+        Assert.Equal(("CORP\\a", "vda1.corp.local", "DG1", "PC"), (rows[0].User, rows[0].Machine, rows[0].Group, rows[0].Client));
+        Assert.Equal("PC9", rows.First(r => r.Name == "excel").Client);
+        var sum = InsightsService.Summarize(rows);
+        var o = sum.Single(x => x.Name == "outlook");
+        Assert.Equal((3, 2, 1, "oneMachine"), (o.Count, o.Users, o.Machines, o.Hint));          // several users, one machine
+        Assert.Equal(["1.2"], o.Versions);
+        Assert.Equal("few", sum.Single(x => x.Name == "excel").Hint);
+    }
+
+    [Fact]
+    public async Task Records_are_read_for_the_allowed_periods_only()
+    {
+        var svc = Make(demo: true);
+        Assert.True((await svc.RecordsAsync("faults", 3, default)).Summary.Count > 0);
+        await Assert.ThrowsAsync<ArgumentException>(() => svc.RecordsAsync("faults", 5, default));
+        await Assert.ThrowsAsync<ArgumentException>(() => svc.RecordsAsync("users", 1, default));
+    }
+
+    [Fact]
+    public void Disconnected_sessions_are_listed_longest_first_with_the_state_change_time()
+    {
+        var now = DateTimeOffset.Parse("2026-11-04T12:00:00Z");
+        HelpdeskSession H(string user, int? idle, DateTimeOffset? changed) => new(new SessionInfo("1", "SAP", "Application", "DG1", "m1", now, null, SessionState.Disconnected, idle, null, null,
+            new Sss.Web.Models.SessionQuality(null, null, null, null, Health.Unknown, Health.Unknown), StateChangedAt: changed), user, "S-1-5-21-1-1-1-1");
+        var rows = InsightsService.DisconnectedRows([H("recent", null, now.AddMinutes(-30)), H("old", null, now.AddHours(-7)), H("fromIdle", 5 * 3600, null)], now);
+        Assert.Equal(["old", "fromIdle", "recent"], rows.Select(r => r.User));
+        Assert.Equal(7, rows[0].Hours);
     }
 
     [Fact]

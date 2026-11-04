@@ -35,7 +35,8 @@ public sealed record SessionInfo(
     string? SessionKey = null,
     string? ClientVersion = null,
     string? ClientPlatform = null,
-    bool ClientOutdated = false);
+    bool ClientOutdated = false,
+    DateTimeOffset? StateChangedAt = null);
 
 /// <summary>Sessions plus non-fatal problems (e.g. "history-unavailable") the UI can tell the user about.</summary>
 public sealed record SessionQueryResult(IReadOnlyList<SessionInfo> Sessions, IReadOnlyList<string> Warnings);

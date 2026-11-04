@@ -147,7 +147,7 @@ public sealed class CitrixSessionProvider(
         NullIfEmpty(b.ClientAddress) ?? m?.ClientAddress,
         quality.Evaluate(m?.IcaRttMs, m?.BandwidthKbps, m?.LogonSeconds, m?.LoadIndex, m?.MeasuredAt),
         b.SessionKey ?? m?.SessionKey,
-        m?.ClientVersion, m?.ClientPlatform, Outdated(m));
+        m?.ClientVersion, m?.ClientPlatform, Outdated(m), b.StateChanged);
 
     // The hint for the user: only when a minimum version is configured and the own client is below it.
     private bool Outdated(MonitorSession? m) =>

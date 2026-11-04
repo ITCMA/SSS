@@ -750,17 +750,71 @@ function sparkline(values, bad) {
   return svg;
 }
 
-function countTable(table, rows) {
-  table.tHead.replaceChildren(el('tr', {}, ...['insName', 'insCount', 'insMachinesCount', 'insTopMachine'].map((k) => el('th', { scope: 'col', text: t(k) }))));
-  const max = Math.max(1, ...rows.map((r) => r.count));
-  table.tBodies[0].replaceChildren(...rows.map((r) => el('tr', {}, cell(t('insName'), r.name),
-    cell(t('insCount'), el('span', {}, `${r.count} `, shareBar(r.count, max))), cell(t('insMachinesCount'), String(r.machines)), cell(t('insTopMachine'), r.topMachine ?? ''))));
+// Crashes and failures: counted by application or reason, switchable between the last 1 and 24 hours, with a detail dialog per row.
+const recState = { faults: { hours: 24, data: null }, failures: { hours: 24, data: null } };
+const fmtTime = (iso) => (iso ? new Intl.DateTimeFormat(state.lang, { dateStyle: 'short', timeStyle: 'medium' }).format(new Date(iso)) : '');
+
+async function loadRecords(kind) {
+  const st = recState[kind], table = $(`ins-${kind}`);
+  const r = await fetch(`api/helpdesk/insights/records?kind=${kind}&hours=${st.hours}`, { credentials: 'same-origin' });
+  if (!r.ok) { st.data = null; renderRecords(kind); return; }
+  st.data = await r.json();
+  renderRecords(kind);
+}
+
+function renderRecords(kind) {
+  const st = recState[kind], table = $(`ins-${kind}`), sum = st.data?.summary ?? [];
+  const max = Math.max(1, ...sum.map((s) => s.count));
+  table.tHead.replaceChildren(el('tr', {}, ...['insName', 'insCount', 'insUsers', 'insMachinesCount', 'insFirst', 'insLast', 'colAction'].map((k) => el('th', { scope: 'col', text: t(k) }))));
+  table.tBodies[0].replaceChildren(...sum.map((s) => {
+    const b = el('button', { type: 'button', text: t('insDetails'), 'aria-label': `${t('insDetails')}: ${s.name}` });
+    b.addEventListener('click', () => openRecordDetail(kind, s));
+    return el('tr', {}, cell(t('insName'), s.name), cell(t('insCount'), el('span', {}, `${s.count} `, shareBar(s.count, max))),
+      cell(t('insUsers'), String(s.users)), cell(t('insMachinesCount'), s.topMachine && s.machines > 1 ? `${s.machines} (${s.topMachine})` : (s.topMachine ?? String(s.machines))),
+      cell(t('insFirst'), fmtTime(s.first)), cell(t('insLast'), fmtTime(s.last)), cell(t('colAction'), b));
+  }));
+  table.hidden = sum.length === 0;
+  $(`ins-${kind}-none`).hidden = sum.length > 0;
+}
+
+function openRecordDetail(kind, s) {
+  const rows = (recState[kind].data?.rows ?? []).filter((r) => r.name.toLowerCase() === s.name.toLowerCase());
+  $('ins-detail-h').textContent = s.name;
+  $('ins-detail-sub').textContent = t('insDetailSub', { n: s.count, users: s.users, machines: s.machines, hours: recState[kind].data.hours })
+    + (s.versions?.length ? ` · ${t('insVersions')}: ${s.versions.join(', ')}` : '');
+  const hint = $('ins-detail-hint');
+  hint.textContent = s.hint === 'few' ? '' : t(`insHint_${s.hint}`, { machine: s.topMachine ?? '', user: s.topUser ?? '' });
+  hint.hidden = !hint.textContent;
+  const itemKeys = [...new Set(rows.flatMap((r) => r.items.map((i) => i.key)))].slice(0, 8);
+  const head = ['insWhen', 'insUser', 'colMachine', 'colGroup', 'colClient'];
+  const table = $('ins-detail-table');
+  table.replaceChildren(el('thead', {}, el('tr', {}, ...head.map((k) => el('th', { scope: 'col', text: t(k) })), ...itemKeys.map((k) => el('th', { scope: 'col', text: fieldLabel(k) })))),
+    el('tbody', {}, ...rows.map((r) => {
+      const userCell = r.userSid ? (() => { const b = el('button', { type: 'button', text: r.user }); b.addEventListener('click', () => { $('ins-detail').close(); openUser(r.userSid, r.user); }); return b; })() : (r.user ?? '');
+      return el('tr', {}, cell(t('insWhen'), fmtTime(r.at)), cell(t('insUser'), userCell), cell(t('colMachine'), r.machine ?? ''), cell(t('colGroup'), r.group ?? ''), cell(t('colClient'), r.client ?? ''),
+        ...itemKeys.map((k) => { const i = r.items.find((x) => x.key === k); return cell(fieldLabel(k), i ? fmtItem(i) : ''); }));
+    })));
+  $('ins-detail').showModal();
+}
+
+function renderDisconnected(rows) {
+  const table = $('ins-disc');
+  table.tHead.replaceChildren(el('tr', {}, ...['insUser', 'colResource', 'colMachine', 'colGroup', 'insSince', 'colAction'].map((k) => el('th', { scope: 'col', text: t(k) }))));
+  table.tBodies[0].replaceChildren(...rows.map((r) => {
+    const b = el('button', { type: 'button', text: t('insOpenUser'), 'aria-label': `${t('insOpenUser')}: ${r.user}` });
+    b.addEventListener('click', () => openUser(r.userSid, r.user));
+    return el('tr', {}, cell(t('insUser'), r.user), cell(t('colResource'), r.application), cell(t('colMachine'), r.machine), cell(t('colGroup'), r.group),
+      cell(t('insSince'), el('span', { class: r.hours >= 4 ? 'state-disconnected' : '', text: r.since ? `${fmtTime(r.since)} (${t('insHours', { n: r.hours })})` : '' })), cell(t('colAction'), b));
+  }));
   table.hidden = rows.length === 0;
+  $('ins-disc-none').hidden = rows.length > 0;
 }
 
 function renderInsights(d) {
-  countTable($('ins-faults'), d.faults ?? []);
-  countTable($('ins-failures'), d.failures ?? []);
+  for (const o of document.querySelectorAll('.ins-hours option')) o.textContent = t('insLastHours', { n: o.value });
+  renderDisconnected(d.disconnected ?? []);
+  loadRecords('faults').catch(() => {});
+  loadRecords('failures').catch(() => {});
   $('ins-findings').replaceChildren(...d.findings.map((f) => {
     const [sym, cls] = SEV[f.severity] ?? SEV.info;
     return el('li', { class: `finding ${cls}` }, el('span', { class: 'sym', 'aria-hidden': 'true', text: sym }),
@@ -1741,6 +1795,13 @@ async function init() {
   $('tab-audit').addEventListener('click', () => showView('audit'));
   $('tab-env').addEventListener('click', () => showView('env'));
   $('tab-insights').addEventListener('click', () => showView('insights'));
+  for (const kind of ['faults', 'failures']) {
+    const sel = $(`ins-${kind}-hours`);
+    for (const h of [1, 3, 6, 12, 24]) sel.append(el('option', { value: String(h), text: t('insLastHours', { n: h }) }));
+    sel.value = '24';
+    sel.addEventListener('change', () => { recState[kind].hours = Number(sel.value); loadRecords(kind).catch(() => setStatus(t('error'), true)); });
+  }
+  $('ins-detail-close').addEventListener('click', () => $('ins-detail').close());
   $('ins-refresh').addEventListener('click', () => loadInsights().catch(() => setStatus(t('error'), true)));
   $('env-refresh').addEventListener('click', () => loadEnv().catch(() => setStatus(t('error'), true)));
   $('cfg').addEventListener('toggle', () => { if ($('cfg').open) loadCfg().catch(() => setStatus(t('error'), true)); });

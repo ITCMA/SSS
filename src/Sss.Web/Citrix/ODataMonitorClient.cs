@@ -40,7 +40,7 @@ public sealed record MachineInfo(string Name, string Group, string AgentVersion,
     DateTimeOffset? RegistrationChanged, string? Fault, string? Id = null, DateTimeOffset? PoweredOn = null);
 
 /// <summary>One application crash (process name and machine id) or one connection failure (reason as the Monitor reports it and machine id).</summary>
-public sealed record FaultRecord(string Name, string? MachineId);
+public sealed record FaultRecord(string Name, string? MachineId, DateTimeOffset? At = null, string? SessionKey = null, long? UserId = null, IReadOnlyList<DetailItem>? Items = null);
 
 public sealed record MonitorUser(string Name, string Sid);
 
@@ -76,6 +76,9 @@ public interface IMonitorClient
 
     /// <summary>Connection failures since <paramref name="since"/> with the reason as the site reports it (empty when the site does not deliver them).</summary>
     Task<IReadOnlyList<FaultRecord>> GetFailuresAsync(DateTimeOffset since, CancellationToken ct) => Task.FromResult<IReadOnlyList<FaultRecord>>([]);
+
+    /// <summary>The sessions with these session keys (user id, machine, delivery group, client, logon time).</summary>
+    Task<IReadOnlyList<MonitorSession>> GetSessionsByKeyAsync(IEnumerable<string> sessionKeys, CancellationToken ct) => Task.FromResult<IReadOnlyList<MonitorSession>>([]);
 
     /// <summary>The newest load index (0-10000) of each machine id.</summary>
     Task<IReadOnlyDictionary<string, int>> GetLoadIndexesAsync(IEnumerable<string> machineIds, CancellationToken ct) => Task.FromResult<IReadOnlyDictionary<string, int>>(new Dictionary<string, int>());
@@ -217,12 +220,12 @@ public sealed partial class ODataMonitorClient(HttpClient http, CitrixOptions op
         {
             if ((await MetaAsync(ct)).FirstOrDefault(e => e.Key.StartsWith("ApplicationFault", StringComparison.OrdinalIgnoreCase)).Value is not { } props || !props.ContainsKey("FaultReportedDate")) return [];
             return (await PagedJsonAsync($"ApplicationFaults?$filter={Esc($"FaultReportedDate ge {iso}")}&$orderby=FaultReportedDate%20desc&$top=500", ct))
-                .Select(r => new FaultRecord(Short(Str(r, "ProcessName") ?? Str(r, "FaultingApplicationPath")?.Split('\\', '/').Last()) ?? "?", Str(r, "MachineId"))).ToList();
+                .Select(r => ToRecord(r, "FaultReportedDate", Short(Str(r, "ProcessName") ?? Str(r, "FaultingApplicationPath")?.Split('\\', '/').Last()) ?? "?")).ToList();
         }
         catch (ProviderUnavailableException) { return []; }
     }
 
-    // The failure records differ between Citrix versions: the date, reason and machine are taken from whichever of the usual properties the site lists.
+    // The failure records differ between Citrix versions: the date and reason are taken from whichever of the usual properties the site lists.
     public async Task<IReadOnlyList<FaultRecord>> GetFailuresAsync(DateTimeOffset since, CancellationToken ct)
     {
         var iso = since.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
@@ -233,10 +236,28 @@ public sealed partial class ODataMonitorClient(HttpClient http, CitrixOptions op
             if (date is null) return [];
             var reasonProp = new[] { "FailureReason", "ConnectionFailureEnumValue", "FailureId", "FailureCategory" }.FirstOrDefault(props.ContainsKey);
             return (await PagedJsonAsync($"ConnectionFailureLogs?$filter={Esc($"{date} ge {iso}")}&$orderby={date}%20desc&$top=500", ct))
-                .Select(r => new FaultRecord(reasonProp is null || !TryGet(r, reasonProp, out var v) ? "?" : v.ValueKind == JsonValueKind.String ? Short(v.GetString())! : v.GetRawText(),
-                    props.ContainsKey("MachineId") ? Str(r, "MachineId") : null)).ToList();
+                .Select(r => ToRecord(r, date, reasonProp is null || !TryGet(r, reasonProp, out var v) ? "?" : v.ValueKind == JsonValueKind.String ? Short(v.GetString())! : v.GetRawText())).ToList();
         }
         catch (ProviderUnavailableException) { return []; }
+    }
+
+    // One record with everything the site delivers about it (shown as a detail table), plus the fields that link it to a session, user and machine.
+    private FaultRecord ToRecord(JsonElement r, string dateProp, string name) => new(name, Str(r, "MachineId"), Date(r, dateProp), Str(r, "SessionKey"),
+        TryGet(r, "UserId", out var u) && u.ValueKind == JsonValueKind.Number && u.TryGetInt64(out var uid) ? uid : null,
+        Props(r).Where(p => !p.Name.EndsWith("Key", StringComparison.Ordinal) && p.Name is not ("Id" or "MachineId" or "UserId" or "CreatedDate" or "ModifiedDate"))
+            .Select(p => Format(p.Name, p.Value)).OfType<DetailItem>().Take(14).ToList());
+
+    public async Task<IReadOnlyList<MonitorSession>> GetSessionsByKeyAsync(IEnumerable<string> sessionKeys, CancellationToken ct)
+    {
+        var keys = sessionKeys.Where(k => Guid.TryParse(k, out _)).Select(k => Guid.Parse(k).ToString("D")).Distinct().Take(200).ToList();
+        var result = new List<MonitorSession>();
+        try
+        {
+            foreach (var batch in keys.Chunk(15))
+                result.AddRange(await PagedAsync($"Sessions?$filter={Esc(string.Join(" or ", batch.Select(k => $"SessionKey eq {k}")))}&$expand={Esc(await ExpandAsync(ct))}", ct));
+        }
+        catch (ProviderUnavailableException) { /* names are optional */ }
+        return result;
     }
 
     public async Task<IReadOnlyList<MonitorSession>> GetFarmLiveAsync(CancellationToken ct)

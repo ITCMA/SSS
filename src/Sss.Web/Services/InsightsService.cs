@@ -15,10 +15,22 @@ public sealed record GroupLogon(string Group, int Sessions, int AvgSeconds, int 
 /// <summary>Crashes of one application or failures with one reason, counted over the last 24 hours.</summary>
 public sealed record CountRow(string Name, int Count, int Machines, string? TopMachine);
 
+/// <summary>Crashes of one application or failures with one reason: how many, how many users and machines, when, and what the pattern suggests
+/// (Hint: few, oneMachine, oneUser, oneBoth, widespread).</summary>
+public sealed record RecordSummary(string Name, int Count, int Users, int Machines, string? TopMachine, string? TopUser, DateTimeOffset? First, DateTimeOffset? Last, string Hint, IReadOnlyList<string> Versions);
+
+/// <summary>One crash or failure with the user, machine and delivery group it happened to and everything else the Monitor knows about it.</summary>
+public sealed record RecordRow(DateTimeOffset? At, string Name, string? User, string? UserSid, string? Machine, string? Group, string? Client, IReadOnlyList<DetailItem> Items);
+
+public sealed record RecordsView(DateTimeOffset At, int Hours, string Kind, IReadOnlyList<RecordSummary> Summary, IReadOnlyList<RecordRow> Rows, bool Demo);
+
+/// <summary>A disconnected session: who, what, where and since when.</summary>
+public sealed record DisconnectedRow(string User, string UserSid, string Application, string Machine, string Group, DateTimeOffset? Since, int Hours);
+
 public sealed record MachineHealthRow(string Name, string Group, int? Registration, int? Power, bool Maintenance, int? Sessions, int? LoadIndex, string Health, int? UptimeDays = null);
 
 public sealed record InsightsView(DateTimeOffset At, int LiveSessions, IReadOnlyList<InsightFinding> Findings, IReadOnlyList<GroupLogon> Groups,
-    IReadOnlyList<MachineHealthRow> Machines, bool Demo, IReadOnlyList<CountRow>? Faults = null, IReadOnlyList<CountRow>? Failures = null);
+    IReadOnlyList<MachineHealthRow> Machines, bool Demo, IReadOnlyList<DisconnectedRow>? Disconnected = null);
 
 /// <summary>How one user's last days looked: number of sessions, logon time (against the delivery group), failures and automatic reconnects.
 /// Verdict is "ok", "attention" or "poor".</summary>
@@ -47,11 +59,86 @@ public sealed class InsightsService(SssOptions options, IMonitorClient? monitor,
         try
         {
             if (_cache is { } c2 && clock.GetUtcNow() - c2.At < CacheFor) return c2.View;
-            var view = demo ? Demo() : monitor is null ? new InsightsView(clock.GetUtcNow(), 0, [], [], [], false, [], []) : await BuildAsync(monitor, ct);
+            var view = demo ? Demo() : monitor is null ? new InsightsView(clock.GetUtcNow(), 0, [], [], [], false, []) : await BuildAsync(monitor, ct);
             _cache = (clock.GetUtcNow(), view);
             return view;
         }
         finally { _gate.Release(); }
+    }
+
+    public static readonly int[] Periods = [1, 3, 6, 12, 24];
+    private readonly Dictionary<(string, int), (DateTimeOffset At, RecordsView View)> _records = [];
+
+    /// <summary>Application crashes ("faults") or connection failures of the last 1 to 24 hours, counted by application or reason, with the single records
+    /// (who, when, where) for the detail view.</summary>
+    public async Task<RecordsView> RecordsAsync(string kind, int hours, CancellationToken ct)
+    {
+        if (kind is not ("faults" or "failures") || !Periods.Contains(hours)) throw new ArgumentException("Unknown kind or period.");
+        var now = clock.GetUtcNow();
+        if (_records.TryGetValue((kind, hours), out var c) && now - c.At < CacheFor) return c.View;
+        await _gate.WaitAsync(ct);
+        try
+        {
+            if (_records.TryGetValue((kind, hours), out c) && now - c.At < CacheFor) return c.View;
+            var view = demo ? DemoRecords(kind, hours) : monitor is null ? new RecordsView(now, hours, kind, [], [], false) : await BuildRecordsAsync(monitor, kind, hours, ct);
+            _records[(kind, hours)] = (now, view);
+            return view;
+        }
+        finally { _gate.Release(); }
+    }
+
+    private async Task<RecordsView> BuildRecordsAsync(IMonitorClient m, string kind, int hours, CancellationToken ct)
+    {
+        var now = clock.GetUtcNow();
+        var records = kind == "faults" ? await m.GetFaultsAsync(now.AddHours(-hours), ct) : await m.GetFailuresAsync(now.AddHours(-hours), ct);
+        var machines = await m.GetMachinesAsync(ct);
+        var sessions = (await m.GetSessionsByKeyAsync(records.Select(r => r.SessionKey).OfType<string>(), ct)).ToDictionary(s => s.SessionKey, StringComparer.OrdinalIgnoreCase);
+        var users = await m.GetUsersByIdAsync(records.Select(r => r.UserId ?? (r.SessionKey is not null && sessions.TryGetValue(r.SessionKey, out var s) ? s.UserId : null)).OfType<long>(), ct);
+        var rows = Rows(records, sessions, users, machines);
+        return new RecordsView(now, hours, kind, Summarize(rows), rows.Take(300).ToList(), false);
+    }
+
+    /// <summary>Joins each record with the session (user, client, delivery group) and the machine it belongs to.</summary>
+    public static List<RecordRow> Rows(IReadOnlyList<FaultRecord> records, IReadOnlyDictionary<string, MonitorSession> sessions, IReadOnlyDictionary<long, MonitorUser> users, IReadOnlyList<MachineInfo> machines)
+    {
+        var byId = machines.Where(x => x.Id is not null).ToDictionary(x => x.Id!, StringComparer.OrdinalIgnoreCase);
+        return records.OrderByDescending(r => r.At ?? DateTimeOffset.MinValue).Select(r =>
+        {
+            var s = r.SessionKey is not null && sessions.TryGetValue(r.SessionKey, out var ss) ? ss : null;
+            var uid = r.UserId ?? s?.UserId;
+            var user = uid is { } id && users.TryGetValue(id, out var u) ? u : null;
+            var machineId = r.MachineId ?? s?.MachineId;
+            var machine = machineId is not null && byId.TryGetValue(machineId, out var mi) ? mi : null;
+            return new RecordRow(r.At, r.Name, user?.Name, user?.Sid, machine?.Name ?? s?.Machine ?? (r.MachineId is { Length: >= 8 } mid ? $"({mid[..8]})" : null),
+                machine?.Group ?? s?.DesktopGroup, s?.ClientName, r.Items ?? []);
+        }).ToList();
+    }
+
+    /// <summary>Counts the records by name with users, machines, first and last time, the versions involved and a hint on the pattern.</summary>
+    public static IReadOnlyList<RecordSummary> Summarize(IReadOnlyList<RecordRow> rows) => rows
+        .GroupBy(r => r.Name, StringComparer.OrdinalIgnoreCase)
+        .Select(g =>
+        {
+            string? Top(IEnumerable<string?> v) => v.Where(x => !string.IsNullOrEmpty(x)).GroupBy(x => x!).OrderByDescending(x => x.Count()).FirstOrDefault()?.Key;
+            var users = g.Select(r => r.User).Where(x => !string.IsNullOrEmpty(x)).Distinct(StringComparer.OrdinalIgnoreCase).Count();
+            var machines = g.Select(r => r.Machine).Where(x => !string.IsNullOrEmpty(x)).Distinct(StringComparer.OrdinalIgnoreCase).Count();
+            var hint = g.Count() < 3 ? "few" : machines == 1 && users <= 1 ? "oneBoth" : machines == 1 ? "oneMachine" : users == 1 ? "oneUser" : "widespread";
+            var versions = g.SelectMany(r => r.Items).Where(i => i.Key is "Version" or "AppVersion").Select(i => i.Value).Distinct().Take(4).ToList();
+            return new RecordSummary(g.Key, g.Count(), users, machines, Top(g.Select(r => r.Machine)), Top(g.Select(r => r.User)),
+                g.Min(r => r.At), g.Max(r => r.At), hint, versions);
+        })
+        .OrderByDescending(s => s.Count).Take(20).ToList();
+
+    private RecordsView DemoRecords(string kind, int hours)
+    {
+        var now = clock.GetUtcNow();
+        var items = kind == "faults"
+            ? new[] { ("outlook.exe", "demo.anna", "rds-01.demo.local", "16.0.17"), ("outlook.exe", "demo.ben", "rds-01.demo.local", "16.0.17"), ("outlook.exe", "demo.carla", "rds-01.demo.local", "16.0.16"), ("sapgui.exe", "demo.dirk", "vdi-02.demo.local", "8.0.1"), ("excel.exe", "demo.anna", "vdi-01.demo.local", "16.0.17") }
+            : new[] { ("Session limit reached", "demo.anna", "rds-01.demo.local", ""), ("Session limit reached", "demo.ben", "rds-01.demo.local", ""), ("Session limit reached", "demo.carla", "rds-02.demo.local", ""), ("No available capacity", "demo.dirk", "rds-02.demo.local", "") };
+        var rows = items.Select((x, i) => new RecordRow(now.AddMinutes(-7 - i * 11), x.Item1, x.Item2, $"S-1-5-21-1-1-1-11{i:00}", x.Item3, x.Item3.StartsWith("rds") ? "DG-Apps" : "DG-Desktops", $"PC-{i + 1:00}",
+            kind == "faults" ? [new DetailItem("Version", x.Item4), new DetailItem("FaultingApplicationPath", $"C:\\Program Files\\App\\{x.Item1}"), new DetailItem("Description", "Faulting module ntdll.dll, exception 0xc0000005")]
+                             : [new DetailItem("FailureReason", x.Item1)])).ToList();
+        return new RecordsView(now, hours, kind, Summarize(rows), rows, true);
     }
 
     private async Task<InsightsView> BuildAsync(IMonitorClient m, CancellationToken ct)
@@ -65,29 +152,39 @@ public sealed class InsightsService(SssOptions options, IMonitorClient? monitor,
         var rows = MachineRows(machines, loads);
         var findings = Findings(live, recent, groups, rows, out var userIds);
         findings.AddRange(UptimeFindings(rows));
+        IReadOnlyList<DisconnectedRow> disconnected = [];
         if (helpdesk is not null)
         {
-            try { findings.AddRange(DisconnectedFindings((await helpdesk.ListLiveAsync(null, 2000, ct)).Sessions)); }
+            try
+            {
+                var brokerSessions = (await helpdesk.ListLiveAsync(null, 2000, ct)).Sessions;
+                disconnected = DisconnectedRows(brokerSessions, now);
+                findings.AddRange(DisconnectedFindings(brokerSessions, now));
+            }
             catch (ProviderUnavailableException) { /* the Broker is optional here */ }
         }
         findings = findings.OrderBy(f => f.Severity switch { "crit" => 0, "warn" => 1, _ => 2 }).ToList();
-        var names = machines.Where(x => x.Id is not null).ToDictionary(x => x.Id!, x => x.Name, StringComparer.OrdinalIgnoreCase);
-        var faults = Count(await m.GetFaultsAsync(now.AddHours(-24), ct), names);
-        var failures = Count(await m.GetFailuresAsync(now.AddHours(-24), ct), names);
-
         // names for the sessions in the findings (the Monitor knows users by a number)
         var users = await m.GetUsersByIdAsync(userIds.Values, ct);
         findings = findings.Select(f => f.Kind is "connection" or "logon" && userIds.TryGetValue(f.Subject, out var uid) && users.TryGetValue(uid, out var u)
             ? f with { Subject = u.Name, UserName = u.Name, UserSid = u.Sid } : f).ToList();
-        return new InsightsView(now, live.Count, findings, groups, rows, false, faults, failures);
+        return new InsightsView(now, live.Count, findings, groups, rows, false, disconnected);
     }
 
+    private static DateTimeOffset? Since(SessionInfo s, DateTimeOffset now) => s.StateChangedAt ?? (s.IdleSeconds is { } idle ? now.AddSeconds(-idle) : null);
+
+    /// <summary>All disconnected sessions, the longest disconnected first (the time comes from the Broker's state change, or its idle time).</summary>
+    public static IReadOnlyList<DisconnectedRow> DisconnectedRows(IReadOnlyList<HelpdeskSession> sessions, DateTimeOffset now) => sessions
+        .Where(h => h.Session.State == SessionState.Disconnected)
+        .Select(h => (H: h, Since: Since(h.Session, now)))
+        .OrderBy(x => x.Since ?? DateTimeOffset.MaxValue).Take(100)
+        .Select(x => new DisconnectedRow(x.H.UserName, x.H.UserSid, x.H.Session.ResourceName, x.H.Session.Machine, x.H.Session.DeliveryGroup, x.Since,
+            x.Since is { } s ? (int)(now - s).TotalHours : 0)).ToList();
+
     /// <summary>Sessions that have been disconnected for hours: they hold a licence and memory without being used.</summary>
-    public static List<InsightFinding> DisconnectedFindings(IReadOnlyList<HelpdeskSession> sessions) => sessions
-        .Where(h => h.Session.State == SessionState.Disconnected && h.Session.IdleSeconds is { } s && s >= DisconnectedHours * 3600)
-        .OrderByDescending(h => h.Session.IdleSeconds).Take(MaxPerKind)
-        .Select(h => new InsightFinding("info", "disconnected", h.UserName, h.Session.ResourceName, h.UserName, h.UserSid, h.Session.Machine, h.Session.DeliveryGroup, h.Session.IdleSeconds / 3600))
-        .ToList();
+    public static List<InsightFinding> DisconnectedFindings(IReadOnlyList<HelpdeskSession> sessions, DateTimeOffset now) => DisconnectedRows(sessions, now)
+        .Where(r => r.Hours >= DisconnectedHours).Take(MaxPerKind)
+        .Select(r => new InsightFinding("info", "disconnected", r.User, r.Application, r.User, r.UserSid, r.Machine, r.Group, r.Hours)).ToList();
 
     /// <summary>Registered machines that have not been restarted for a long time.</summary>
     public static List<InsightFinding> UptimeFindings(IReadOnlyList<MachineHealthRow> machines) => machines
@@ -249,6 +346,5 @@ public sealed class InsightsService(SssOptions options, IMonitorClient? monitor,
         new("vdi-01.demo.local", "DG-Desktops", 1, 3, false, 6, 2400, "good"), new("vdi-02.demo.local", "DG-Desktops", 1, 3, false, 4, 1900, "good"),
         new("vdi-03.demo.local", "DG-Desktops", 1, 3, true, 0, 300, "info"),
     ], true,
-    [new("outlook.exe", 14, 4, "rds-01.demo.local"), new("sapgui.exe", 6, 2, "rds-01.demo.local"), new("excel.exe", 3, 3, "vdi-01.demo.local")],
-    [new("Session limit reached", 9, 2, "rds-01.demo.local"), new("No available capacity", 4, 1, "rds-02.demo.local")]);
+    [new("demo.carla", "S-1-5-21-1-1-1-1103", "SAP GUI", "rds-01.demo.local", "DG-Apps", clock.GetUtcNow().AddHours(-9), 9), new("demo.dirk", "S-1-5-21-1-1-1-1104", "Windows 11 Desktop", "vdi-02.demo.local", "DG-Desktops", clock.GetUtcNow().AddMinutes(-70), 1)]);
 }

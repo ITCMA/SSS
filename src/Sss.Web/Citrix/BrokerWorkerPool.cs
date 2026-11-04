@@ -110,7 +110,7 @@ public sealed partial class BrokerWorkerPool : IBrokerClient, IHostedService, ID
             list.Add(new BrokerSession(
                 Str(s, "uid") ?? "", Str(s, "sessionKey"), Str(s, "state") ?? "", Str(s, "type") ?? "",
                 Str(s, "desktopGroup"), Str(s, "machine"), Date(s, "startTime"), Int(s, "idleSeconds"),
-                Str(s, "clientName"), Str(s, "clientAddress"), apps, Str(s, "userName"), Str(s, "userSid")));
+                Str(s, "clientName"), Str(s, "clientAddress"), apps, Str(s, "userName"), Str(s, "userSid"), Date(s, "stateChange")));
         }
         return list;
     }

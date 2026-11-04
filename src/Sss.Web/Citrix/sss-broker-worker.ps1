@@ -83,6 +83,7 @@ function Convert-Session($s) {
         desktopGroup  = [string]$s.DesktopGroupName
         machine       = $machine
         startTime     = Get-Utc $s.StartTime
+        stateChange   = $(if ($s.PSObject.Properties['SessionStateChangeTime']) { Get-Utc $s.SessionStateChangeTime } else { $null })
         idleSeconds   = $idle
         clientName    = [string]$s.ClientName
         clientAddress = [string]$s.ClientAddress

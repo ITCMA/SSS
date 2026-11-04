@@ -27,7 +27,9 @@ The **Insights** tab answers "what is conspicuous right now?" without opening a 
 
 The table also shows the **average of each of the last 7 days** as a small curve, so a slow deterioration is visible and not only the average. A group with fewer than 5 sessions is shown in grey and is not rated.
 
-**Application crashes** and **connection failures** of the last 24 hours are counted by application or reason, with the number of machines affected and the machine with most of them. The failure reason is shown as the Monitor reports it (often a code); a site that does not deliver these records leaves the table out.
+**Disconnected sessions** lists every disconnected session with user, application, machine, delivery group and since when (from the Broker's state change time), the longest first. Sessions disconnected for 4 hours or more are also named under *Conspicuous now*.
+
+**Application crashes** and **connection failures** can be switched between the last **1, 3, 6, 12 and 24 hours**. Each row counts one application (or failure reason) with the number of users, the machines (and the machine with most), the first and last time. **Details** opens every single record: when, which user (a button to open the user's sessions), machine, delivery group, client device and everything else the Monitor delivers about it (for a crash the version, program path and error description). Above the records a hint names the pattern: one user on one machine, mostly one machine (look at the machine: patches, updates, disk), one user on several machines (look at the user: profile, settings) or widespread (look for a recent change). The failure reason is shown as the Monitor reports it (often a code); a site that does not deliver these records leaves the table out.
 
 **Machines** lists every VDA with a state (problem, busy, OK, maintenance, off), its load index, the number of sessions and how long it has been running.
 

@@ -113,9 +113,20 @@
       <p id="ins-none" class="muted" hidden data-i18n="insNone">Nothing conspicuous: all measured values are within the limits.</p>
       <h3 data-i18n="insGroups">Logon time per delivery group (last 7 days)</h3>
       <div class="table-wrap"><table id="ins-groups"><caption class="sr" data-i18n="insGroups"></caption><thead></thead><tbody></tbody></table></div>
-      <h3 data-i18n="insFaults">Application crashes (last 24 hours)</h3>
+      <h3 data-i18n="insDisconnected">Disconnected sessions</h3>
+      <p id="ins-disc-none" class="muted" hidden data-i18n="insDiscNone">No disconnected sessions.</p>
+      <div class="table-wrap"><table id="ins-disc"><caption class="sr" data-i18n="insDisconnected"></caption><thead></thead><tbody></tbody></table></div>
+      <div class="section-head">
+        <h3 data-i18n="insFaults">Application crashes</h3>
+        <label><span data-i18n="insPeriod">Period</span> <select id="ins-faults-hours" class="ins-hours"></select></label>
+      </div>
+      <p id="ins-faults-none" class="muted" hidden data-i18n="insRecNone">Nothing recorded in this period (or the site does not deliver these records).</p>
       <div class="table-wrap"><table id="ins-faults"><caption class="sr" data-i18n="insFaults"></caption><thead></thead><tbody></tbody></table></div>
-      <h3 data-i18n="insFailures">Connection failures (last 24 hours)</h3>
+      <div class="section-head">
+        <h3 data-i18n="insFailures">Connection failures</h3>
+        <label><span data-i18n="insPeriod">Period</span> <select id="ins-failures-hours" class="ins-hours"></select></label>
+      </div>
+      <p id="ins-failures-none" class="muted" hidden data-i18n="insRecNone">Nothing recorded in this period (or the site does not deliver these records).</p>
       <div class="table-wrap"><table id="ins-failures"><caption class="sr" data-i18n="insFailures"></caption><thead></thead><tbody></tbody></table></div>
       <h3 data-i18n="insMachines">Machines</h3>
       <div class="table-wrap"><table id="ins-machines"><caption class="sr" data-i18n="insMachines"></caption><thead></thead><tbody></tbody></table></div>
@@ -236,6 +247,20 @@
   </main>
 
   <footer class="muted"><span id="updated"></span>SSS – Session Self Service</footer>
+
+  <dialog id="ins-detail" class="wide" aria-labelledby="ins-detail-h">
+    <div class="dlg-head">
+      <div class="section-head">
+        <h2 id="ins-detail-h"></h2>
+        <button type="button" id="ins-detail-close" data-i18n="close">Close</button>
+      </div>
+      <p id="ins-detail-sub" class="muted"></p>
+    </div>
+    <div class="dlg-body">
+      <p id="ins-detail-hint" class="finding"></p>
+      <div class="table-wrap"><table class="smalltable" id="ins-detail-table"></table></div>
+    </div>
+  </dialog>
 
   <dialog id="procs" class="wide" aria-labelledby="procs-h">
     <div class="dlg-head">
