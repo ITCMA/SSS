@@ -406,5 +406,12 @@
   "envChartMachines": "VDA machines by state",
   "envChartApps": "Most started applications",
   "envOther": "other",
-  "envNotRegistered": "not registered"
+  "envNotRegistered": "not registered",
+  "ariaViews": "Vues",
+  "ariaControls": "Commandes",
+  "hdMessageLabel": "Message à l'utilisateur",
+  "loggingOff": "Fermeture de la session …",
+  "sendingMessage": "Envoi du message …",
+  "noMatch": "Aucune session ne correspond au filtre.",
+  "filterReset": "Réinitialiser le filtre"
 }

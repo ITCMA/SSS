@@ -41,6 +41,7 @@ async function setLang(lang) {
   store.set('sss.lang', lang);
   for (const el of document.querySelectorAll('[data-i18n]')) el.textContent = t(el.dataset.i18n);
   for (const el of document.querySelectorAll('[data-i18n-ph]')) el.placeholder = t(el.dataset.i18nPh);
+  for (const el of document.querySelectorAll('[data-i18n-aria]')) el.setAttribute('aria-label', t(el.dataset.i18nAria));
   buildHeads();
   render();
   renderHd();
@@ -262,7 +263,19 @@ function resCell(s) {
   return td;
 }
 
-function render() {
+// "No sessions" and "no hits for the filter" are different things: say which, and offer to reset the filter.
+function emptyNote(p, shown, total, filter, reset, emptyKey = 'noLive') {
+  p.hidden = shown > 0;
+  if (shown > 0) return;
+  if (filter && total > 0) {
+    const b = el('button', { type: 'button', text: t('filterReset') });
+    b.addEventListener('click', reset);
+    p.replaceChildren(`${t('noMatch')} `, b);
+  } else p.textContent = t(emptyKey);
+}
+
+function render() { keepFocus(renderTables); }
+function renderTables() {
   // headings that depend on the view (setLang resets the data-i18n texts, so set them on every render)
   if (state.view === 'hduser' && state.target) {
     $('live-h').textContent = t('hdSessionsOf', { name: state.target.name });
@@ -293,7 +306,7 @@ function render() {
       cell(t('colQuality'), qualityCell(s.quality, true)),
       cell(t('colAction'), actions(s, btn, true)));
   }));
-  $('live-empty').hidden = live.length > 0;
+  emptyNote($('live-empty'), live.length, state.data.live.length, f, () => { state.filter = ''; $('filter').value = ''; render(); });
   $('live').hidden = live.length === 0;
 
   const hb = $('hist').tBodies[0];
@@ -307,7 +320,7 @@ function render() {
     cell(t('colClient'), clientCell(s)),
     cell(t('colQuality'), qualityCell(s.quality)),
     ...(state.expert ? [cell(t('colAction'), actions(s))] : []))));
-  $('hist-empty').hidden = hist.length > 0;
+  emptyNote($('hist-empty'), hist.length, state.data.history.length, f, () => { state.filter = ''; $('filter').value = ''; render(); }, 'noHistory');
   $('hist').hidden = hist.length === 0;
 
   const all = state.data.live;
@@ -370,7 +383,8 @@ function openUser(sid, name) {
   showView('hduser');
 }
 
-function renderHd() {
+function renderHd() { keepFocus(renderHdTable); }
+function renderHdTable() {
   const d = state.hdLive;
   if (!d) return;
   const f = state.hdFilter.trim().toLowerCase();
@@ -391,7 +405,7 @@ function renderHd() {
       cell(t('colAction'), open));
   }));
   $('hd-live').hidden = rows.length === 0;
-  $('hd-live-empty').hidden = rows.length > 0;
+  emptyNote($('hd-live-empty'), rows.length, d.sessions.length, f, () => { state.hdFilter = ''; $('hd-filter').value = ''; renderHd(); });
   $('hd-trunc').hidden = !d.truncated;
 }
 
@@ -432,7 +446,7 @@ async function searchUsers(q) {
 async function logoffHd(scope, uids, question) {
   if (needReason() === null) { $('reason').focus(); return; }
   if (!(await confirmDialog(question))) return;
-  setStatus('…');
+  setStatus(t('loggingOff'));
   try {
     const r = await fetch('api/helpdesk/logoff', {
       method: 'POST', credentials: 'same-origin',
@@ -1428,7 +1442,7 @@ async function sendMessage() {
   const s = state.msgTarget;
   const text = $('message-text').value.trim();
   if (!s || !text) return;
-  setStatus('…');
+  setStatus(t('sendingMessage'));
   try {
     const r = await fetch('api/helpdesk/message', {
       method: 'POST', credentials: 'same-origin',
@@ -1446,7 +1460,16 @@ async function sendMessage() {
 }
 
 // ---------- API ----------
+// The tables are rebuilt on every refresh: keep the keyboard focus on the same button afterwards.
+function keepFocus(fn) {
+  const a = document.activeElement, label = a?.getAttribute?.('aria-label'), table = a?.closest?.('table')?.id;
+  fn();
+  if (label && table && !a.isConnected) [...document.querySelectorAll(`#${table} button`)].find((b) => b.getAttribute('aria-label') === label)?.focus();
+}
+
+// While a log-off is on its way the row actions are locked, so a second click cannot repeat it.
 function setStatus(msg, err = false) {
+  document.body.classList.toggle('busy', msg === t('loggingOff'));
   const s = $('status');
   s.textContent = msg;
   s.className = err ? 'status err' : 'status';
@@ -1497,7 +1520,7 @@ function confirmDialog(text, okKey = 'confirm') {
 
 async function logoff(url, question) {
   if (!(await confirmDialog(question))) return;
-  setStatus('…');
+  setStatus(t('loggingOff'));
   try {
     const r = await fetch(url, { method: 'POST', credentials: 'same-origin', headers: { 'X-CSRF-TOKEN': await csrf() } });
     if (r.status === 429) { setStatus(t('rateLimited'), true); return; }

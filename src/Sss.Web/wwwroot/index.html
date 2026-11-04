@@ -43,7 +43,7 @@
 
   <div id="demo" class="banner" role="note" hidden data-i18n="demo"></div>
 
-  <nav id="tabs" class="tabs" hidden aria-label="Views">
+  <nav id="tabs" class="tabs" hidden data-i18n-aria="ariaViews" aria-label="Views">
     <button type="button" id="tab-mine" aria-pressed="true" data-i18n="tabMine">My sessions</button>
     <button type="button" id="tab-hd" aria-pressed="false" data-i18n="tabHelpdesk">Helpdesk</button>
     <button type="button" id="tab-sys" aria-pressed="false" data-i18n="tabStatus">Status</button>
@@ -169,7 +169,7 @@
         </label>
       </div>
 
-      <section class="toolbar" aria-label="Controls">
+      <section class="toolbar" data-i18n-aria="ariaControls" aria-label="Controls">
         <label>
           <span data-i18n="range">History</span>
           <select id="range">
@@ -249,6 +249,7 @@
     <form method="dialog" id="message-form">
       <h2 id="message-h" data-i18n="hdMessageTitle">Send a message to the session</h2>
       <p id="message-target" class="muted"></p>
+      <label for="message-text" class="fieldlabel" data-i18n="hdMessageLabel">Message</label>
       <textarea id="message-text" rows="4" maxlength="300" required data-i18n-ph="hdMessagePlaceholder"></textarea>
       <div class="actions">
         <button value="cancel" formnovalidate data-i18n="cancel">Cancel</button>

@@ -2,6 +2,11 @@
 
 All notable changes to SSS. The project follows [Semantic Versioning](docs/COMPATIBILITY.md); versions below 1.0.0 may still change configuration keys between minor versions, and every such change is listed here.
 
+## Unreleased
+
+### Changed
+- Accessibility and feedback: the message field has a visible label, the area names "Views" and "Controls" are translated, a log-off says "Logging off the session …" and locks the row actions until it is done, an empty filter says "No sessions match the filter" with a button to reset it (instead of "no sessions"), and the keyboard focus stays on the same button when the tables refresh.
+
 ## 0.4.2 - 2026-11-04 (beta)
 
 ### Added

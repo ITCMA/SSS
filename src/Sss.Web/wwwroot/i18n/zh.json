@@ -406,5 +406,12 @@
   "envChartMachines": "VDA machines by state",
   "envChartApps": "Most started applications",
   "envOther": "other",
-  "envNotRegistered": "not registered"
+  "envNotRegistered": "not registered",
+  "ariaViews": "视图",
+  "ariaControls": "控制",
+  "hdMessageLabel": "给用户的消息",
+  "loggingOff": "正在注销会话 …",
+  "sendingMessage": "正在发送消息 …",
+  "noMatch": "没有符合筛选条件的会话。",
+  "filterReset": "重置筛选"
 }

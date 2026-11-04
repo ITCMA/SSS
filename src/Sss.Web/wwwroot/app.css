@@ -22,6 +22,8 @@ body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.45 sys
 h1 { font-size: 1.25rem; margin: 0; }
 h2 { font-size: 1.1rem; margin: 0; }
 .muted { color: var(--muted); margin: 0; }
+.fieldlabel { display: block; font-size: .85rem; color: var(--muted); margin: 6px 0 2px; }
+body.busy .rowactions button, body.busy button.danger-outline { pointer-events: none; opacity: .5; }
 .sr, .skip:not(:focus) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .skip:focus { position: fixed; top: 8px; left: 8px; background: var(--surface); padding: 8px 12px; z-index: 10; }
 :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
