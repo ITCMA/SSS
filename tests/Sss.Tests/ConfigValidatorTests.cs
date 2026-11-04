@@ -44,7 +44,7 @@ public class ConfigValidatorTests
               "Citrix":{"Controllers":["ddc01.corp.local"],"Monitor":{"UseHttps":false}},
               "Instances":{"Directory":"\\\\fs\\sss"},"Audit":{"Directory":"\\\\fs\\audit"},"Metrics":{"Enabled":true},"Typo":1}}
             """);
-        string[] expected = ["no domain", "ReasonRequired", "AuditorGroup", "HTTP", "Expected", "KeyDirectory", "PerServerFiles", "AllowedIps", "Typo"];
+        string[] expected = ["no domain", "AuditorGroup", "HTTP", "Expected", "KeyDirectory", "PerServerFiles", "AllowedIps", "Typo"];
         foreach (var part in expected) Assert.Contains(w, m => m.Contains(part, StringComparison.Ordinal));
     }
 
@@ -158,7 +158,7 @@ public class EffectiveConfigTests
             Assert.Equal("sss.local.json", rows["RefreshSeconds"].Source);
             Assert.Equal("Memory", rows["Citrix:Workers"].Source);
             Assert.Equal(("appsettings.json", false), (rows["Quality:RttWarnMs"].Source, rows["Quality:RttWarnMs"].Explicit));   // shipped default: own source, not "changed"
-            Assert.Equal(("true", "default", false), (rows["Helpdesk:ReasonRequired"].Value, rows["Helpdesk:ReasonRequired"].Source, rows["Helpdesk:ReasonRequired"].Explicit));
+            Assert.Equal(("false", "default", false), (rows["Helpdesk:ReasonRequired"].Value, rows["Helpdesk:ReasonRequired"].Source, rows["Helpdesk:ReasonRequired"].Explicit));
             Assert.Equal("••••••", rows["Audit:Sinks:Snmp:0:Community"].Value);                       // secret masked
             Assert.DoesNotContain(rows.Values, r => r.Value.Contains("geheim") || r.Value.Contains("s3cret"));
             Assert.Equal("nms", rows["Audit:Sinks:Snmp:0:Host"].Value);

@@ -36,16 +36,20 @@ Mitglieder der AD-Gruppen der [Rollen](docs/ROLES.de.md) bekommen einen **Helpde
 <p align="center"><em>Anmelde-Wasserfall und Leistungsdiagramme; Profiltyp, Größe, Ordnerbaum und Befunde</em></p>
 
 - **Benutzer finden** oder **alle Live-Sitzungen der Farm** auflisten; Sitzungen und Verlauf jedes Benutzers öffnen.
-- **Rollen**: Stufe 1 sieht an, Stufe 2 meldet auch ab und sendet Nachrichten, Stufe 3 liest zusätzlich Prozesse und Profile anderer Benutzer; **Auditor** und **Admin** sind eigene Rollen. Für jede ändernde Aktion ist eine **Ticketnummer oder ein Grund** Pflicht.
+- **Rollen**: Stufe 1 sieht an, Stufe 2 meldet auch ab und sendet Nachrichten, Stufe 3 liest zusätzlich Prozesse und Profile anderer Benutzer; **Auditor** und **Admin** sind eigene Rollen. Für jede ändernde Aktion lässt sich eine **Ticketnummer oder ein Grund** eintragen (auf Wunsch als Pflicht).
 - Sitzungen **abmelden** und eine **Nachricht an eine Sitzung** senden („bitte Arbeit speichern, der Server startet neu“).
 - **Leistungsdaten und Diagramme** im Zeitverlauf: ICA-Laufzeit, verfügbare Bandbreite, Rechenzentrums-Latenz, mit Werten beim Überfahren, dazu Verbindungsverlauf sowie Fehler- und Trennungsgründe.
 - **Anmelde-Wasserfall**: wohin die Anmeldezeit geht (Vermittlung, HDX-Verbindung, Authentifizierung, Gruppenrichtlinien, Anmeldeskripte, Profil laden, Shell). Der langsamste Schritt ist hervorgehoben, Zeit, die Citrix nicht aufschlüsselt, wird als solche gezeigt.
 - **Profilanalyse, auf dem VDA gelesen**: lokal, servergespeichert, Citrix Profile Management oder **FSLogix**; Container- und Ordnergröße; ein **Ordnerbaum** wie bei TreeSize und die **größten Dateien**; Ordnerumleitung; FSLogix- und UPM-Einstellungen samt Ausschlüssen; dazu **Befunde mit Empfehlung** (Container fast voll, Outlook- oder Teams-Caches, persönliche Daten im Profil, fehlende Ausschlüsse, alte lokale Profile, ...).
 - **Anwendungen und Prozesse beenden** einer Sitzung über einen eingeschränkten Endpunkt auf den VDAs (standardmäßig aus).
 - **„Support-Info kopieren“** legt die wichtigsten Fakten einer Sitzung für ein Ticket in die Zwischenablage.
+- **Umgebungs-Reiter** für Admins, mit Diagrammen und Tabellen: Workspace-App-Versionen und Plattformen aller Live-Sitzungen, Sitzungen je Standort, VDA-Maschinen nach Zustand und Agent-Version, die am häufigsten gestarteten Anwendungen, dazu ein Hinweis für Benutzer mit veraltetem Client.
 - **Statusseite** mit Live-Prüfungen statt Suche in der Ereignisanzeige; **Audit-Protokoll** für jede Suche, Ansicht, Abmeldung, Nachricht und Prozessaktion: wer was an wem getan hat, mit Hash-Kette, einem **Audit-Reiter** für den Auditor und Kopien an einen **zentralen Ort** (UNC-Ordner, Syslog/CEF, HTTP/SIEM, SNMP).
 
-<p align="center"><img src="docs/img/processes-light.png" alt="Anwendungen und Prozesse einer Sitzung" width="60%"></p>
+<p align="center">
+  <img src="docs/img/processes-light.png" alt="Anwendungen und Prozesse einer Sitzung" width="49%">
+  <img src="docs/img/environment-light.png" alt="Reiter Umgebung mit Diagrammen zu Plattformen, Standorten, VDA-Maschinen und Anwendungen" width="49%">
+</p>
 
 ## Warum SSS
 
@@ -76,7 +80,7 @@ ASPNETCORE_ENVIRONMENT=Development ASPNETCORE_URLS=http://localhost:5080 dotnet 
 - Jede Abmeldung, Nachricht und Prozessaktion wird serverseitig noch einmal gegen die eigenen Live-Sitzungen des Aufrufers geprüft, bevor etwas an Citrix geht; fremde oder unbekannte IDs werden abgelehnt und protokolliert.
 - Anti-Forgery-Token, Ratenbegrenzung pro Benutzer, strenge CSP und Sicherheits-Header, keine Inline-Skripte, kein `innerHTML`.
 - Der Helpdesk sind getrennte Endpunkte hinter einer AD-Gruppe; alles, was er tut, wird protokolliert.
-- Die Prozesssteuerung nutzt einen eingeschränkten JEA-Endpunkt mit drei Befehlen und zeigt genau, was er kann und was nicht ([Doku](docs/PROCESSES.de.md#was-das-freigibt-und-was-nicht)).
+- Die Prozesssteuerung nutzt einen eingeschränkten JEA-Endpunkt mit vier Befehlen und zeigt genau, was er kann und was nicht ([Doku](docs/PROCESSES.de.md#was-das-freigibt-und-was-nicht)).
 - Details und Meldeweg: [SECURITY.md](SECURITY.md), [Bedrohungsanalyse](docs/THREAT-MODEL.de.md).
 
 ## Dokumentation
@@ -89,8 +93,9 @@ ASPNETCORE_ENVIRONMENT=Development ASPNETCORE_URLS=http://localhost:5080 dotnet 
 | [Berechtigungen auf einen Blick](docs/PERMISSIONS.de.md) | wer braucht welches Recht, wo und warum |
 | [Betrieb](docs/OPERATIONS.de.md) | Update, Health-Probe, Statusseite, Audit-Protokoll, Fehlersuche |
 | [Anwendungen, Prozesse und Profile](docs/PROCESSES.de.md) | der JEA-Endpunkt auf den VDAs, Einrichtung, Sicherheit |
-| [Rollen](docs/ROLES.de.md) | Helpdesk-Stufen, Auditor, Admin, Pflicht-Ticketnummer |
+| [Rollen](docs/ROLES.de.md) | Helpdesk-Stufen, Auditor, Admin, optionale Ticketnummer |
 | [Audit-Protokoll und zentrales Logging](docs/AUDIT.de.md) | wer hat was getan, Ziele (UNC, Syslog/CEF, HTTP, SNMP), Integrität |
+| [Umgebung](docs/ENVIRONMENT.de.md) | Client-Versionen und Standorte, Hinweis bei veraltetem Client |
 | [Delivery Controller](docs/CONTROLLERS.de.md) | Erkennung, Lastverteilung, virtuelle Adresse |
 | [Mehrere Controller und Server](docs/MULTI-SERVER.de.md) | Serverliste, Konfigurationsabgleich, Ausleiten, Load Balancer, Kerberos-Alias, Monitor über HTTPS |
 | [Datenquellen](docs/DATA-SOURCES.de.md) | woher die Daten kommen und wie die Qualität bewertet wird |
@@ -107,7 +112,7 @@ ASPNETCORE_ENVIRONMENT=Development ASPNETCORE_URLS=http://localhost:5080 dotnet 
 - [x] Experten-Ansicht mit Diagrammen, Anmelde-Wasserfall, Profilanalyse, Support-Info, StoreFront-Link, Statusseite, Setup-Prüfung
 - [x] Einzelne Prozesse einer Sitzung beenden (JEA-Endpunkt auf den VDAs)
 - [x] IIS-Installer mit automatischem Rückfall, Release-Builds über GitHub Actions
-- [x] Rollen (Helpdesk-Stufen, Auditor, Admin), Pflicht-Ticketnummer
+- [x] Rollen (Helpdesk-Stufen, Auditor, Admin), optionale Ticketnummer
 - [x] Zentrales Audit-Protokoll mit Hash-Kette, Ziele (UNC, Syslog/CEF, HTTP, SNMP) und Audit-Reiter
 - [x] Controller-Erkennung und Lastverteilung, Serverliste mit Abweichungsprüfung, Konfigurations-Schema und -Prüfung
 - [ ] Mehrere Controller, mehrere Webserver und die zentralen Ziele in einer echten Umgebung prüfen

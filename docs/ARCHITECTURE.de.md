@@ -23,7 +23,7 @@ flowchart LR
   end
   DB[("Monitor-Datenbank")]
   subgraph VDA["VDA (optionale SSS-Komponente)"]
-    JEA["JEA-Endpunkt SSS.Processes<br/>drei Befehle"]
+    JEA["JEA-Endpunkt SSS.Processes<br/>vier Befehle"]
   end
   AD["Active Directory<br/>Kerberos, Helpdesk-Gruppe"]
 

@@ -13,7 +13,7 @@ Browser --> SSS (IIS) --> PowerShell worker --WinRM--> JEA endpoint "SSS.Process
                           (service account)             Get-SssProcess / Stop-SssProcess
 ```
 
-- The JEA endpoint offers exactly **three commands**: `Get-SssProcess` and `Stop-SssProcess` for this feature, and the read-only `Get-SssProfile` for the [profile type and size](DATA-SOURCES.md#profile-type-and-size) in the expert view. The service account cannot run anything else on the VDA through it.
+- The JEA endpoint offers exactly **four commands**: `Get-SssProcess` and `Stop-SssProcess` for this feature, and the read-only `Get-SssProfile` for the [profile type and size](DATA-SOURCES.md#profile-type-and-size) and `Get-SssPolicy` for the **Citrix policy values in force** in the expert view (helpdesk level 3). `Get-SssProcess` also reads the product name from the file properties of each program ("Google Chrome" instead of `chrome`); `Get-SssPolicy` reads only the registry values below `HKLM\SOFTWARE\Policies\Citrix\<session id>` of the sessions in which the user runs processes (at most 400 values, text cut at 200 characters). The service account cannot run anything else on the VDA through it.
 - It runs as a temporary local administrator (a *virtual account* that exists only for that call), so the service account itself needs no administrator rights on the VDAs.
 - **Only the user's own processes are touched.** Both commands take the user's SID and compare it with the owner of every process; system processes, other users' processes and unknown ids are refused (`not-owned`, `not-found`). The Citrix session processes `wfshell.exe`, `ctxgfx.exe` and `cmstart.exe` are protected (`protected`).
 - **SSS checks the session twice.** The web application accepts a session only when it is one of the target's live sessions; the PowerShell worker looks it up again in the Broker and refuses it unless the session belongs to that user. Only the machine of that session is contacted.
@@ -90,7 +90,7 @@ The endpoint is the only new door on the VDA. What someone who controlled the SS
 | list processes, window titles and program paths of a user's session | read only; a user SID must be passed in; only that user's processes are returned |
 | end a process | only processes owned by the SID passed in; never system processes; never `wfshell`, `ctxgfx`, `cmstart`; no commands or scripts can be sent |
 | read the profile type, sizes, folder names, FSLogix and UPM settings | read only; file **contents** are never read, only names and sizes |
-| anything else on the VDA | not possible: the session is restricted to these three commands and runs as a temporary account that exists only for the call |
+| anything else on the VDA | not possible: the session is restricted to these four commands and runs as a temporary account that exists only for the call |
 
 Remaining risk, honestly: an attacker who owns the SSS service account can end the processes of **any** user on the VDAs that run the endpoint (a denial of service) and read process and folder names. They cannot run code, read files or change the system through it. Reduce the exposure with:
 
@@ -102,7 +102,7 @@ Remaining risk, honestly: an attacker who owns the SSS service account can end t
 
 ## Security notes
 
-- This feature gives the SSS service account a path to the VDAs. Keep it limited to the three commands as shipped; do not widen the role capability.
+- This feature gives the SSS service account a path to the VDAs. Keep it limited to the four commands as shipped; do not widen the role capability.
 - JEA transcripts show every call. Collect them with your usual tools if you need a second trail next to SSS's audit file.
 - Audience `Helpdesk` removes the feature for ordinary users and keeps it for support staff.
 - The process names and window titles of a user can contain private information. They are shown only to that user and to the helpdesk, and are not written to the audit trail (only the process id).

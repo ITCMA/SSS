@@ -71,7 +71,8 @@ public sealed class MockSessionProvider : ISessionProvider, IHelpdeskProvider, I
         DateTimeOffset start, DateTimeOffset? end, SessionState state, int? idle, string client, string ip,
         int rtt, int kbps, int logon, int load) =>
         _items.Add(new Entry(sid, new SessionInfo(uid, name, type, dg, machine, start, end, state, idle, client, ip,
-            _quality.Evaluate(rtt, kbps, logon, load, state == SessionState.Ended ? null : _clock.GetUtcNow().AddSeconds(-40)), Guid.CreateVersion7().ToString())));
+            _quality.Evaluate(rtt, kbps, logon, load, state == SessionState.Ended ? null : _clock.GetUtcNow().AddSeconds(-40)), Guid.CreateVersion7().ToString(),
+            "26.7.1.4", "Windows", ClientOutdated: client == "LAPTOP-M42" && state != SessionState.Ended)));   // demo: one old client shows the hint
 
     public Task<SessionQueryResult> GetSessionsAsync(UserIdentity user, TimeSpan historyWindow, CancellationToken ct)
     {
@@ -125,10 +126,10 @@ public sealed class MockSessionProvider : ISessionProvider, IHelpdeskProvider, I
             var t = DateTimeOffset.UtcNow;
             _processes[uid] = list =
             [
-                new(4120, "explorer", t.AddHours(-3), 148, null, true, @"C:\Windows\explorer.exe"),
-                new(5304, "chrome", t.AddHours(-2), 612, "Wiki - Google Chrome", true, @"C:\Program Files\Google\Chrome\Application\chrome.exe"),
-                new(6212, "EXCEL", t.AddMinutes(-95), 284, "Budget.xlsx - Excel", true, @"C:\Program Files\Microsoft Office\root\Office16\EXCEL.EXE"),
-                new(7188, "OUTLOOK", t.AddHours(-3), 402, "Inbox - Outlook", true, @"C:\Program Files\Microsoft Office\root\Office16\OUTLOOK.EXE"),
+                new(4120, "explorer", t.AddHours(-3), 148, null, true, @"C:\Windows\explorer.exe", "Windows Explorer"),
+                new(5304, "chrome", t.AddHours(-2), 612, "Wiki - Google Chrome", true, @"C:\Program Files\Google\Chrome\Application\chrome.exe", "Google Chrome"),
+                new(6212, "EXCEL", t.AddMinutes(-95), 284, "Budget.xlsx - Excel", true, @"C:\Program Files\Microsoft Office\root\Office16\EXCEL.EXE", "Microsoft Excel"),
+                new(7188, "OUTLOOK", t.AddHours(-3), 402, "Inbox - Outlook", true, @"C:\Program Files\Microsoft Office\root\Office16\OUTLOOK.EXE", "Microsoft Outlook"),
                 new(8040, "notepad", t.AddMinutes(-12), 18, "Untitled - Notepad", true, @"C:\Windows\System32\notepad.exe"),
                 new(9020, "backgroundTask", t.AddHours(-3), 41, null),
             ];
@@ -142,6 +143,19 @@ public sealed class MockSessionProvider : ISessionProvider, IHelpdeskProvider, I
         {
             var owned = _items.Any(e => e.OwnerSid == userSid && e.Info.Uid == uid && e.Info.State != SessionState.Ended);
             return Task.FromResult(owned ? new ProcessListResult("demo-vda.demo.local", ProcessesOf(uid).ToList()) : throw new InvalidOperationException("Session not found."));
+        }
+    }
+
+    public Task<PolicyListResult> GetPoliciesAsync(string userSid, string uid, CancellationToken ct)
+    {
+        lock (_gate)
+        {
+            if (!_items.Any(e => e.OwnerSid == userSid && e.Info.Uid == uid && e.Info.State != SessionState.Ended)) throw new InvalidOperationException("Session not found.");
+            return Task.FromResult(new PolicyListResult("demo-vda.demo.local",
+            [
+                new(2, "User\\ICA Client Redirection", "ClipboardRedirection", "1"), new(2, "User\\Printing", "AutoCreateClientPrinters", "2"),
+                new(2, "Computer\\Profile Management", "PathToUserStore", "\\\\fileserver\\profiles"), new(2, "Computer\\ICA", "SessionReliabilityTimeout", "180"),
+            ]));
         }
     }
 
@@ -213,13 +227,15 @@ public sealed class MockSessionProvider : ISessionProvider, IHelpdeskProvider, I
             new("session", [new("StartDate", i0.StartTime.ToString("o")), new("LifecycleState", i0.State.ToString()), new("SessionType", i0.ResourceType)]),
             new("logon", [new("LogOnDuration", ((i0.Quality.LogonSeconds ?? 20) * 1000).ToString(), "ms"), new("BrokeringDuration", "850", "ms"),
                 new("ProfileLoadDuration", "4200", "ms"), new("GroupPolicyDuration", "2300", "ms"), new("LogonScriptsDuration", "1100", "ms")]),
-            new("client", [new("ClientName", i0.ClientName ?? ""), new("ClientAddress", i0.ClientAddress ?? ""), new("ClientVersion", "2507.1"), new("Protocol", "HDX"),
+            new("client", [new("ClientName", i0.ClientName ?? ""), new("ClientAddress", i0.ClientAddress ?? ""), new("ClientVersion", "26.7.1.4"), new("ClientPlatform", "Windows"), new("Protocol", "HDX"),
+                new("ClientLocationCity", "Berlin"), new("ClientLocationCountry", "Germany"), new("ClientNetworkInterfaceType", "WiFi"),
+                new("ConnectedViaHostName", "gateway.demo.local"), new("ConnectedViaIPAddress", "10.20.0.5"), new("IsSecureIca", "true"),
                 new("LogOnStartDate", logStart.ToString("o")), new("LogOnEndDate", logStart.AddMilliseconds(total0).ToString("o")),
                 new("HdxStartDate", logStart.AddMilliseconds(850).ToString("o")), new("HdxEndDate", logStart.AddMilliseconds(2750).ToString("o")),
                 new("GpoStartDate", logStart.AddMilliseconds(2750).ToString("o")), new("GpoEndDate", logStart.AddMilliseconds(5050).ToString("o")),
                 new("BrokeringDuration", "46", "ms")]),
             new("network", [new("IcaRttMS", (i0.Quality.IcaRttMs ?? 0).ToString(), "ms"), new("OutputBandwidthAvailable", (i0.Quality.BandwidthKbps ?? 0).ToString(), "kbit/s")]),
-            new("machine", [new("DnsName", i0.Machine), new("OSType", "Windows 11"), new("AgentVersion", "2507.0.0.1")]),
+            new("machine", [new("DnsName", i0.Machine), new("OSType", "Windows 11"), new("AgentVersion", "2507.0.0.1"), new("DesktopGroup.Name", i0.DeliveryGroup)]),
             new("technical", [new("SessionKey", sessionKey), new("Uid", i0.Uid)]),
         };
         IReadOnlyList<DetailSeries> series =
@@ -227,15 +243,29 @@ public sealed class MockSessionProvider : ISessionProvider, IHelpdeskProvider, I
             new("IcaRttMS", "ms", rtt),
             new("OutputBandwidthAvailable", "kbit/s", bw),
             new("DcLatency", "ms", dc),
+            new("WanLatency", "ms", dc.Select(p => new[] { p[0], p[1] * 3 + 4 }).ToList()),
+            new("Endpoint.PercentCPU", "%", rtt.Select(p => new[] { p[0], 8 + p[1] % 17 }).ToList()),
+            new("Vda.PercentCpu", "%", rtt.Select(p => new[] { p[0], 20 + p[1] % 31 }).ToList()),
+            new("Vda.MemoryPercent", "%", rtt.Select(p => new[] { p[0], 55 + p[1] % 11 }).ToList()),
         ];
-        // Demo logon: the profile load is the slow part, like in many real sites.
+        // Demo logon: the profile load is the slow part, like in many real sites. Group policies and logon scripts run inside the interactive session.
+        var slow = rnd.Next(0, 3) * 4000;
         var steps = new List<LogonStep>
         {
-            new("Brokering", 0, 850, true), new("Hdx", 850, 1900, false), new("Authentication", 2750, 1400, true), new("Gpo", 2750, 2300, false),
-            new("LogOnScripts", 5050, 1100, false), new("ProfileLoad", 6150, 4200 + (rnd.Next(0, 3) * 4000), false), new("Interactive", 10350 + (rnd.Next(0, 3) * 4000), 3200 + (rnd.Next(0, 3) * 9000), false),
+            new("Brokering", 0, 850, true), new("Hdx", 850, 1900, false, AvgUserMs: 1700), new("Authentication", 2750, 1400, true),
+            new("ProfileLoad", 2750, 4200 + slow, false, AvgUserMs: 3900),
+            new("Interactive", 6950 + slow, 8200, false, AvgUserMs: 8000),
+            new("Gpo", 6950 + slow, 2300, false, "Interactive", AvgUserMs: 1900), new("LogOnScripts", 9250 + slow, 1100, false, "Interactive", AvgUserMs: 1050),
         };
         var total = steps.Max(s => s.StartMs + s.DurationMs);
-        return Task.FromResult<SessionDetails?>(new SessionDetails(sessionKey, groups, series, [], [], new LogonWaterfall(total, steps)));
+        IReadOnlyList<DetailTable> tables =
+        [
+            new("launches", new[] { ("chrome", "126.0.6478.127", "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe", "1840"), ("OUTLOOK", "16.0.17928", "C:\\Program Files\\Microsoft Office\\root\\Office16\\OUTLOOK.EXE", "5230"),
+                ("EXCEL", "16.0.17928", "C:\\Program Files\\Microsoft Office\\root\\Office16\\EXCEL.EXE", "2610") }
+                .Select(a => (IReadOnlyList<DetailItem>)[new("ProcessName", a.Item1), new("AppVersion", a.Item2), new("ExecutablePath", a.Item3), new("StartDate", logStart.AddMilliseconds(total0 + 2000).ToString("o")),
+                    new("StartupTimeMs", a.Item4, "ms"), new("IsPublishedApp", "false")]).ToList()),
+        ];
+        return Task.FromResult<SessionDetails?>(new SessionDetails(sessionKey, groups, series, tables, [], new LogonWaterfall(total, steps)));
     }
 
     public Task<IReadOnlyList<string>> LogoffAsync(UserIdentity user, IReadOnlyCollection<string> uids, CancellationToken ct)

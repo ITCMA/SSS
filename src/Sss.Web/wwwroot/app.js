@@ -247,6 +247,14 @@ function actions(s, logoffBtn, live = false) {
   return box;
 }
 
+// Device and address, the Workspace app version when Citrix delivers it, and a hint when the own client is older than the minimum version.
+function clientCell(s) {
+  const box = el('span', {}, `${s.clientName ?? '–'}${s.clientAddress ? ` (${s.clientAddress})` : ''}`);
+  if (s.clientVersion) box.append(el('small', { class: 'block', text: t('clientVersion', { v: s.clientVersion, p: s.clientPlatform ? ` · ${s.clientPlatform}` : '' }) }));
+  if (s.clientOutdated) box.append(el('small', { class: 'block state-disconnected', text: `⚠ ${t('clientOutdated')}` }));
+  return box;
+}
+
 function resCell(s) {
   const td = el('td', { 'data-label': t('colResource'), class: 'res' });
   td.append(el('strong', { text: s.resourceName }),
@@ -281,7 +289,7 @@ function render() {
       cell(t('colStarted'), fmtDate(s.startTime)),
       cell(t('colDuration'), fmtDur(durationOf(s))),
       cell(t('colIdle'), fmtDur(s.idleSeconds)),
-      cell(t('colClient'), `${s.clientName ?? '–'}${s.clientAddress ? ` (${s.clientAddress})` : ''}`),
+      cell(t('colClient'), clientCell(s)),
       cell(t('colQuality'), qualityCell(s.quality, true)),
       cell(t('colAction'), actions(s, btn, true)));
   }));
@@ -296,7 +304,7 @@ function render() {
     cell(t('colStarted'), fmtDate(s.startTime)),
     cell(t('colEnded'), fmtDate(s.endTime)),
     cell(t('colDuration'), fmtDur(durationOf(s))),
-    cell(t('colClient'), `${s.clientName ?? '–'}${s.clientAddress ? ` (${s.clientAddress})` : ''}`),
+    cell(t('colClient'), clientCell(s)),
     cell(t('colQuality'), qualityCell(s.quality)),
     ...(state.expert ? [cell(t('colAction'), actions(s))] : []))));
   $('hist-empty').hidden = hist.length > 0;
@@ -320,13 +328,15 @@ function showView(view) {
   $('hd').hidden = !hdList;
   $('sys').hidden = view !== 'sys';
   $('audit').hidden = view !== 'audit';
-  $('panel').hidden = hdList || view === 'sys' || view === 'audit';
+  $('env').hidden = view !== 'env';
+  $('panel').hidden = hdList || view === 'sys' || view === 'audit' || view === 'env';
   $('target').hidden = view !== 'hduser';
   syncTabs();
   $('tab-mine').setAttribute('aria-pressed', String(view === 'mine'));
   $('tab-hd').setAttribute('aria-pressed', String(view === 'hdlist' || view === 'hduser'));
   $('tab-sys').setAttribute('aria-pressed', String(view === 'sys'));
   $('tab-audit').setAttribute('aria-pressed', String(view === 'audit'));
+  $('tab-env').setAttribute('aria-pressed', String(view === 'env'));
   setStatus('');
   render();
   load();
@@ -337,6 +347,7 @@ function syncTabs() {
   $('tab-hd').hidden = !state.helpdesk;
   $('tab-sys').hidden = !state.caps.admin;
   $('tab-audit').hidden = !state.caps.audit;
+  $('tab-env').hidden = !state.caps.admin;
   $('tabs').hidden = !(state.helpdesk || state.caps.admin || state.caps.audit);
 }
 
@@ -352,6 +363,9 @@ function needReason(out) {
 
 function openUser(sid, name) {
   state.target = { sid, name };
+  const label = document.querySelector('#target label span');
+  label.setAttribute('data-i18n', state.reasonRequired ? 'hdReason' : 'hdReasonOptional');
+  label.textContent = t(state.reasonRequired ? 'hdReason' : 'hdReasonOptional');
   $('reason').value = '';
   showView('hduser');
 }
@@ -373,7 +387,7 @@ function renderHd() {
       cell(t('colMachine'), s.machine),
       cell(t('colState'), el('span', { class: `state-${s.state}`, text: t(s.state === 'active' ? 'stateActive' : 'stateDisconnected') })),
       cell(t('colStarted'), fmtDate(s.startTime)),
-      cell(t('colClient'), `${s.clientName ?? '–'}${s.clientAddress ? ` (${s.clientAddress})` : ''}`),
+      cell(t('colClient'), clientCell(s)),
       cell(t('colAction'), open));
   }));
   $('hd-live').hidden = rows.length === 0;
@@ -493,6 +507,163 @@ function renderCfg() {
   $('cfg-none').hidden = rows.length > 0;
 }
 
+// ---------- environment (admin): client versions and locations ----------
+// A horizontal bar for one row; the width is the share of the largest value.
+function shareBar(value, max, bad = false) {
+  const W = 120, svg = svgEl('svg', { viewBox: `0 0 ${W} 12`, width: String(W), height: '12', 'aria-hidden': 'true' });
+  svg.append(svgEl('rect', { class: bad ? 'bar barbad' : 'bar', x: '0', y: '1', width: String(Math.max(2, W * value / Math.max(1, max))), height: '10', rx: '2' }));
+  return svg;
+}
+
+async function loadEnv() {
+  const r = await fetch('api/helpdesk/environment', { credentials: 'same-origin' });
+  if (r.status === 403) { state.caps.admin = false; syncTabs(); showView('mine'); return; }
+  if (r.status === 429) { setStatus(t('rateLimited'), true); return; }
+  if (r.status === 503) { setStatus(t('unavailable'), true); return; }
+  if (!r.ok) throw new Error(String(r.status));
+  renderEnv(await r.json());
+}
+
+// ---------- small charts for the Environment tab ----------
+const CAT = ['cat0', 'cat1', 'cat2', 'cat3', 'cat4', 'cat5'];
+function envLegend(parts) {
+  return el('ul', { class: 'legend envlegend' }, ...parts.map((p) => el('li', {}, el('span', { class: `swatch ${p.cls}`, 'aria-hidden': 'true' }), `${p.label}: `, el('strong', { text: String(p.value) }))));
+}
+function donutChart(title, parts) {
+  parts = parts.filter((p) => p.value > 0);
+  const total = parts.reduce((a, p) => a + p.value, 0);
+  if (!total) return null;
+  const R = 52, r = 32, svg = svgEl('svg', { viewBox: '0 0 120 120', width: '120', height: '120', role: 'img', 'aria-label': title });
+  let a0 = -Math.PI / 2;
+  for (const p of parts) {
+    const a1 = a0 + (p.value / total) * Math.PI * 2 - (parts.length > 1 ? 0.012 : 0), big = a1 - a0 > Math.PI ? 1 : 0;
+    const pt = (rad, a) => `${60 + rad * Math.cos(a)} ${60 + rad * Math.sin(a)}`;
+    const path = svgEl('path', { class: `slice ${p.cls}`, d: parts.length === 1
+      ? `M60 ${60 - R} A${R} ${R} 0 1 1 59.9 ${60 - R} L59.9 ${60 - r} A${r} ${r} 0 1 0 60 ${60 - r} Z`
+      : `M${pt(R, a0)} A${R} ${R} 0 ${big} 1 ${pt(R, a1)} L${pt(r, a1)} A${r} ${r} 0 ${big} 0 ${pt(r, a0)} Z` });
+    const tip = svgEl('title'); tip.textContent = `${p.label}: ${p.value} (${Math.round(p.value / total * 100)} %)`; path.append(tip);
+    svg.append(path);
+    a0 += (p.value / total) * Math.PI * 2;
+  }
+  const c = svgEl('text', { x: '60', y: '65', 'text-anchor': 'middle', class: 'donut-total' }); c.textContent = String(total); svg.append(c);
+  return el('figure', { class: 'envchart' }, el('h3', { text: title }), el('div', { class: 'donutrow' }, svg, envLegend(parts)));
+}
+function stackBar(title, parts) {
+  parts = parts.filter((p) => p.value > 0);
+  const total = parts.reduce((a, p) => a + p.value, 0);
+  if (!total) return null;
+  const W = 300, svg = svgEl('svg', { viewBox: `0 0 ${W} 26`, class: 'stack', role: 'img', 'aria-label': title });
+  let x = 0;
+  for (const p of parts) {
+    const w = (p.value / total) * W, rect = svgEl('rect', { class: `slice ${p.cls}`, x, y: 2, width: Math.max(1, w - 1), height: 22 });
+    const tip = svgEl('title'); tip.textContent = `${p.label}: ${p.value}`; rect.append(tip); svg.append(rect); x += w;
+  }
+  return el('figure', { class: 'envchart' }, el('h3', { text: title }), svg, envLegend(parts));
+}
+function barChart(title, rows) {
+  if (!rows.length) return null;
+  const max = Math.max(1, ...rows.map((r) => r.value)), L = 150, W = 420, rowH = 22;
+  const svg = svgEl('svg', { viewBox: `0 0 ${W} ${rows.length * rowH + 4}`, class: 'hbars', role: 'img', 'aria-label': title });
+  rows.forEach((r, i) => {
+    const y = 2 + i * rowH;
+    const name = svgEl('text', { x: L - 6, y: y + 14, 'text-anchor': 'end' }); name.textContent = r.label.length > 22 ? `${r.label.slice(0, 21)}…` : r.label;
+    const bar = svgEl('rect', { class: 'slice cat0', x: L, y: y + 2, width: Math.max(2, (r.value / max) * (W - L - 40)), height: rowH - 8, rx: 3 });
+    const val = svgEl('text', { x: L + Math.max(2, (r.value / max) * (W - L - 40)) + 5, y: y + 14 }); val.textContent = String(r.value);
+    const tip = svgEl('title'); tip.textContent = `${r.label}: ${r.value}`; bar.append(tip);
+    svg.append(name, bar, val);
+  });
+  return el('figure', { class: 'envchart wide' }, el('h3', { text: title }), svg);
+}
+function renderEnvCharts(d) {
+  const top = (list, n, other) => {
+    const s = [...list].sort((a, b) => b.value - a.value), head = s.slice(0, n), rest = s.slice(n).reduce((a, x) => a + x.value, 0);
+    return (rest ? [...head, { label: other, value: rest }] : head).map((p, i) => ({ ...p, cls: CAT[i % CAT.length] }));
+  };
+  const byPlatform = new Map();
+  for (const v of d.versions) byPlatform.set(v.platform === '?' ? t('envUnknown') : v.platform, (byPlatform.get(v.platform === '?' ? t('envUnknown') : v.platform) ?? 0) + v.sessions);
+  const loc = (d.citrixLocations ?? []).map((l) => ({ label: [l.city, l.country].filter(Boolean).join(', ') || t('envNoCitrixLocation'), value: l.sessions }));
+  const ml = d.machineList ?? [];
+  const reg = ml.filter((m) => m.registration === 1 && !m.maintenance).length, maint = ml.filter((m) => m.maintenance).length, notReg = ml.filter((m) => m.registration !== 1 && !m.maintenance).length;
+  const apps = (d.apps ?? []).slice(0, 8).map((a) => ({ label: a.name, value: a.launches }));
+  const charts = [
+    donutChart(t('envChartPlatform'), top([...byPlatform].map(([label, value]) => ({ label, value })), 5, t('envOther'))),
+    donutChart(t('envChartLocation'), top(loc, 5, t('envOther'))),
+    stackBar(t('envChartMachines'), [{ label: t('regRegistered'), value: reg, cls: 'cat1' }, { label: t('colMaintenance'), value: maint, cls: 'cat3' }, { label: t('envNotRegistered'), value: notReg, cls: 'cat4' }]),
+    barChart(t('envChartApps'), apps),
+  ].filter(Boolean);
+  $('env-charts').replaceChildren(...charts);
+}
+
+function renderEnv(d) {
+  renderEnvCharts(d);
+  const tile = (n, label, bad = false) => el('div', {}, el('h3', { text: label }), el('p', { class: bad && n > 0 ? 'state-disconnected' : '', text: String(n) }));
+  $('env-tiles').replaceChildren(tile(d.sessions, t('envSessions')), tile(d.devices, t('envDevices')), tile(d.users, t('envUsers')), tile(d.outdated, t('envOutdated'), true));
+
+  const vNote = $('env-versions-note');
+  vNote.hidden = false;
+  vNote.textContent = !d.versionAvailable ? t('envNoVersionField') : d.withoutVersion > 0 ? t('envNoVersion', { n: d.withoutVersion }) : t('envAsOf', { time: fmtDate(d.at) });
+  const maxV = Math.max(1, ...d.versions.map((v) => v.devices));
+  $('env-versions').tHead.replaceChildren(el('tr', {}, ...['colVersion', 'colPlatform', 'colDevices', 'colSessions', 'colShare'].map((k) => el('th', { scope: 'col', text: t(k) }))));
+  $('env-versions').tBodies[0].replaceChildren(...d.versions.map((v) => el('tr', {},
+    cell(t('colVersion'), el('span', {}, v.version || t('envUnknown'), v.outdated ? el('span', { class: 'state-disconnected', text: ` ✖ ${t('envOutdatedMark')}` }) : '')),
+    cell(t('colPlatform'), v.platform), cell(t('colDevices'), String(v.devices)), cell(t('colSessions'), String(v.sessions)),
+    cell(t('colShare'), shareBar(v.devices, maxV, v.outdated)))));
+  $('env-versions').hidden = d.versions.length === 0;
+
+  const lNote = $('env-locations-note');
+  lNote.hidden = d.locationsConfigured;
+  lNote.textContent = t('envNoLocations');
+  const maxL = Math.max(1, ...d.locations.map((l) => l.sessions));
+  $('env-locations').tHead.replaceChildren(el('tr', {}, ...['colLocation', 'colSessions', 'colDevices', 'colUsers', 'colShare'].map((k) => el('th', { scope: 'col', text: t(k) }))));
+  $('env-locations').tBodies[0].replaceChildren(...d.locations.map((l) => el('tr', {},
+    cell(t('colLocation'), l.name || t('envUnassigned')), cell(t('colSessions'), String(l.sessions)), cell(t('colDevices'), String(l.devices)),
+    cell(t('colUsers'), String(l.users)), cell(t('colShare'), shareBar(l.sessions, maxL)))));
+  $('env-locations').hidden = d.locations.length === 0;
+
+  const cl = d.citrixLocations ?? [], maxC = Math.max(1, ...cl.map((l) => l.sessions));
+  $('env-citrix-h').hidden = cl.length === 0;
+  $('env-citrix').hidden = cl.length === 0;
+  $('env-citrix').tHead.replaceChildren(el('tr', {}, ...['colCountry', 'colCity', 'colSessions', 'colDevices', 'colUsers', 'colShare'].map((k) => el('th', { scope: 'col', text: t(k) }))));
+  $('env-citrix').tBodies[0].replaceChildren(...cl.map((l) => el('tr', {},
+    cell(t('colCountry'), l.country || (l.city ? t('envUnknown') : t('envNoCitrixLocation'))), cell(t('colCity'), l.city || (l.country ? t('envUnknown') : '')), cell(t('colSessions'), String(l.sessions)),
+    cell(t('colDevices'), String(l.devices)), cell(t('colUsers'), String(l.users)), cell(t('colShare'), shareBar(l.sessions, maxC)))));
+
+  const ms = d.machines ?? [], maxM = Math.max(1, ...ms.map((m) => m.machines));
+  $('env-machines-h').hidden = ms.length === 0;
+  $('env-machines').hidden = ms.length === 0;
+  $('env-machines').tHead.replaceChildren(el('tr', {}, ...['colAgent', 'colOs', 'colMachines', 'colMaintenance', 'colUnregistered', 'colShare'].map((k) => el('th', { scope: 'col', text: t(k) }))));
+  $('env-machines').tBodies[0].replaceChildren(...ms.map((m) => el('tr', {},
+    cell(t('colAgent'), m.agentVersion || t('envNoAgent')), cell(t('colOs'), m.agentVersion ? m.os : t('envNoAgentGroup', { g: m.deliveryGroup || '–' })), cell(t('colMachines'), `${m.machines}${m.poweredOff ? ` (${t('envOffCount', { n: m.poweredOff })})` : ''}`), cell(t('colMaintenance'), String(m.inMaintenance)),
+    cell(t('colUnregistered'), el('span', { class: m.unregistered > 0 ? 'state-disconnected' : '', text: String(m.unregistered) })), cell(t('colShare'), shareBar(m.machines, maxM)))));
+
+  const ml = [...(d.machineList ?? [])].sort((a, b) => (a.registration === 1 ? 0 : 1) - (b.registration === 1 ? 0 : 1) || (a.group ?? '').localeCompare(b.group ?? '') || a.name.localeCompare(b.name));
+  $('env-machlist-h').hidden = ml.length === 0;
+  $('env-machlist').hidden = ml.length === 0;
+  const REG = (m) => m.registration == null ? '' : m.registration === 1 ? t('regRegistered') : t('regNot', { n: m.registration });
+  const POW = { 2: 'powerOff', 3: 'powerOn', 4: 'powerSuspended' };
+  $('env-machlist').tHead.replaceChildren(el('tr', {}, ...['colMachine', 'colGroup', 'colAgent', 'colOs', 'colRegistration', 'colPower', 'colSessions', 'colMaintenance', 'colChanged'].map((k) => el('th', { scope: 'col', text: t(k) }))));
+  $('env-machlist').tBodies[0].replaceChildren(...ml.map((m) => el('tr', {},
+    cell(t('colMachine'), m.name), cell(t('colGroup'), m.group), cell(t('colAgent'), m.agentVersion), cell(t('colOs'), m.os),
+    cell(t('colRegistration'), el('span', { class: m.registration != null && m.registration !== 1 ? 'state-disconnected' : '', text: REG(m) })),
+    cell(t('colPower'), POW[m.power] ? t(POW[m.power]) : ''), cell(t('colSessions'), m.sessions == null ? '' : String(m.sessions)),
+    cell(t('colMaintenance'), m.maintenance ? t('yes') : ''), cell(t('colChanged'), m.registrationChanged ? fmtDate(m.registrationChanged) : ''))));
+  const lhc = d.lhc ?? [];
+  $('env-lhc-h').hidden = lhc.length === 0;
+  $('env-lhc-note').hidden = lhc.length === 0;
+  $('env-lhc').hidden = lhc.length === 0;
+  const lcols = [...new Set(lhc.flatMap((r) => r.map((i) => i.key)))].filter((k) => !/(Id|Key)$/.test(k)).slice(0, 10);
+  $('env-lhc').tHead.replaceChildren(el('tr', {}, ...lcols.map((c) => el('th', { scope: 'col', text: fieldLabel(c) }))));
+  $('env-lhc').tBodies[0].replaceChildren(...lhc.map((r) => el('tr', {}, ...lcols.map((c) => { const i = r.find((x) => x.key === c); return cell(fieldLabel(c), i ? fmtItem(i) : ''); }))));
+
+  const apps = d.apps ?? [], maxA = Math.max(1, ...apps.map((a) => a.launches));
+  $('env-apps-note').textContent = apps.length ? t('envAppsNote') : t('envNoApps');
+  $('env-apps').hidden = apps.length === 0;
+  $('env-apps').tHead.replaceChildren(el('tr', {}, ...['colApp', 'colLaunches', 'colPeak', 'colUsersDay', 'colMachines', 'colShare'].map((k) => el('th', { scope: 'col', text: t(k) }))));
+  $('env-apps').tBodies[0].replaceChildren(...apps.map((a) => el('tr', {},
+    cell(t('colApp'), el('span', {}, a.name, a.process ? el('small', { class: 'block muted', text: a.process }) : '')), cell(t('colLaunches'), String(a.launches)), cell(t('colPeak'), String(a.peakConcurrent)),
+    cell(t('colUsersDay'), String(a.usersPerDay)), cell(t('colMachines'), String(a.machines)), cell(t('colShare'), shareBar(a.launches, maxA)))));
+}
+
 // ---------- audit trail (auditor role) ----------
 const auditQuery = () => {
   const p = new URLSearchParams({ days: $('a-days').value });
@@ -588,7 +759,7 @@ async function verifyAudit() {
 
 // ---------- expert details ----------
 const GROUP_TITLE = { session: 'groupSession', logon: 'groupLogon', client: 'groupClient', network: 'groupNetwork', machine: 'groupMachine', technical: 'groupTechnical' };
-const TABLE_TITLE = { connections: 'tableConnections', failures: 'tableFailures', applications: 'tableApplications' };
+const TABLE_TITLE = { connections: 'tableConnections', failures: 'tableFailures', applications: 'tableApplications', launches: 'tableLaunches', faults: 'tableFaults', gpo: 'tableGpo', appx: 'tableAppx', reconnects: 'tableReconnects' };
 const SVGNS = 'http://www.w3.org/2000/svg';
 const svgEl = (tag, attrs = {}) => { const e = document.createElementNS(SVGNS, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); return e; };
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/;
@@ -613,6 +784,12 @@ function valueNode(i, byKey) {
   if (m && start && ISO.test(i.value) && ISO.test(start.value)) {
     const ms = new Date(i.value) - new Date(start.value);
     if (ms >= 0) return el('span', {}, text, ' ', rateEl(m[1] ? rateMs(m[1], ms) : null, `Δ ${fmtMs(ms)}`, 'delta'));
+  }
+  // every other timestamp of the group: how long after the start of the logon (or of the session) it happened
+  if (ISO.test(i.value) && /Date$/.test(i.key) && !/^(LogOnStart|Start|Created|Modified)Date$/.test(i.key)) {
+    const anchor = byKey.get('LogOnStartDate') ?? byKey.get('StartDate');
+    const ms = anchor && ISO.test(anchor.value) ? new Date(i.value) - new Date(anchor.value) : -1;
+    if (ms >= 0 && ms < 86400000) return el('span', {}, text, ' ', el('span', { class: 'delta', title: t(byKey.has('LogOnStartDate') ? 'deltaSinceLogon' : 'deltaSinceStart'), text: `+${fmtMs(ms)}` }));
   }
   return text;
 }
@@ -738,8 +915,9 @@ function chart(title, series, opts = {}) {
 function buildWaterfall(w) {
   if (!w || !w.steps.length) return el('div');
   const stepName = (id) => t(`step${id}`) === `step${id}` ? fieldLabel(id) : t(`step${id}`);
-  const R = 74, rowH = 26, T = 8, B = 26, W = 640;
-  const L = Math.min(260, Math.max(120, Math.ceil(Math.max(...w.steps.map((s) => stepName(s.id).length)) * 6.6) + 16));
+  const R = 190, rowH = 24, T = 8, B = 26, W = 980;
+  const indent = 12;   // sub-steps sit a little to the right of their parent
+  const L = Math.min(280, Math.max(120, Math.ceil(Math.max(...w.steps.map((s) => stepName(s.id).length + (s.parent ? 2 : 0))) * 6.6) + 16));
   const H = T + w.steps.length * rowH + B;
   const unit = w.totalMs >= 40000 ? 10000 : w.totalMs >= 20000 ? 5000 : w.totalMs >= 8000 ? 2000 : w.totalMs >= 3000 ? 1000 : 500;
   const sx = (ms) => L + (ms / w.totalMs) * (W - L - R);
@@ -754,9 +932,13 @@ function buildWaterfall(w) {
     const y = T + i * rowH, name = stepName(s.id), rate = s.id === 'Unaccounted' ? null : rateMs(s.id, s.durationMs);
     const pct = Math.round((s.durationMs / w.totalMs) * 100);
     const bar = svgEl('rect', { class: `wbar${rate ? ` r-${rate}` : ''}${s.estimated ? ' est' : ''}${s.id === 'Unaccounted' ? ' gap' : ''}${s === slowest ? ' slow' : ''}`, x: sx(s.startMs), y: y + 4, width: Math.max(2, sx(s.durationMs) - sx(0)), height: rowH - 10, rx: 3 });
-    const tip = svgEl('title'); tip.textContent = `${name}: ${fmtMs(s.durationMs)} (${pct} %), ${t('waterfallAt', { s: fmtMs(s.startMs) })}${rate ? ` – ${t(RATE_WORD[rate])}` : ''}${s.estimated ? ` – ${t('waterfallEstimated')}` : ''}`;
+    const when = s.startAt ? `\n${fmtDateMs(s.startAt)}${s.endAt ? ` – ${fmtDateMs(s.endAt)}` : ''}` : '';
+    const avg = s.avgUserMs ? `\n${t('waterfallAvgUser', { s: fmtMs(s.avgUserMs) })}` : '';
+    const tip = svgEl('title'); tip.textContent = `${name}: ${fmtMs(s.durationMs)} (${pct} %), ${t('waterfallAt', { s: fmtMs(s.startMs) })}${rate ? ` – ${t(RATE_WORD[rate])}` : ''}${s.estimated ? ` – ${t('waterfallEstimated')}` : ''}${when}${avg}`;
     bar.append(tip);
-    svg.append(text(name, L - 8, y + rowH / 2 + 4, 'end'), bar, text(fmtMs(s.durationMs), sx(s.startMs + s.durationMs) + 5, y + rowH / 2 + 4, 'start', 'wval'));
+    // the comparison with the user's earlier logons: slower or faster by more than a third
+    const cmp = s.avgUserMs ? (s.durationMs > s.avgUserMs * 1.33 ? ` ▲ Ø ${fmtMs(s.avgUserMs)}` : s.durationMs < s.avgUserMs * 0.75 ? ` ▼ Ø ${fmtMs(s.avgUserMs)}` : ` ≈ Ø ${fmtMs(s.avgUserMs)}`) : '';
+    svg.append(text((s.parent ? '↳ ' : '') + name, L - 8, y + rowH / 2 + 4, 'end', s.parent ? 'wsub' : ''), bar, text(fmtMs(s.durationMs) + cmp, sx(s.startMs + s.durationMs) + 5, y + rowH / 2 + 4, 'start', 'wval'));
   });
   const legend = el('ul', { class: 'legend rates' }, ...['good', 'norm', 'bad'].map((r) => el('li', {}, rateEl(r, t(RATE_WORD[r])))));
   return el('figure', { class: 'chart waterfall' }, el('h3', { text: t('waterfallTitle') }), svg, legend,
@@ -765,19 +947,55 @@ function buildWaterfall(w) {
     w.steps.some((s) => s.estimated) ? el('p', { class: 'muted', text: t('waterfallEstimated') }) : el('span'));
 }
 
+// Endpoint -> gateway -> VDA with the latencies in between, from the connection record and the latest metrics (like the session topology of Director).
+// Without a gateway the connection goes straight to the VDA and says so.
+function buildTopology(d, s) {
+  const all = new Map(d.groups.flatMap((g) => g.items.map((i) => [i.key, i])));
+  const v = (k) => all.get(k)?.value;
+  const last = (name) => { const sr = d.series.find((x) => x.name === name); return sr ? sr.points[sr.points.length - 1][1] : null; };
+  const node = (title, ...lines) => el('div', { class: 'node' }, el('h4', { text: title }), ...lines.filter(Boolean).map((l) => el('small', { text: l })));
+  const ms = (x) => `${Math.round(x)} ms`;
+  const link = (head, ...parts) => el('div', { class: 'link' }, ...(head ? [el('strong', { text: head })] : []), ...parts.filter(([, x]) => x != null).map(([label, x]) => el('div', { text: `${label}: ${ms(x)}` })));
+  // without a gateway Citrix records the client itself as the "connected via" address: that is a direct connection
+  const same = (a, b) => a && b && a.toLowerCase().split('.')[0] === b.toLowerCase().split('.')[0];
+  const viaHost = v('ConnectedViaHostName'), viaIp = v('ConnectedViaIPAddress');
+  const direct = (viaHost || viaIp) && !v('GatewayPopName') && (same(viaHost, v('ClientName')) || same(viaIp, v('ClientAddress')) || same(viaIp, v('ClientPublicIP')));
+  const via = direct ? null : viaHost ?? viaIp;
+  const popName = v('GatewayPopName');
+  const rtt = last('IcaRttMS'), wan = last('WanLatency'), dc = last('DcLatency'), net = last('IcaLatency');
+  const endpoint = [v('ClientName'), v('ClientAddress'), [v('ClientPlatform'), v('ClientVersion')].filter(Boolean).join(' '), [v('ClientLocationCity'), v('ClientLocationCountry')].filter(Boolean).join(', '),
+    /\D/.test(v('ClientNetworkInterfaceType') ?? '0') && `${t('topoNetworkType')}: ${v('ClientNetworkInterfaceType')}`, v('ClientISP')];
+  if (!endpoint.some(Boolean) && !via) return el('div');
+  const nodes = [node(t('topoClient'), ...endpoint)];
+  if (via) nodes.push(link(null, [t('topoWan'), wan], [t('topoNetwork'), net]), node(t('topoGateway'), v('ConnectedViaHostName'), v('ConnectedViaIPAddress'), popName && `${t('topoPop')}: ${popName}`), link(null, [t('topoDc'), dc]));
+  else nodes.push(link(t('topoDirect'), [t('topoNetwork'), net ?? wan], [t('topoDc'), dc]), node(t('topoGateway'), t('topoNoGateway')));
+  nodes.push(node(t('topoVda'), s.machine, v('DesktopGroup.Name')));
+  const hdx = v('HdxProtocolName') ? `${v('HdxProtocolName')}${v('EdtMtu') ? ` (MTU ${v('EdtMtu')})` : ''}` : v('Protocol');
+  const facts = [rtt != null && `ICARTT ${ms(rtt)}`, hdx && `${t('topoProtocol')}: ${hdx}`, all.get('IsSecureIca')?.value === 'true' && t('topoSecure'), /\D/.test(v('WorkspaceType') ?? '0') && v('WorkspaceType'),
+    v('LaunchedViaHostName') && `${t('topoLaunched')}: ${v('LaunchedViaHostName')}`].filter(Boolean).join(' · ');
+  return el('section', { class: 'group' }, el('h3', { text: t('topoTitle') }), el('div', { class: 'topo' }, ...nodes),
+    el('p', { class: 'muted', text: via ? facts : [t('topoDirectNote'), facts].filter(Boolean).join(' · ') }));
+}
+const ctxMachine = (s) => s.machine;
+
 function buildCharts(series) {
   const is = (re) => (s) => re.test(s.name);
   const bw = series.filter(is(/Bandwidth/i));
   const dc = series.filter(is(/^(Dc|Server)/i));
   const net = series.filter((s) => /Latency|Rtt/i.test(s.name) && !/^(Dc|Server)/i.test(s.name) && !/Bandwidth/i.test(s.name));
-  const used = new Set([...bw, ...dc, ...net]);
+  const ep = series.filter(is(/^Endpoint\./)), vda = series.filter(is(/^Vda\./));
+  const strip = (list, re) => list.map((x) => ({ ...x, name: x.name.replace(re, '') }));
+  const used = new Set([...bw, ...dc, ...net, ...ep, ...vda]);
   const more = series.filter((s) => !used.has(s));
   const box = el('div', { class: 'charts' });
   const bwAvail = bw.filter(is(/Available/i)), bwUsed = bw.filter((x) => !bwAvail.includes(x));
   const Q = state.quality;
   // the limits of the traffic light as reference lines, so a curve can be judged at a glance
   const rttLines = Q && net.some(is(/Rtt/i)) ? [{ y: Q.rttWarnMs, cls: 'warn', label: `${t('healthWarning')} ${Q.rttWarnMs} ms` }, { y: Q.rttCritMs, cls: 'crit', label: `${t('healthCritical')} ${Q.rttCritMs} ms` }] : [];
-  for (const [title, list, lines] of [[t('chartNetwork'), net, rttLines], [t('chartBandwidth'), bwUsed], [t('chartBandwidthAvail'), bwAvail], [t('chartDatacenter'), dc]])
+  const epCpu = strip(ep.filter(is(/Percent/i)), /^Endpoint\./), epNet = strip(ep.filter(is(/Throughput|Wifi/i)), /^Endpoint\./);
+  const vdaLoad = strip(vda.filter(is(/Percent/i)), /^Vda\./), vdaSessions = strip(vda.filter(is(/SessionCount/i)), /^Vda\./);
+  for (const [title, list, lines] of [[t('chartNetwork'), net, rttLines], [t('chartBandwidth'), bwUsed], [t('chartBandwidthAvail'), bwAvail], [t('chartDatacenter'), dc],
+    [t('chartEndpointLoad'), epCpu], [t('chartEndpointNet'), epNet], [t('chartVdaLoad'), vdaLoad], [t('chartVdaSessions'), vdaSessions]])
     if (list.length) box.append(chart(title, list.slice(0, 4), { lines }));
   const out = [box.childElementCount ? box : el('p', { class: 'muted', text: t('chartNoData') })];
   if (more.length) {
@@ -791,6 +1009,17 @@ function buildCharts(series) {
 // ---------- why a traffic light is what it is ----------
 const rateValue = (v, warn, crit, higher) => v == null ? 'unknown' : higher ? (v >= crit ? 'critical' : v >= warn ? 'warning' : 'good') : (v <= crit ? 'critical' : v <= warn ? 'warning' : 'good');
 const healthWord = (h) => t('health' + h[0].toUpperCase() + h.slice(1));
+
+// Counts of connections, connection failures and automatic reconnects of the session: how stable the connection was.
+function buildStability(d) {
+  const n = (id) => d.tables.find((x) => x.id === id)?.rows.length;
+  const parts = [['stabConnections', n('connections')], ['stabFailures', n('failures')], ['stabReconnects', n('reconnects')]];
+  if (parts.every(([, c]) => c == null)) return el('div');
+  const bad = (n('failures') ?? 0) + (n('reconnects') ?? 0) > 0;
+  return el('section', { class: 'group' }, el('h3', { text: t('stabTitle') }),
+    el('ul', { class: 'legend' }, ...parts.map(([k, c]) => el('li', {}, `${t(k)}: `, el('strong', { text: String(c ?? 0) })))),
+    el('p', { class: bad ? 'state-disconnected' : 'muted', text: t(bad ? 'stabUnstable' : 'stabStable') }));
+}
 
 function buildQuality(s) {
   const q = s.quality, Q = state.quality;
@@ -962,13 +1191,43 @@ function buildProfileSection(ctx) {
         { credentials: 'same-origin' });
       if (state.detailsCtx !== ctx) return;
       if (r.status === 429) { out.replaceChildren(el('p', { class: 'muted', text: t('rateLimited') })); return; }
-      if (!r.ok) { out.replaceChildren(el('p', { class: 'muted', text: t(r.status === 503 ? 'profileUnavailable' : 'error') })); return; }
+      if (!r.ok) { out.replaceChildren(el('p', { class: 'muted', text: t(r.status === 503 ? 'profileUnavailable' : r.status === 403 ? 'noRight' : 'error') })); return; }
       ctx.profile = await r.json();
       renderProfile(ctx, out);
     } catch { out.replaceChildren(el('p', { class: 'muted', text: t('error') })); }
     finally { btn.disabled = false; }
   });
   return el('section', { class: 'group profile' }, el('h3', { text: t('profileTitle') }), el('p', { class: 'muted', text: t('profileHint') }), btn, out);
+}
+
+// Citrix policy values in force in the session (read on the VDA, helpdesk level 3).
+function buildPolicySection(ctx) {
+  const out = el('div'), btn = el('button', { type: 'button', text: t('policiesRead') });
+  btn.addEventListener('click', async () => {
+    if (state.reasonRequired && !$('reason').value.trim()) { out.replaceChildren(el('p', { class: 'muted', text: t('hdReasonFirst') })); return; }
+    btn.disabled = true;
+    out.replaceChildren(el('p', { class: 'muted', text: t('profileScanning') }));
+    try {
+      const r = await fetch(`api/helpdesk/sessions/${encodeURIComponent(ctx.s.uid)}/policies?sid=${encodeURIComponent(state.target.sid)}&reason=${encodeURIComponent($('reason').value.trim())}`, { credentials: 'same-origin' });
+      if (state.detailsCtx !== ctx) return;
+      if (!r.ok) { out.replaceChildren(el('p', { class: 'muted', text: t(r.status === 503 ? 'profileUnavailable' : r.status === 403 ? 'noRight' : 'error') })); return; }
+      const rows = (await r.json()).entries;
+      const filter = el('input', { type: 'search', autocomplete: 'off', placeholder: t('filterPlaceholder'), 'aria-label': t('filter') });
+      const body = el('tbody');
+      const draw = () => {
+        const f = filter.value.trim().toLowerCase();
+        body.replaceChildren(...rows.filter((e) => !f || `${e.path} ${e.name} ${e.value}`.toLowerCase().includes(f)).map((e) => el('tr', {},
+          cell(t('colPath'), e.path || '–'), cell(t('colName'), e.name), cell(t('colValue'), e.value))));
+      };
+      filter.addEventListener('input', draw);
+      draw();
+      out.replaceChildren(rows.length ? el('div', {}, el('p', { class: 'muted', text: t('policiesNote') }), filter,
+        el('div', { class: 'table-wrap' }, el('table', { class: 'smalltable' }, el('thead', {}, el('tr', {}, ...['colPath', 'colName', 'colValue'].map((k) => el('th', { scope: 'col', text: t(k) })))), body)))
+        : el('p', { class: 'muted', text: t('policiesNone') }));
+    } catch { out.replaceChildren(el('p', { class: 'muted', text: t('error') })); }
+    finally { btn.disabled = false; }
+  });
+  return el('section', { class: 'group profile' }, el('h3', { text: t('policiesTitle') }), el('p', { class: 'muted', text: t('policiesHint') }), btn, out);
 }
 
 function supportText(s, d, profile) {
@@ -1013,6 +1272,7 @@ async function loadProcesses(ctx) {
     const url = state.view === 'hduser' ? `${procsBase(ctx)}?sid=${encodeURIComponent(state.target.sid)}&reason=${encodeURIComponent($('reason').value.trim())}` : procsBase(ctx);
     const r = await fetch(url, { credentials: 'same-origin' });
     if (state.procsCtx !== ctx) return;
+    if (r.status === 403) { $('procs-msg').textContent = t('noRight'); return; }
     if (r.status === 404) { $('procs-msg').textContent = t('detailsNone'); return; }
     if (r.status === 429) { $('procs-msg').textContent = t('rateLimited'); return; }
     if (r.status === 503) { $('procs-msg').textContent = t('procUnavailable'); return; }
@@ -1063,7 +1323,8 @@ function renderProcesses(ctx) {
     const kill = el('button', { type: 'button', class: 'danger-outline', text: t('procKill') });
     kill.addEventListener('click', () => endProcess(ctx, p));
     const name = el('td', { 'data-label': t('colProcess'), text: p.name });
-    if (p.more) name.append(el('small', { class: 'muted', text: ` ${t('procMore', { n: p.more })}` }));
+    if (p.description) name.append(el('small', { class: 'block muted', text: p.description }));
+    if (p.more) name.append(el('small', { class: 'block muted', text: t('procMore', { n: p.more }) }));
     return el('tr', {},
       name, el('td', { 'data-label': t('colProgram'), class: 'tpath', title: p.path ?? '', text: p.path ?? '' }),
       el('td', { 'data-label': t('colPid'), text: String(p.id) }), el('td', { 'data-label': t('colStarted'), text: fmtDate(p.started) }),
@@ -1117,10 +1378,11 @@ async function openDetails(s, tab = 'summary') {
     $('details-msg').textContent = d.unavailable.length
       ? t('detailsPartial', { parts: d.unavailable.map((p) => t(TABLE_TITLE[p] ?? p)).join(', ') }) : '';
     const defs = [
-      { id: 'summary', label: t('tabSummary'), node: el('div', { class: 'summary' }, buildQuality(ctx.s), buildWaterfall(d.waterfall)) },
+      { id: 'summary', label: t('tabSummary'), node: el('div', {}, el('div', { class: 'summary' }, buildQuality(ctx.s), buildTopology(d, ctx.s)), buildStability(d), buildWaterfall(d.waterfall)) },
       { id: 'charts', label: t('tabCharts'), node: buildCharts(d.series) },
       { id: 'props', label: t('tabProps'), node: el('div', {}, el('div', { class: 'groups' }, ...d.groups.map(groupBox)), ...d.tables.map(detailTable)) },
-      ...(state.profile && ctx.s.uid && ctx.s.state !== 'ended' ? [{ id: 'profile', label: t('tabProfile'), node: buildProfileSection(ctx) }] : []),
+      ...(state.profile && ctx.s.uid && ctx.s.state !== 'ended' && state.view === 'hduser' && state.caps.deep ? [{ id: 'policies', label: t('tabPolicies'), node: buildPolicySection(ctx) }] : []),
+      ...(state.profile && ctx.s.uid && ctx.s.state !== 'ended' && (state.view !== 'hduser' || state.caps.deep) ? [{ id: 'profile', label: t('tabProfile'), node: buildProfileSection(ctx) }] : []),
     ];
     $('details-body').replaceChildren(...buildTabs(defs, tab));
   } catch {
@@ -1195,6 +1457,7 @@ async function load() {
     if (state.view === 'hdlist') { await loadHdList(); return; }
     if (state.view === 'sys') { await loadSys(); return; }
     if (state.view === 'audit') { await loadAudit(); return; }
+    if (state.view === 'env') { await loadEnv(); return; }
     const url = state.view === 'hduser'
       ? `api/helpdesk/sessions?sid=${encodeURIComponent(state.target.sid)}&range=${encodeURIComponent(state.range)}`
       : `api/sessions?range=${encodeURIComponent(state.range)}`;
@@ -1284,6 +1547,8 @@ async function init() {
   $('tab-mine').addEventListener('click', () => showView('mine'));
   $('tab-hd').addEventListener('click', () => showView('hdlist'));
   $('tab-audit').addEventListener('click', () => showView('audit'));
+  $('tab-env').addEventListener('click', () => showView('env'));
+  $('env-refresh').addEventListener('click', () => loadEnv().catch(() => setStatus(t('error'), true)));
   $('cfg').addEventListener('toggle', () => { if ($('cfg').open) loadCfg().catch(() => setStatus(t('error'), true)); });
   $('cfg-filter').addEventListener('input', renderCfg);
   $('cfg-changed').addEventListener('change', renderCfg);
@@ -1318,14 +1583,15 @@ async function init() {
   }
   await load();
   // demo mode only (README screenshots): ?shot=details opens the expert view of the first session, ?shot=profile also reads its
-  // profile, ?shot=processes opens its process list
+  // profile, ?shot=processes opens its process list, ?shot=env the Environment tab
   const shot = QUERY.get('shot');
   if (!$('demo').hidden && state.data?.live[0] && ['details', 'profile', 'processes'].includes(shot)) {
     setExpert(true);
     if (shot === 'processes') await openProcesses(state.data.live[0]);
     else { await openDetails(state.data.live[0], shot === 'profile' ? 'profile' : 'summary'); if (shot === 'profile') document.querySelector('.profile button')?.click(); }
   }
-  state.timer = setInterval(() => { if (!document.hidden && !$('confirm').open && state.view !== 'audit') load(); }, refreshSeconds * 1000);
+  if (!$('demo').hidden && shot === 'env' && state.caps.admin) { showView('env'); await loadEnv(); }
+  state.timer = setInterval(() => { if (!document.hidden && !$('confirm').open && state.view !== 'audit' && state.view !== 'env') load(); }, refreshSeconds * 1000);
 }
 
 init();

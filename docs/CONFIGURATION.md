@@ -54,7 +54,7 @@ SSS has no configuration GUI on purpose: a web page that writes its own configur
 | Key | Default | Meaning |
 |---|---|---|
 | `Group` | `""` | AD group (`DOMAIN\Group`) whose members have all helpdesk rights (level 3: find users, see and log off their sessions, send messages, processes, profile, expert view, status). Kept for existing installations; finer levels are in `Sss:Roles`. Resolved to a SID at startup; if it cannot be resolved the group grants nothing. |
-| `ReasonRequired` | `true` | Require a ticket number or reason (any text, not checked) for every helpdesk log-off, message, process list, profile and end-process; it is written to the audit trail. See [Roles](ROLES.md#ticket-number-or-reason-mandatory). |
+| `ReasonRequired` | `false` | When `true`, require a ticket number or reason (any text, not checked) for every helpdesk log-off, message, process list, profile and end-process; it is written to the audit trail. See [Roles](ROLES.md#ticket-number-or-reason-mandatory). |
 | `BulkAlertThreshold` | `5` | A helpdesk request that logs off this many sessions or more also writes the event `alert:bulk-logoff`. 0 = off. |
 | `MaxSessions` | `1000` | Upper limit of the farm-wide session overview. |
 | `MessageTitle` | `IT Helpdesk` | Title of messages sent to a session. |
@@ -154,6 +154,16 @@ Default `data` next to the application. Holds what SSS keeps between restarts: t
 | `StaleSeconds` | `180` | A server that has not reported for this long counts as not running. |
 
 See [Server list and configuration](MULTI-SERVER.md#server-list-and-configuration).
+
+## Environment (`Sss:Environment`)
+
+| Key | Default | Meaning |
+|---|---|---|
+| `Locations` | `[]` | Your sites: a list of `{ "Name": "...", "Networks": [ "10.20.0.0/16", ... ] }`. The Environment tab counts sessions per location; the most specific network wins. |
+| `MinClientVersion` | `{}` | Oldest acceptable Workspace app version per platform (`"*"` = every other platform). Older clients are marked in the Environment tab and their users get a hint. Empty = no check. |
+| `HintOutdatedClient` | `true` | Show the user the hint when the own Workspace app is below the minimum. |
+
+Details and privacy notes: [Environment](ENVIRONMENT.md). The field names of the client version and platform in the Monitor are `Sss:Citrix:Monitor:ClientVersionField` and `ClientPlatformField`.
 
 ## Metrics (`Sss:Metrics`)
 

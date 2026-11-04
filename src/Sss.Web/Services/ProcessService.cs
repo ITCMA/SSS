@@ -27,6 +27,14 @@ public sealed partial class ProcessService(IProcessProvider provider, SessionSer
         return info with { Hints = ProfileAdvisor.Analyze(info) };
     }
 
+    public async Task<PolicyListResult?> PoliciesAsync(UserIdentity target, string uid, UserIdentity? actor, string? reason, string? ip, CancellationToken ct)
+    {
+        if (!await OwnsAsync(target, uid, ct)) return null;
+        var list = await provider.GetPoliciesAsync(target.Sid, uid, ct);
+        audit.Write(new AuditEntry("list-policies", target, uid, "success", ip, actor, reason));
+        return list;
+    }
+
     public async Task<ProcessListResult?> ListAsync(UserIdentity target, string uid, UserIdentity? actor, string? reason, string? ip, CancellationToken ct)
     {
         if (!await OwnsAsync(target, uid, ct)) return null;

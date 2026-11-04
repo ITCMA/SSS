@@ -122,4 +122,10 @@ public sealed class MonitorOptions
 
     /// <summary>Maximum number of pages read for one history query.</summary>
     public int MaxPages { get; set; } = 5;
+
+    /// <summary>Property of Connection with the Workspace app version. Used when the site delivers it (checked in $metadata).</summary>
+    public string ClientVersionField { get; set; } = "ClientVersion";
+
+    /// <summary>Property of Connection with the client platform (Windows, Mac, iOS ...). Used when the site delivers it.</summary>
+    public string ClientPlatformField { get; set; } = "ClientPlatform";
 }

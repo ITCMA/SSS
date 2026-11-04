@@ -678,6 +678,16 @@
                   "description": "Maximum number of pages read for one history query.",
                   "type": "integer",
                   "default": 5
+                },
+                "ClientVersionField": {
+                  "description": "Property of Connection with the Workspace app version. Used when the site delivers it (checked in $metadata).",
+                  "type": "string",
+                  "default": "ClientVersion"
+                },
+                "ClientPlatformField": {
+                  "description": "Property of Connection with the client platform (Windows, Mac, iOS ...). Used when the site delivers it.",
+                  "type": "string",
+                  "default": "ClientPlatform"
                 }
               },
               "additionalProperties": false
@@ -736,9 +746,9 @@
               "default": ""
             },
             "ReasonRequired": {
-              "description": "Require a ticket number or reason for every helpdesk action that changes something or reads processes or profiles (log-off, message, end process). Free text; the content is not checked, it is written to the audit log.",
+              "description": "Require a ticket number or reason for every helpdesk action that changes something or reads processes or profiles (log-off, message, end process). Free text; the content is not checked, it is written to the audit log. Off by default: the field stays available and is logged when filled in.",
               "type": "boolean",
-              "default": true
+              "default": false
             },
             "BulkAlertThreshold": {
               "description": "A helpdesk request that logs off this many sessions or more is reported as an alert event (audit sinks can notify).",
@@ -836,6 +846,48 @@
                 "type": "string"
               },
               "default": []
+            }
+          },
+          "additionalProperties": false
+        },
+        "Environment": {
+          "description": "The Environment view (client versions, locations) and the outdated-client hint.",
+          "type": "object",
+          "properties": {
+            "Locations": {
+              "description": "Your sites or offices, each with the networks (CIDR or single address) its clients connect from.",
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "Name": {
+                    "description": "Name shown in the Environment tab, for example the office or data center.",
+                    "type": "string",
+                    "default": ""
+                  },
+                  "Networks": {
+                    "description": "Networks of this location, for example 10.20.0.0/16. The most specific match wins.",
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "default": []
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "MinClientVersion": {
+              "description": "Oldest acceptable Workspace app version per platform, for example {\"Windows\": \"26.3.0\", \"Mac\": \"26.3.0\"}; \"*\" applies to every other platform. Clients below it are counted as outdated in the Environment tab and their users get a hint. Empty = no check.",
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "HintOutdatedClient": {
+              "description": "Show the user a hint in the session list when the own Workspace app is below the minimum version.",
+              "type": "boolean",
+              "default": true
             }
           },
           "additionalProperties": false

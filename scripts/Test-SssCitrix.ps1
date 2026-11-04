@@ -9,6 +9,7 @@
     1. Broker SDK is available and the controller answers (Get-BrokerSession for the given user)
     2. Monitor OData is reachable with the current Windows identity
     3. The properties SSS relies on exist in the OData $metadata (User.Sid, Session.*, SessionMetrics date/RTT field)
+    4. What else the Monitor delivers (entity sets, client version and platform, location, policy or score data), as the basis for further views
   Copy the output into a GitHub issue if something does not match. Add -Redact first: it replaces user, domain,
   host names, SIDs, IP addresses and GUIDs in the output (-Mask adds more words, -UseHttp selects http:// for the Monitor).
 
@@ -188,6 +189,40 @@ try {
     }
     $session = $xml.SelectSingleNode("//edm:EntityType[@Name='Session']", $ns)
     if ($session) { Info ('Session properties: ' + (($session.Property | ForEach-Object { $_.Name }) -join ', ')) }
+
+    # What the "Environment" view (client versions, locations) and possible further views (uberAgent score, app usage, policies) can build on.
+    Info '--- Monitor data model (what else this site delivers) ---'
+    $sets = @($xml.SelectNodes('//edm:EntityContainer/edm:EntitySet', $ns) | ForEach-Object { $_.Name })
+    Info ('Entity sets ({0}): {1}' -f $sets.Count, ($sets -join ', '))
+    foreach ($pair in @(@('Connection', 'ClientVersion'), @('Connection', 'ClientPlatform'), @('Session', 'ClientVersion'))) {
+        $node = $xml.SelectSingleNode("//edm:EntityType[@Name='" + $pair[0] + "']/edm:Property[@Name='" + $pair[1] + "']", $ns)
+        if ($node) { Ok ("Environment view: {0}.{1} exists" -f $pair[0], $pair[1]) } else { Info ("Environment view: {0}.{1} not found" -f $pair[0], $pair[1]) }
+    }
+    $hits = @()
+    foreach ($et in $xml.SelectNodes('//edm:EntityType', $ns)) {
+        foreach ($prop in $et.Property) {
+            if ($prop.Name -match 'ClientVersion|ClientPlatform|Platform|Location|Country|City|Geo|Policy|Polic|Score|UberAgent|Trust') { $hits += ("{0}.{1}" -f $et.Name, $prop.Name) }
+        }
+    }
+    if ($hits.Count -gt 0) { Info ('Properties that may carry client, location, policy or score data: ' + ($hits -join ', ')) } else { Info 'No properties with client, location, policy or score names besides the ones above.' }
+    # Property names (not values) of record types that may carry logon details, scores or load data: the basis for further views.
+    foreach ($typeName in 'SessionLogonMetrics', 'LogOnMetrics', 'LogOnSummaries', 'SessionMetricsLatest', 'GatewayPopInfo', 'LoadIndexes', 'ProcessUtilization', 'Processes', 'MachineMetric', 'SessionActivitySummaries', 'Machine', 'LhcReport') {
+        $node = $null
+        foreach ($candidate in @($typeName, $typeName.TrimEnd('s'), ($typeName -replace 'ies$', 'y'), ($typeName -replace 'es$', ''))) {
+            $node = $xml.SelectSingleNode("//edm:EntityType[@Name='$candidate']", $ns)
+            if ($node) { break }
+        }
+        if ($node) { Info ("Data model {0}: {1}" -f $typeName, (($node.Property | ForEach-Object { "{0} ({1})" -f $_.Name, ($_.Type -replace '^Edm\.', '') }) -join ', ')) }
+        else { Info ("Data model {0}: not found" -f $typeName) }
+    }
+    $candidates = @($sets | Where-Object { $_ -match 'uber|score|app|polic|locat|geo|endpoint|device|trust|usage|resource|logon' })
+    foreach ($set in $candidates) {
+        try {
+            $r = Get-Json ($MonitorBaseUrl + $set + '?$top=1') | ConvertFrom-Json
+            if ($r.value.Count -gt 0) { Ok ("Entity set '{0}' contains data (first row has: {1})" -f $set, (($r.value[0].PSObject.Properties | ForEach-Object { $_.Name }) -join ', ')) }
+            else { Info ("Entity set '{0}' exists but is empty" -f $set) }
+        } catch { Info ("Entity set '{0}' could not be read: {1}" -f $set, $_.Exception.Message) }
+    }
 } catch { Bad ("Monitor OData `$metadata: {0}" -f $_.Exception.Message) }
 
 if ($sid) {
@@ -235,7 +270,7 @@ if ($Vda) {
         try {
             $session = New-PSSession -ComputerName $Vda -ConfigurationName $JeaConfiguration -ErrorAction Stop
             Ok "Connected to the endpoint '$JeaConfiguration' on $Vda as $([Security.Principal.WindowsIdentity]::GetCurrent().Name)"
-            Import-PSSession -Session $session -CommandName 'Get-SssProcess', 'Stop-SssProcess', 'Get-SssProfile' -AllowClobber -DisableNameChecking -ErrorAction SilentlyContinue | Out-Null
+            Import-PSSession -Session $session -CommandName 'Get-SssProcess', 'Stop-SssProcess', 'Get-SssProfile', 'Get-SssPolicy' -AllowClobber -DisableNameChecking -ErrorAction SilentlyContinue | Out-Null
             Ok 'Process commands are offered'
             $procs = @(Get-SssProcess -UserSid $sid)
             Ok ("Get-SssProcess returned {0} process(es) of the user" -f $procs.Count)
@@ -245,10 +280,19 @@ if ($Vda) {
                 Ok ("Get-SssProfile: type {0}, folder size {1}{2}, container {3}, local path {4}" -f $prof.Type, $(if ($null -ne $prof.SizeMb) { "$($prof.SizeMb) MB" } else { 'not read' }), $(if ($prof.SizePartial) { ' (partial)' } else { '' }), $(if ($null -ne $prof.ContainerMb) { "$($prof.ContainerMb) MB" } else { 'not read' }), $(if ($prof.LocalPath) { 'found' } else { 'missing' }))
                 if ($prof.Notes) { Info ('Profile notes: ' + (@($prof.Notes) -join ', ')) }
             } else { Info 'Get-SssProfile is not offered: run Install-SssJea.ps1 again on this VDA to add the profile command.' }
+            if (Get-Command Get-SssPolicy -ErrorAction SilentlyContinue) {
+                $pol = @(Get-SssPolicy -UserSid $sid)
+                Ok ("Get-SssPolicy returned {0} policy value(s)" -f $pol.Count)
+                # names and places only (no values), to map them to the names Studio shows
+                foreach ($line in @($pol | ForEach-Object { '{0} | {1}' -f $_.Path, $_.Name } | Sort-Object -Unique | Select-Object -First 400)) { Info ('Policy value: ' + $line) }
+            } else { Info 'Get-SssPolicy is not offered: run Install-SssJea.ps1 again on this VDA to add the policy command.' }
             $other = Stop-SssProcess -UserSid $sid -ProcessId 2147483647
             if ($other -eq 'not-found' -or $other -eq 'not-owned') { Ok "Safety check: a process id that does not exist is refused ($other)" }
             else { Bad "Safety check failed: Stop-SssProcess answered '$other' for a process id that does not exist" }
-        } catch { Bad ("JEA endpoint: {0}" -f $_.Exception.Message) }
+        } catch {
+            Bad ("JEA endpoint: {0}" -f $_.Exception.Message)
+            if ($_.Exception.Message -match 'Access is denied') { Info 'The account running this test is not a -Principal of the endpoint (Install-SssJea.ps1). The web server uses its own identity: add the account that runs the SSS application pool (or the test user, for this test) to -Principal and run the installer again on the VDA.' }
+        }
         finally { if ($session) { Remove-PSSession $session -ErrorAction SilentlyContinue } }
         Info 'Nothing was ended. Test ending with a harmless process (for example notepad) in the web interface.'
     }

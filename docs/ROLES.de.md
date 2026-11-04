@@ -10,7 +10,7 @@ Jeder, der sich anmelden kann, sieht und beendet **seine eigenen** Sitzungen. Da
 | Stufe 2 | `Sss:Roles:Level2Group` | Stufe 1, dazu Sitzungen abmelden und Nachrichten senden. |
 | Stufe 3 | `Sss:Roles:Level3Group` | Stufe 2, dazu Prozesse und Profil anderer Benutzer lesen und Prozesse beenden (braucht den [JEA-Endpunkt](PROCESSES.de.md)). |
 | Auditor | `Sss:Roles:AuditorGroup` | das [Audit-Protokoll](AUDIT.de.md) lesen, auswerten, exportieren und seine Integrität prüfen. Sonst nichts. |
-| Admin | `Sss:Roles:AdminGroup` | der Reiter **Status**: Prüfungen, Delivery Controller, Audit-Ziele und die Liste der SSS-Server. |
+| Admin | `Sss:Roles:AdminGroup` | der Reiter **Status** (Prüfungen, Delivery Controller, Audit-Ziele, Liste der SSS-Server, wirksame Konfiguration) und der Reiter **Umgebung** ([Client-Versionen und Standorte](ENVIRONMENT.de.md)). |
 
 ```json
 "Roles": {
@@ -27,9 +27,9 @@ Jeder, der sich anmelden kann, sieht und beendet **seine eigenen** Sitzungen. Da
 - Die Oberfläche zeigt nur, was die Rollen erlauben, und der Server prüft jeden Aufruf noch einmal (ein API-Aufruf ohne das Recht bekommt `403`).
 - Jede Audit-Zeile trägt die Rolle dessen, der gehandelt hat (`L2`, `L3+Auditor`, ...).
 
-## Ticketnummer oder Grund (Pflicht)
+## Ticketnummer oder Grund (optional, auf Wunsch Pflicht)
 
-Mit `Sss:Helpdesk:ReasonRequired` = `true` (Standard) braucht jede Helpdesk-Aktion, die etwas ändert oder Prozesse und Profile liest, eine **Ticketnummer oder einen Grund**: Abmelden, Nachricht, Prozessliste, Profil, Prozess beenden. SSS prüft den Inhalt nicht (beliebiger Text bis 200 Zeichen), es stellt nur sicher, dass einer da ist, und schreibt ihn in das Audit-Protokoll. Der Helpdesk trägt ihn einmal im Feld oben in der Benutzeransicht ein. Suchen und Sitzungen ansehen braucht keinen. Mit `false` ist er optional.
+Das Feld oben in der Benutzeransicht nimmt eine Ticketnummer oder einen beliebigen Grund auf; was eingetragen wird, steht im Audit-Protokoll. Standardmäßig ist es **optional**. Mit `Sss:Helpdesk:ReasonRequired` = `true` braucht jede Helpdesk-Aktion, die etwas ändert oder Prozesse und Profile liest, eine **Ticketnummer oder einen Grund**: Abmelden, Nachricht, Prozessliste, Profil, Prozess beenden. SSS prüft den Inhalt nicht (beliebiger Text bis 200 Zeichen), es stellt nur sicher, dass einer da ist, und schreibt ihn in das Audit-Protokoll. Der Helpdesk trägt ihn einmal im Feld oben in der Benutzeransicht ein. Suchen und Sitzungen ansehen braucht keinen. Wieder ausgeschaltet ist er optional.
 
 ## Hinweis bei Massenaktionen
 

@@ -32,7 +32,10 @@ public sealed record SessionInfo(
     string? ClientName,
     string? ClientAddress,
     SessionQuality Quality,
-    string? SessionKey = null);
+    string? SessionKey = null,
+    string? ClientVersion = null,
+    string? ClientPlatform = null,
+    bool ClientOutdated = false);
 
 /// <summary>Sessions plus non-fatal problems (e.g. "history-unavailable") the UI can tell the user about.</summary>
 public sealed record SessionQueryResult(IReadOnlyList<SessionInfo> Sessions, IReadOnlyList<string> Warnings);
@@ -79,14 +82,20 @@ public sealed record SessionDetails(
 
 /// <summary>One step of the logon (brokering, HDX, authentication, GPO, scripts, profile, shell) on a time axis in
 /// milliseconds. <c>Estimated</c> = the length is known but the position was derived.</summary>
-public sealed record LogonStep(string Id, double StartMs, double DurationMs, bool Estimated);
+public sealed record LogonStep(string Id, double StartMs, double DurationMs, bool Estimated, string? Parent = null,
+    DateTimeOffset? StartAt = null, DateTimeOffset? EndAt = null, double? AvgUserMs = null);
 
 public sealed record LogonWaterfall(double TotalMs, IReadOnlyList<LogonStep> Steps);
 
 /// <summary>One health check of the status page.</summary>
 public sealed record StatusCheck(string Id, bool? Ok, string Detail, string? Label = null);
 
-public sealed record ProcessEntry(int Id, string Name, DateTimeOffset? Started, int MemoryMb, string? Window, bool IsApp = false, string? Path = null);
+public sealed record ProcessEntry(int Id, string Name, DateTimeOffset? Started, int MemoryMb, string? Window, bool IsApp = false, string? Path = null, string? Description = null);
+
+/// <summary>One Citrix policy value in force in a session: where it sits below the policy key, its name and its value.</summary>
+public sealed record PolicyEntry(int SessionId, string Path, string Name, string Value);
+
+public sealed record PolicyListResult(string? Machine, IReadOnlyList<PolicyEntry> Entries);
 
 public sealed record ProcessListResult(string? Machine, IReadOnlyList<ProcessEntry> Processes);
 

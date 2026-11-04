@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Sss.Web;
 using Sss.Web.Providers;
 using Sss.Web.Services;
 
@@ -20,6 +21,7 @@ public abstract class SssFactory(bool helpdesk, string roles = "") : WebApplicat
         Environment.SetEnvironmentVariable("Sss__Auth__DevIsHelpdesk", helpdesk ? "true" : "false");
         Environment.SetEnvironmentVariable("Sss__Audit__Directory", AuditDir);
         Environment.SetEnvironmentVariable("Sss__Auth__DevRoles", roles);
+        Environment.SetEnvironmentVariable("Sss__Helpdesk__ReasonRequired", "true");   // the API tests cover the requirement; it is off by default
     }
 
     public HttpClient NewClient() => CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = true, AllowAutoRedirect = false });
@@ -30,6 +32,7 @@ public abstract class SssFactory(bool helpdesk, string roles = "") : WebApplicat
         Environment.SetEnvironmentVariable("Sss__Auth__DevIsHelpdesk", null);
         Environment.SetEnvironmentVariable("Sss__Audit__Directory", null);
         Environment.SetEnvironmentVariable("Sss__Auth__DevRoles", null);
+        Environment.SetEnvironmentVariable("Sss__Helpdesk__ReasonRequired", null);
         if (Directory.Exists(AuditDir)) Directory.Delete(AuditDir, true);
     }
 }
@@ -95,6 +98,17 @@ public class HelpdeskApiTests : IClassFixture<HelpdeskOnFactory>
         Assert.True(p.GetProperty("sizeMb").GetInt32() > 0);
         Assert.Contains("profile-info", string.Concat(Directory.GetFiles(_f.AuditDir).Select(File.ReadAllText)));
         Assert.Equal(HttpStatusCode.NotFound, (await _c.GetAsync("/api/sessions/does-not-exist/profile")).StatusCode);
+    }
+
+    [Fact]
+    public async Task The_policies_of_a_session_are_read_audited_and_foreign_sessions_are_not_found()
+    {
+        var r = await _c.GetAsync($"/api/helpdesk/sessions/2001/policies?sid={MockSessionProvider.OtherSid}&reason=INC1");
+        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        Assert.Contains(await (r).Json() is var j ? j.GetProperty("entries").EnumerateArray().Select(e => e.GetProperty("name").GetString()).ToArray() : [], n => n == "ClipboardRedirection");
+        Assert.Contains("list-policies", string.Concat(Directory.GetFiles(_f.AuditDir).Select(File.ReadAllText)));
+        Assert.Equal(HttpStatusCode.NotFound, (await _c.GetAsync($"/api/helpdesk/sessions/9999/policies?sid={MockSessionProvider.OtherSid}&reason=r")).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await _c.GetAsync($"/api/helpdesk/sessions/2001/policies?sid={MockSessionProvider.OtherSid}")).StatusCode);   // reason required in these tests
     }
 
     [Fact]
@@ -302,6 +316,9 @@ public class NonHelpdeskApiTests : IClassFixture<HelpdeskOffFactory>
 
 public class HelpdeskServiceTests
 {
+    [Fact]
+    public void A_ticket_number_is_optional_by_default() => Assert.False(new SssOptions().Helpdesk.ReasonRequired);
+
     [Theory]
     [InlineData("  ticket 1  ", "ticket 1")]
     [InlineData("a\r\nb\tc", "abc")]
@@ -358,6 +375,12 @@ public class RoleTests : IClassFixture<Level1Factory>, IClassFixture<Level2Facto
         Assert.Equal(HttpStatusCode.Forbidden, (await _l1.PostJson("/api/helpdesk/message", new { sid = MockSessionProvider.OtherSid, uids = new[] { "2001" }, text = "hi", reason = "r" })).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await _l1.GetAsync($"/api/helpdesk/sessions/2001/processes?sid={MockSessionProvider.OtherSid}&reason=r")).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await _l1.GetAsync("/api/helpdesk/status")).StatusCode);   // no admin group configured: every helpdesk member
+    }
+
+    [Fact]
+    public async Task Level_2_cannot_read_the_policies_either()
+    {
+        Assert.Equal(HttpStatusCode.Forbidden, (await _l2.GetAsync($"/api/helpdesk/sessions/2001/policies?sid={MockSessionProvider.OtherSid}&reason=r")).StatusCode);
     }
 
     [Fact]

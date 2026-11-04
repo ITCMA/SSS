@@ -33,9 +33,36 @@ public sealed class SssOptions
     /// <summary>Prometheus metrics endpoint.</summary>
     public MetricsOptions Metrics { get; set; } = new();
 
+    /// <summary>The Environment view (client versions, locations) and the outdated-client hint.</summary>
+    public EnvironmentOptions Environment { get; set; } = new();
+
     /// <summary>Folder for state SSS keeps between restarts (forwarding positions, controller cache, drain flag).
     /// Relative paths are based on the app directory; the app pool identity needs write access.</summary>
     public string DataDirectory { get; set; } = "data";
+}
+
+/// <summary>The Environment tab shows which Workspace app versions and platforms connect and from which of your locations. Citrix delivers no
+/// location for an on-premises site (the cloud derives it from the address), so locations are the networks you assign to a name.</summary>
+public sealed class EnvironmentOptions
+{
+    /// <summary>Your sites or offices, each with the networks (CIDR or single address) its clients connect from.</summary>
+    public LocationOptions[] Locations { get; set; } = [];
+
+    /// <summary>Oldest acceptable Workspace app version per platform, for example {"Windows": "26.3.0", "Mac": "26.3.0"}; "*" applies to every other platform.
+    /// Clients below it are counted as outdated in the Environment tab and their users get a hint. Empty = no check.</summary>
+    public Dictionary<string, string> MinClientVersion { get; set; } = [];
+
+    /// <summary>Show the user a hint in the session list when the own Workspace app is below the minimum version.</summary>
+    public bool HintOutdatedClient { get; set; } = true;
+}
+
+public sealed class LocationOptions
+{
+    /// <summary>Name shown in the Environment tab, for example the office or data center.</summary>
+    public string Name { get; set; } = "";
+
+    /// <summary>Networks of this location, for example 10.20.0.0/16. The most specific match wins.</summary>
+    public string[] Networks { get; set; } = [];
 }
 
 /// <summary>GET /metrics in the Prometheus text format (counters and states, no personal data). IIS must allow anonymous access
@@ -281,8 +308,9 @@ public sealed class HelpdeskOptions
     public string Group { get; set; } = "";
 
     /// <summary>Require a ticket number or reason for every helpdesk action that changes something or reads processes or
-    /// profiles (log-off, message, end process). Free text; the content is not checked, it is written to the audit log.</summary>
-    public bool ReasonRequired { get; set; } = true;
+    /// profiles (log-off, message, end process). Free text; the content is not checked, it is written to the audit log. Off by default: the field stays
+    /// available and is logged when filled in.</summary>
+    public bool ReasonRequired { get; set; }
 
     /// <summary>A helpdesk request that logs off this many sessions or more is reported as an alert event (audit sinks can notify).</summary>
     public int BulkAlertThreshold { get; set; } = 5;

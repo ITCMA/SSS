@@ -154,8 +154,21 @@ public sealed partial class BrokerWorkerPool : IBrokerClient, IHostedService, ID
                     p.TryGetProperty("memoryMb", out var mem) ? mem.GetInt32() : 0,
                     Str(p, "window") is { Length: > 0 } w ? w : null,
                     p.TryGetProperty("isApp", out var ia) && ia.ValueKind == JsonValueKind.True,
-                    Str(p, "path") is { Length: > 0 } pa ? pa : null));
+                    Str(p, "path") is { Length: > 0 } pa ? pa : null,
+                    Str(p, "description") is { Length: > 0 } de ? de : null));
         return new BrokerProcessList(Str(res, "machine"), list);
+    }
+
+    public async Task<BrokerPolicies> PoliciesAsync(string userSid, string uid, CancellationToken ct)
+    {
+        if (!SidRegex().IsMatch(userSid)) throw new ArgumentException("Invalid SID.", nameof(userSid));
+        if (!UidRegex().IsMatch(uid)) throw new ArgumentException("Invalid session id.", nameof(uid));
+        var res = await RunAsync(new() { ["op"] = "policies", ["sid"] = userSid, ["uid"] = uid }, ct, Math.Max(_options.RequestTimeoutSeconds, _options.Processes.TimeoutSeconds));
+        var list = new List<PolicyEntry>();
+        if (res.TryGetProperty("policies", out var arr) && arr.ValueKind == JsonValueKind.Array)
+            foreach (var p in arr.EnumerateArray())
+                list.Add(new PolicyEntry(Int(p, "sessionId") ?? 0, Str(p, "path") ?? "", Str(p, "name") ?? "", Str(p, "value") ?? ""));
+        return new BrokerPolicies(Str(res, "machine"), list);
     }
 
     public async Task<ProfileInfo> ProfileAsync(string userSid, string uid, int scanSeconds, CancellationToken ct)

@@ -10,7 +10,7 @@ Everybody who can sign in sees and logs off **their own** sessions. On top of th
 | Level 2 | `Sss:Roles:Level2Group` | level 1, plus log off sessions and send messages. |
 | Level 3 | `Sss:Roles:Level3Group` | level 2, plus list processes and read the profile of other users, end processes (needs the [JEA endpoint](PROCESSES.md)). |
 | Auditor | `Sss:Roles:AuditorGroup` | read, evaluate and export the [audit trail](AUDIT.md) and check its integrity. Nothing else. |
-| Admin | `Sss:Roles:AdminGroup` | the **Status** tab: health checks, Delivery Controllers, audit destinations and the list of SSS servers. |
+| Admin | `Sss:Roles:AdminGroup` | the **Status** tab (health checks, Delivery Controllers, audit destinations, list of SSS servers, effective configuration) and the **Environment** tab ([client versions and locations](ENVIRONMENT.md)). |
 
 ```json
 "Roles": {
@@ -27,9 +27,9 @@ Everybody who can sign in sees and logs off **their own** sessions. On top of th
 - The interface shows only what the roles allow, and the server checks every call again (an API call without the right gets `403`).
 - Every audit line carries the role of the person who acted (`L2`, `L3+Auditor`, ...).
 
-## Ticket number or reason (mandatory)
+## Ticket number or reason (optional, can be made mandatory)
 
-With `Sss:Helpdesk:ReasonRequired` = `true` (the default) every helpdesk action that changes something or reads processes or profiles needs a **ticket number or reason**: log off, message, process list, profile, end process. SSS does not check the content (any text up to 200 characters), it only makes sure that there is one and writes it into the audit trail. The helpdesk enters it once in the field at the top of the user view. Searching and looking at sessions does not need one. Set the option to `false` to make it optional.
+The field at the top of the user view takes a ticket number or any other reason; whatever is entered is written into the audit trail. By default it is **optional**. With `Sss:Helpdesk:ReasonRequired` = `true` every helpdesk action that changes something or reads processes or profiles needs a **ticket number or reason**: log off, message, process list, profile, end process. SSS does not check the content (any text up to 200 characters), it only makes sure that there is one and writes it into the audit trail. The helpdesk enters it once in the field at the top of the user view. Searching and looking at sessions does not need one. Switch the option off again to make it optional.
 
 ## Notice on bulk actions
 

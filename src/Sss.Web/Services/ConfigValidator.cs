@@ -57,7 +57,6 @@ public static partial class ConfigValidator
         var h = o.Helpdesk;
         if (h.MaxSessions < 1) Error("Sss:Helpdesk:MaxSessions must be at least 1.");
         if (h.BulkAlertThreshold < 0) Error("Sss:Helpdesk:BulkAlertThreshold must not be negative (0 = off).");
-        if (!h.ReasonRequired) Warn("Sss:Helpdesk:ReasonRequired is false: helpdesk actions need no ticket number or reason.");
 
         foreach (var (key, value) in new[]
                  {
@@ -86,6 +85,16 @@ public static partial class ConfigValidator
         if (i.Directory.Length > 0 && o.DataProtection.KeyDirectory.Length == 0)
             Warn("Several servers are configured (Sss:Instances) but Sss:DataProtection:KeyDirectory is empty: a CSRF token of one server is rejected by the others unless the load balancer is sticky.");
 
+        foreach (var loc in o.Environment.Locations)
+        {
+            if (string.IsNullOrWhiteSpace(loc.Name) || loc.Name.Length > 60 || loc.Name.Any(char.IsControl)) Error("Sss:Environment:Locations: every location needs a name of up to 60 plain characters.");
+            if (loc.Networks.Length == 0) Error($"Sss:Environment:Locations '{loc.Name}' lists no networks.");
+            foreach (var n in loc.Networks)
+                if (EnvironmentService.ParseNetwork(n) is null) Error($"Sss:Environment:Locations '{loc.Name}': '{n}' is not a network like 10.20.0.0/16 or an address.");
+        }
+        foreach (var (platform, min) in o.Environment.MinClientVersion)
+            if (platform.Length == 0 || ClientVersions.Parse(min) is null) Error($"Sss:Environment:MinClientVersion '{platform}': '{min}' is not a version like 26.3.0.");
+
         foreach (var a in o.Metrics.AllowedIps)
         {
             var ok = a.Contains('/') ? IPNetwork.TryParse(a, out _) : IPAddress.TryParse(a, out _);
@@ -112,7 +121,7 @@ public static partial class ConfigValidator
         if (c.Balancing.FailureThreshold < 1) error("Sss:Citrix:Balancing:FailureThreshold must be at least 1.");
         if (c.Monitor.Enabled)
         {
-            foreach (var field in new[] { c.Monitor.MetricsDateField, c.Monitor.IcaRttField, c.Monitor.BandwidthField })
+            foreach (var field in new[] { c.Monitor.MetricsDateField, c.Monitor.IcaRttField, c.Monitor.BandwidthField, c.Monitor.ClientVersionField, c.Monitor.ClientPlatformField })
                 if (!FieldRegex().IsMatch(field)) error($"Sss:Citrix:Monitor field name '{field}' is not a valid OData property name.");
             foreach (var u in c.Monitor.BaseUrls.Append(c.Monitor.BaseUrl ?? "").Where(u => u.Length > 0))
                 if (!(Uri.TryCreate(u, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https")) error("Sss:Citrix:Monitor:BaseUrl(s) must be http:// or https:// addresses.");

@@ -10,6 +10,9 @@ public interface IProcessProvider
 
     Task<ProfileInfo> GetProfileAsync(string userSid, string uid, int scanSeconds, CancellationToken ct);
 
+    /// <summary>The Citrix policy values in force in the user's sessions on that machine (read only).</summary>
+    Task<PolicyListResult> GetPoliciesAsync(string userSid, string uid, CancellationToken ct) => throw new NotSupportedException();
+
     /// <summary>closed, killed, no-window, not-closed, not-owned, not-found or protected.</summary>
     Task<string> EndProcessAsync(string userSid, string uid, int processId, bool force, CancellationToken ct);
 }

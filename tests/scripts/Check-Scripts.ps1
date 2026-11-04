@@ -88,7 +88,7 @@ Check 'role capability and session configuration files are valid' {
     $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ('sss-jea-' + [guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $tmp | Out-Null
     try {
-        New-PSRoleCapabilityFile -Path (Join-Path $tmp 'SssProcesses.psrc') -VisibleFunctions 'Get-SssProcess', 'Get-SssProfile', 'Stop-SssProcess' -FunctionDefinitions $functions
+        New-PSRoleCapabilityFile -Path (Join-Path $tmp 'SssProcesses.psrc') -VisibleFunctions 'Get-SssProcess', 'Get-SssProfile', 'Get-SssPolicy', 'Stop-SssProcess' -FunctionDefinitions $functions
         New-PSSessionConfigurationFile -Path (Join-Path $tmp 'SSS.pssc') -SessionType RestrictedRemoteServer -RunAsVirtualAccount -TranscriptDirectory $tmp `
             -RoleDefinitions @{ 'CORP\svc-sss$' = @{ RoleCapabilities = 'SssProcesses' } }
         [void](Parse (Join-Path $tmp 'SssProcesses.psrc')); [void](Parse (Join-Path $tmp 'SSS.pssc'))
@@ -107,6 +107,13 @@ Check 'Get-SssProcess refuses an invalid SID' {
     $threw = $false
     try { Get-SssProcess -UserSid "S-1-5-21-1' or '1'='1" | Out-Null } catch { $threw = $true }
     Assert $threw 'invalid SID was accepted'
+}
+
+Check 'Get-SssPolicy runs and returns only plain values' {
+    $list = @(Get-SssPolicy -UserSid $sid)
+    foreach ($e in $list) { Assert ($e.Name -and $null -ne $e.Value -and $e.Value.Length -le 200) 'policy entry malformed' }
+    $bad = $false; try { Get-SssPolicy -UserSid 'x; calc' | Out-Null } catch { $bad = $true }
+    Assert $bad 'invalid SID not refused'
 }
 
 Check 'Get-SssProfile reads type and size of the current profile' {

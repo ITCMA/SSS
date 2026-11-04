@@ -34,6 +34,16 @@ Broker- und Monitor-Sitzungen werden über den **SessionKey** verbunden. Fällt 
 
 Die drei optionalen Datensätze der Experten-Ansicht gibt es nicht auf jeder Umgebung. SSS meldet einen fehlenden Satz als „von dieser Umgebung nicht geliefert“ und zeigt den Rest. `Test-SssCitrix.ps1` zeigt, welche deine Umgebung hat.
 
+### Verbindungs-, Endpunkt- und VDA-Daten in der Experten-Ansicht
+
+Neben der Sitzung und ihren Messwerten liest die Experten-Ansicht, wo die Site sie liefert (Prüfung im `$metadata`, sonst fehlt der Teil einfach):
+
+- die **Verbindung** (Reiter Übersicht, „Verbindung“): Endpunktname, Adresse, Plattform und Workspace-App-Version, Standort, Netzwerktyp, Gateway (`ConnectedViaHostName`), Protokoll und Verschlüsselung, mit den Latenzen dazwischen (WAN, Rechenzentrum, Netzwerk, ICARTT) wie Directors Sitzungstopologie;
+- **EndpointMetrics** (CPU, Speicher, GPU, WLAN-Signal und Durchsatz des Endgeräts) und **ResourceUtilization** der VDA-Maschine (CPU, Speicher in Prozent, Sitzungszahl) als Diagramme unter „Verlauf“;
+- die **Anmeldedetails**, die der Monitor getrennt führt: Benutzerinitialisierung und AppX-Schritte als weitere Schritte der Anmeldung, Profiltyp und -größe, die Zahl großer Dateien, die langsamsten Gruppenrichtlinien-Erweiterungen sowie das HDX-Protokoll mit MTU und der Gateway-Standort;
+- den **Lastindex** der VDA-Maschine (0-10000), der wie die Anmeldedauer die zweite Ampel („Rechenzentrum & VDA“) speist;
+- die **in der Sitzung gestarteten Anwendungen** (`ActiveApplicationLaunches`, `HistoricalApplicationLaunches`) mit Startdauer sowie **Anwendungsabstürze** (`ApplicationFaults`).
+
 ### Anmelde-Wasserfall
 
 Die Expertenansicht zeichnet die Anmeldung als Balken auf einer gemeinsamen Zeitachse, damit der Schritt auffällt, der die Zeit frisst. Die Schritte stammen aus den Eigenschaften der `Connection`-Datensätze, die der Monitor zur Sitzung führt (bevorzugt die ursprüngliche Anmeldung, nicht ein späteres Wiederverbinden):
@@ -43,7 +53,7 @@ Die Expertenansicht zeichnet die Anmeldung als Balken auf einer gemeinsamen Zeit
 - Zeit innerhalb der Anmeldung, die kein Schritt erklärt (Verbindungsaufbau, Authentifizierung, Sitzungsstart ...), erscheint als grauer Balken „Vom Monitor nicht aufgeschlüsselt“, damit eine Pause im Diagramm als fehlende Daten und nicht als Leerlauf erkennbar ist. Alle Positionen sind die Zeitstempel, die der Monitor liefert, bezogen auf `LogOnStartDate`; Schritte können sich überlappen, etwa Gruppenrichtlinien und Shellstart;
 - das Gesamtfenster `LogOnStartDate`/`LogOnEndDate` und die `LogOnDuration` der Sitzung sind der Rahmen, keine Schritte.
 
-SSS legt über dieses Muster hinaus keine Feldnamen fest, neue Citrix-Versionen erscheinen also von selbst. Liefert eine Site keine Schrittdaten, erscheint kein Wasserfall; `Test-SssCitrix.ps1` listet die `Connection`-Eigenschaften und nennt, welche Schritte deine Site liefert. Der längste gemessene Schritt wird mit seinem Anteil an der Anmeldung hervorgehoben.
+SSS legt über dieses Muster hinaus keine Feldnamen fest, neue Citrix-Versionen erscheinen also von selbst. Liefert eine Site keine Schrittdaten, erscheint kein Wasserfall; `Test-SssCitrix.ps1` listet die `Connection`-Eigenschaften und nennt, welche Schritte deine Site liefert. Der längste gemessene Schritt wird mit seinem Anteil an der Anmeldung hervorgehoben. Schritte, die ganz innerhalb eines längeren Schritts liegen, stehen darunter (Gruppenrichtlinien und Anmeldeskripte innerhalb der interaktiven Sitzung; Einschalten und Hochfahren unter dem Maschinenstart), der Tooltip nennt Start und Ende auf die Millisekunde, und neben jedem Schritt steht der **Durchschnitt der Anmeldungen desselben Benutzers der letzten sieben Tage** (▲ deutlich langsamer, ▼ schneller, ≈ ähnlich), sobald es mindestens zwei frühere Anmeldungen gibt.
 
 ### Profiltyp und Größe
 
@@ -67,7 +77,7 @@ Die Größe des Profilordners wird mit Zeitlimit gezählt (`Processes:ProfileSca
 | Ihr Gerät & Netzwerk | ICA-Round-Trip-Zeit | `SessionMetrics.IcaRttMS` | unter 80 ms / ab 80 / ab 150 |
 | Ihr Gerät & Netzwerk | verfügbare Bandbreite | `SessionMetrics.OutputBandwidthAvailable` (bit/s, als kbit/s angezeigt) | über 1500 / bis 1500 / bis 400 kbit/s |
 | Rechenzentrum & VDA | Anmeldedauer | `Sessions.LogOnDuration` (ms) | unter 45 s / ab 45 / ab 90 |
-| Rechenzentrum & VDA | Last-Index des Servers | noch nicht angebunden | ab 7000 / ab 9000 |
+| Rechenzentrum & VDA | Last-Index des Servers | `LoadIndexes.EffectiveLoadIndex` der Maschine (wenn die Site ihn liefert) | ab 7000 / ab 9000 |
 
 - Der **schlechteste bekannte** Wert einer Ampel gewinnt. Ein fehlender Wert ist „unbekannt“ (?), nie rot.
 - Ein Wert **0** bei ICA-Round-Trip-Zeit oder Bandbreite bedeutet im Monitor „nicht gemessen“ und gilt als fehlend. Der Monitor schreibt mehrere Arten von Messzeilen, und die neueste enthält nicht immer jeden Messwert; SSS liest deshalb die letzten 10 Messungen und nimmt je Messwert den **neuesten brauchbaren Wert**. Die Experten-Ansicht zeigt, wann diese Messung war.

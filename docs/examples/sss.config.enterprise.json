@@ -37,6 +37,14 @@
         ]
       }
     },
+    "Environment": {
+      "Locations": [
+        { "Name": "Head office", "Networks": [ "10.20.0.0/16" ] },
+        { "Name": "Branch office", "Networks": [ "10.30.0.0/16", "192.0.2.0/24" ] },
+        { "Name": "Home office (VPN)", "Networks": [ "10.99.0.0/16" ] }
+      ],
+      "MinClientVersion": { "Windows": "26.3.0", "*": "26.3.0" }
+    },
     "Metrics": { "Enabled": true, "AllowedIps": [ "10.0.5.0/24" ] }
   }
 }

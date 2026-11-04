@@ -54,7 +54,7 @@ SSS hat absichtlich keine Konfigurations-GUI: Eine Webseite, die ihre eigene Kon
 | Schlüssel | Standard | Bedeutung |
 |---|---|---|
 | `Group` | `""` | AD-Gruppe (`DOMÄNE\Gruppe`), deren Mitglieder alle Helpdesk-Rechte haben (Stufe 3: Benutzer suchen, Sitzungen sehen und abmelden, Nachrichten senden, Prozesse, Profil, Expertenansicht, Status). Bleibt für bestehende Installationen; feinere Stufen stehen in `Sss:Roles`. Wird beim Start in eine SID aufgelöst; gelingt das nicht, gibt die Gruppe nichts frei. |
-| `ReasonRequired` | `true` | Für jedes Abmelden, jede Nachricht, Prozessliste, jedes Profil und Prozess-Beenden durch das Helpdesk eine Ticketnummer oder einen Grund verlangen (beliebiger Text, wird nicht geprüft); er steht im Audit-Protokoll. Siehe [Rollen](ROLES.de.md#ticketnummer-oder-grund-pflicht). |
+| `ReasonRequired` | `false` | Mit `true` für jedes Abmelden, jede Nachricht, Prozessliste, jedes Profil und Prozess-Beenden durch das Helpdesk eine Ticketnummer oder einen Grund verlangen (beliebiger Text, wird nicht geprüft); er steht im Audit-Protokoll. Siehe [Rollen](ROLES.de.md#ticketnummer-oder-grund-pflicht). |
 | `BulkAlertThreshold` | `5` | Eine Helpdesk-Anfrage, die so viele Sitzungen oder mehr abmeldet, schreibt zusätzlich das Ereignis `alert:bulk-logoff`. 0 = aus. |
 | `MaxSessions` | `1000` | Obergrenze der farmweiten Sitzungsübersicht. |
 | `MessageTitle` | `IT Helpdesk` | Titel der Nachrichten, die an eine Sitzung gesendet werden. |
@@ -154,6 +154,16 @@ Standard `data` neben der Anwendung. Enthält, was SSS zwischen Neustarts behäl
 | `StaleSeconds` | `180` | Ein Server, der so lange nicht gemeldet hat, gilt als nicht laufend. |
 
 Siehe [Serverliste und Konfiguration](MULTI-SERVER.de.md#serverliste-und-konfiguration).
+
+## Umgebung (`Sss:Environment`)
+
+| Schlüssel | Standard | Bedeutung |
+|---|---|---|
+| `Locations` | `[]` | Ihre Standorte: eine Liste aus `{ "Name": "...", "Networks": [ "10.20.0.0/16", ... ] }`. Der Reiter Umgebung zählt Sitzungen je Standort; das genaueste Netz gewinnt. |
+| `MinClientVersion` | `{}` | Älteste akzeptierte Workspace-App-Version je Plattform (`"*"` = jede andere Plattform). Ältere Clients werden im Reiter Umgebung markiert, ihre Benutzer bekommen einen Hinweis. Leer = keine Prüfung. |
+| `HintOutdatedClient` | `true` | Dem Benutzer den Hinweis zeigen, wenn die eigene Workspace-App unter dem Minimum liegt. |
+
+Details und Datenschutzhinweise: [Umgebung](ENVIRONMENT.de.md). Die Feldnamen von Client-Version und Plattform im Monitor sind `Sss:Citrix:Monitor:ClientVersionField` und `ClientPlatformField`.
 
 ## Metriken (`Sss:Metrics`)
 

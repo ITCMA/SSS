@@ -135,6 +135,8 @@ public class ODataMonitorClientTests
         public List<Uri> Requests { get; } = [];
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
+            // the client probes $metadata once for optional fields; these tests are about the data queries
+            if (request.RequestUri!.AbsolutePath.EndsWith("$metadata")) return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
             Requests.Add(request.RequestUri!);
             var body = respond(request);
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, "application/json") });
@@ -748,6 +750,23 @@ public class ControllerWorkerTests
         Assert.Null(svc.LastError);
         Assert.Equal(["ddc1.demo.local", "ddc2.demo.local"], dir.Names);   // evil.example.com is outside .demo.local, ddc3 is Failed
         Assert.Equal("Primary", dir.All[1].Zone);
+    }
+
+    [Fact]
+    public async Task Policies_and_program_descriptions_are_read_through_the_endpoint_of_the_vda()
+    {
+        if (!PwshAvailable()) return;
+        using var d = new TempDir();
+        var o = new CitrixOptions { Controllers = ["ddc1.demo.local"], Processes = new ProcessOptions { Enabled = true } };
+        using var pool = Pool(o, new ControllerDirectory(o, d.Sub("data"), TimeProvider.System));
+
+        var policies = await pool.PoliciesAsync("S-1-5-21-1-1-1-1001", "101", default);
+        Assert.Equal("vdi-01.demo.local", policies.Machine);
+        Assert.Contains(policies.Entries, e => e.Name == "ClipboardRedirection" && e.Value == "1" && e.Path == "User");
+
+        var processes = await pool.ProcessesAsync("S-1-5-21-1-1-1-1001", "101", default);
+        Assert.Contains(processes.Processes, p => p.Name == "chrome" && p.Description == "Google Chrome");
+        await Assert.ThrowsAnyAsync<Exception>(() => pool.PoliciesAsync("S-1-5-21-1-1-1-2002", "101", default));   // not the owner of that session
     }
 
     [Fact]

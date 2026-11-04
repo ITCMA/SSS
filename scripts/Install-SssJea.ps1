@@ -7,7 +7,7 @@
   It registers the session configuration "SSS.Processes". The endpoint
     - can be used only by the SSS service account (-Principal),
     - runs as a temporary local administrator (virtual account) that exists only for the duration of one call,
-    - offers exactly three commands, Get-SssProcess, Stop-SssProcess and Get-SssProfile (read only), and nothing else,
+    - offers exactly four commands, Get-SssProcess, Get-SssProfile and Get-SssPolicy (read only) and Stop-SssProcess, and nothing else,
     - touches only processes whose owner is the user SID that SSS passes in, never system or other users' processes,
     - never ends the Citrix session processes wfshell.exe, ctxgfx.exe and cmstart.exe,
     - writes a transcript of every call to the folder given by -TranscriptDirectory.
@@ -96,14 +96,25 @@ if ($PSCmdlet.ShouldProcess($work, 'Write role capability and session configurat
             # Process.Path is empty for processes of other sessions here; WMI reports the executable path reliably.
             $paths = @{}
             foreach ($w in @(Get-WmiObject -Class Win32_Process -ErrorAction SilentlyContinue)) { if ($w -and $w.ExecutablePath) { $paths[[int]$w.ProcessId] = [string]$w.ExecutablePath } }
+            $descriptions = @{}
             Get-Process -IncludeUserName | Where-Object { $_.UserName -eq $account } | ForEach-Object {
                 $path = $paths[[int]$_.Id]
                 if (-not $path) { try { $path = [string]$_.Path } catch { } }
                 $isApp = (($known -contains $_.ProcessName.ToLowerInvariant()) -or ($_.ProcessName -like '*calc*'))
                 if (-not $path) { $isApp = $isApp -or -not ($noise -contains $_.ProcessName.ToLowerInvariant()) }   # path unknown (also for single processes): judge by the list of system process names
                 elseif (-not $isApp -and $path -and -not $path.StartsWith($windows, [System.StringComparison]::OrdinalIgnoreCase) -and $path -notmatch '\\(Citrix|FSLogix)\\') { $isApp = $true }
+                # the product name from the file properties ("Google Chrome" instead of chrome), read once per program file
+                $desc = ''
+                if ($path) {
+                    if ($descriptions.ContainsKey($path)) { $desc = $descriptions[$path] }
+                    else {
+                        try { $vi = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($path); $desc = [string]$vi.FileDescription; if (-not $desc) { $desc = [string]$vi.ProductName } } catch { }
+                        $descriptions[$path] = $desc
+                    }
+                }
                 [pscustomobject]@{
                     Id        = $_.Id
+                    Description = $desc
                     Name      = $_.ProcessName
                     SessionId = $_.SessionId
                     Started   = $(try { $_.StartTime.ToUniversalTime().ToString('o') } catch { $null })
@@ -112,6 +123,46 @@ if ($PSCmdlet.ShouldProcess($work, 'Write role capability and session configurat
                     Path      = $path
                     IsApp     = [bool]$isApp
                 }
+            }
+        } },
+        @{ Name = 'Get-SssPolicy'; ScriptBlock = {
+            [CmdletBinding()]
+            param([Parameter(Mandatory = $true)][ValidatePattern('^S-1-\d+(-\d+)+$')][string]$UserSid)
+            # Read only: the Citrix policy values in force for the sessions of the user. The VDA writes them below HKLM\SOFTWARE\Policies\Citrix\<session id>;
+            # only the sessions in which this user runs processes are read, at most 400 values, text cut at 200 characters.
+            $account = (New-Object System.Security.Principal.SecurityIdentifier($UserSid)).Translate([System.Security.Principal.NTAccount]).Value
+            $ids = @{}
+            Get-Process -IncludeUserName | Where-Object { $_.UserName -eq $account } | ForEach-Object { $ids[[int]$_.SessionId] = $true }
+            $count = 0
+            # the effective values below Policies\Citrix\<id>, and (when the VDA keeps it) the user policy tree below Citrix\UserPolicy\<id>, whose key names are those of the policies
+            foreach ($id in @($ids.Keys)) {
+              foreach ($rootInfo in @(@("HKLM:\SOFTWARE\Policies\Citrix\$id", ''), @("HKLM:\SOFTWARE\Citrix\UserPolicy\$id", 'UserPolicy'))) {
+                $root = [string]$rootInfo[0]; $tag = [string]$rootInfo[1]
+                if (-not (Test-Path $root)) { continue }
+                $stack = New-Object System.Collections.Stack
+                $stack.Push(@($root, $tag, 0))
+                while ($stack.Count -gt 0 -and $count -lt 400) {
+                    $item = $stack.Pop(); $key = [string]$item[0]; $rel = [string]$item[1]; $depth = [int]$item[2]
+                    $props = Get-ItemProperty -Path $key -ErrorAction SilentlyContinue
+                    if ($props) {
+                        foreach ($n in $props.PSObject.Properties) {
+                            if ($n.Name -like 'PS*' -or $count -ge 400) { continue }
+                            $v = $n.Value
+                            if ($v -is [byte[]]) { $v = '<binary>' } elseif ($v -is [array]) { $v = ($v -join ', ') }
+                            $v = [string]$v
+                            if ($v.Length -gt 200) { $v = $v.Substring(0, 200) }
+                            [pscustomobject]@{ SessionId = $id; Path = $rel; Name = [string]$n.Name; Value = $v }
+                            $count++
+                        }
+                    }
+                    if ($depth -lt 4) {
+                        foreach ($c in @(Get-ChildItem -Path $key -ErrorAction SilentlyContinue)) {
+                            $leaf = ([string]$c.Name).Split('\')[-1]
+                            $stack.Push(@($c.PSPath, $(if ($rel) { "$rel\$leaf" } else { $leaf }), ($depth + 1)))
+                        }
+                    }
+                }
+              }
             }
         } },
         @{ Name = 'Get-SssProfile'; ScriptBlock = {
@@ -312,7 +363,7 @@ if ($PSCmdlet.ShouldProcess($work, 'Write role capability and session configurat
     # restricted session breaks the implicit remoting on the SSS side ("alias gcls is read-only"). Get-WmiObject is part of the
     # already loaded Management snap-in, so Get-SssProfile uses it instead of Get-CimInstance.
     $psrc = Join-Path $capDir 'SssProcesses.psrc'
-    New-PSRoleCapabilityFile -Path $psrc -VisibleFunctions 'Get-SssProcess', 'Get-SssProfile', 'Stop-SssProcess' -FunctionDefinitions $functions
+    New-PSRoleCapabilityFile -Path $psrc -VisibleFunctions 'Get-SssProcess', 'Get-SssProfile', 'Get-SssPolicy', 'Stop-SssProcess' -FunctionDefinitions $functions
     # a module manifest next to the role capability folder makes the capability discoverable by name
     New-ModuleManifest -Path (Join-Path $moduleDir 'SssProcesses.psd1') -RootModule '' -ModuleVersion '1.0.0' -Description 'SSS process endpoint role capability'
 

@@ -96,7 +96,8 @@ else
         sp.GetService<IMonitorClient>(),
         sp.GetRequiredService<QualityEvaluator>(),
         sp.GetRequiredService<TimeProvider>(),
-        sp.GetRequiredService<ILogger<CitrixSessionProvider>>()));
+        sp.GetRequiredService<ILogger<CitrixSessionProvider>>(),
+        options.Environment));
     builder.Services.AddSingleton<ISessionProvider>(sp => sp.GetRequiredService<CitrixSessionProvider>());
     builder.Services.AddSingleton<IHelpdeskProvider>(sp => sp.GetRequiredService<CitrixSessionProvider>());
     builder.Services.AddSingleton<ISessionDetailsProvider>(sp => sp.GetRequiredService<CitrixSessionProvider>());
@@ -119,6 +120,7 @@ builder.Services.AddSingleton(new AuditReader([auditDir, .. options.Audit.Sinks.
 builder.Services.AddSingleton(sp => new AuditForwarder(options.Audit.OpsStream ? [auditStream, opsStream] : [auditStream], auditSinks, dataDir,
     options.Audit.RetentionDays, options.Audit.PerServerFiles, sp.GetRequiredService<TimeProvider>(), sp.GetRequiredService<ILogger<AuditForwarder>>()));
 builder.Services.AddHostedService(sp => sp.GetRequiredService<AuditForwarder>());
+builder.Services.AddSingleton(sp => new EnvironmentService(options, sp.GetService<IMonitorClient>(), sp.GetRequiredService<TimeProvider>(), mockProvider));
 builder.Services.AddSingleton<SessionService>();
 builder.Services.AddSingleton<DetailsService>();
 builder.Services.AddSingleton<ProcessService>();
@@ -493,6 +495,17 @@ hd.MapGet("/sessions/{uid}/processes", async (HttpContext http, string uid, stri
     if (options.Helpdesk.ReasonRequired && why is null) return Results.BadRequest("A reason is required.");
     return await svc.ListAsync(new UserIdentity(sid, directory.NameOf(sid)), uid, actor, why, RemoteIp(http), ct) is { } list ? Results.Ok(list) : Results.NotFound();
 }).RequireCap(Cap.Deep);
+hd.MapGet("/sessions/{uid}/policies", async (HttpContext http, string uid, string? sid, string? reason, ProcessService svc, IUserDirectory directory, CancellationToken ct) =>
+{
+    var actor = ResolveUser(http, options);
+    if (actor is null) return Results.Unauthorized();
+    if (!svc.ProfileAvailable(true)) return Results.NotFound();
+    if (sid is null || !HelpdeskService.SidRegex().IsMatch(sid) || sid.Length > 184) return Results.BadRequest("Invalid user.");
+    if (!uidPattern.IsMatch(uid)) return Results.BadRequest("Invalid session id.");
+    var why = HelpdeskService.NormalizeReason(reason);
+    if (options.Helpdesk.ReasonRequired && why is null) return Results.BadRequest("A reason is required.");
+    return await svc.PoliciesAsync(new UserIdentity(sid, directory.NameOf(sid)), uid, actor, why, RemoteIp(http), ct) is { } list ? Results.Ok(list) : Results.NotFound();
+}).RequireCap(Cap.Deep);
 hd.MapGet("/sessions/{uid}/profile", async (HttpContext http, string uid, string? sid, string? reason, ProcessService svc, IUserDirectory directory, CancellationToken ct) =>
 {
     var actor = ResolveUser(http, options);
@@ -533,6 +546,8 @@ hd.MapPost("/message", async (HttpContext http, HelpdeskMessageRequest body, Hel
 // Health checks for the status page; technical details are for helpdesk eyes only.
 // What SSS runs with and where each value comes from (secrets masked). Read only: the files are edited on the server.
 hd.MapGet("/config", (IConfigurationRoot root) => Results.Ok(EffectiveConfig.Build(options, root))).RequireCap(Cap.Admin);
+// Environment tab: Workspace app versions and locations of all live sessions (counts only).
+hd.MapGet("/environment", async (EnvironmentService svc, CancellationToken ct) => Results.Ok(await svc.GetAsync(ct))).RequireCap(Cap.Admin);
 hd.MapGet("/instances", (InstanceRegistry registry) => Results.Ok(registry.View())).RequireCap(Cap.Admin);
 hd.MapGet("/status", async (StatusService svc, CancellationToken ct) => Results.Ok(await svc.RunAsync(ct))).RequireCap(Cap.Admin);
 

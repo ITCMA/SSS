@@ -14,7 +14,7 @@ public static partial class LogonWaterfallBuilder
     [GeneratedRegex(@"^(?<n>.+)StartDate$")] private static partial Regex StartRegex();
 
     // Director's order; steps that are not listed follow by start time.
-    private static readonly string[] KnownOrder = ["Brokering", "VMStart", "Hdx", "Authentication", "Gpo", "LogOnScripts", "ProfileLoad", "Interactive"];
+    private static readonly string[] KnownOrder = ["Brokering", "VMStart", "VMPowerOn", "VMBoot", "Hdx", "Authentication", "Gpo", "LogOnScripts", "ProfileLoad", "Interactive"];
 
     // Totals and bookkeeping, not steps.
     private static readonly HashSet<string> NotSteps = new(StringComparer.OrdinalIgnoreCase)
@@ -78,10 +78,26 @@ public static partial class LogonWaterfallBuilder
 
         var logStart = Date("LogOnStartDate");
         var steps = new List<(string Id, double Start, double Duration, bool Estimated)>();
+        var at = new Dictionary<string, (DateTimeOffset Start, DateTimeOffset End)>(StringComparer.OrdinalIgnoreCase);
+        var explicitParent = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var origin = logStart ?? (dated.Count > 0 ? dated.Min(d => d.Start) : (DateTimeOffset?)null);
 
         foreach (var (id, s, e) in dated)
+        {
             steps.Add((id, origin is { } o ? (s - o).TotalMilliseconds : 0, (e - s).TotalMilliseconds, false));
+            at[id] = (s, e);
+        }
+
+        // The machine start has two parts: power on, then boot and register (Director shows them below "machine start").
+        if (Date("VMStartStartDate") is { } vs && Date("VMPoweredOnDate") is { } vp && Date("VMStartEndDate") is { } ve && vs <= vp && vp <= ve && origin is { } vo)
+        {
+            steps.Add(("VMPowerOn", (vs - vo).TotalMilliseconds, (vp - vs).TotalMilliseconds, false));
+            steps.Add(("VMBoot", (vp - vo).TotalMilliseconds, (ve - vp).TotalMilliseconds, false));
+            at["VMPowerOn"] = (vs, vp);
+            at["VMBoot"] = (vp, ve);
+            explicitParent["VMPowerOn"] = "VMStart";
+            explicitParent["VMBoot"] = "VMStart";
+        }
 
         // Brokering happens before the logon starts. Other steps with a length but no position are placed one after
         // another, right behind the HDX connection when there is one, otherwise at the start (flagged as estimated).
@@ -112,8 +128,33 @@ public static partial class LogonWaterfallBuilder
         var min = ordered.Min(s => s.Start);
         var max = ordered.Max(s => s.Start + s.Duration);
         var total = sessionLogOnMs is > 0 ? sessionLogOnMs.Value : max - Math.Min(0, min);
-        return new LogonWaterfall(Math.Round(Math.Max(total, max - min)), 
-            ordered.Select(s => new LogonStep(s.Id, Math.Round(s.Start - min), Math.Round(s.Duration), s.Estimated)).ToList());
+        // A measured step that lies completely inside a longer measured step belongs to it (group policies and logon scripts inside the
+        // interactive session); the smallest such step is the parent.
+        string? ParentOf((string Id, double Start, double Duration, bool Estimated) s)
+        {
+            if (explicitParent.TryGetValue(s.Id, out var fixedParent)) return fixedParent;
+            if (s.Estimated || s.Id == "Unaccounted" || s.Duration <= 0) return null;
+            var best = ordered.Where(p => !p.Estimated && p.Id != "Unaccounted" && p.Id != s.Id && p.Duration > s.Duration && !explicitParent.ContainsKey(p.Id)
+                    && s.Start >= p.Start - 1 && s.Start + s.Duration <= p.Start + p.Duration + 1)
+                .OrderBy(p => p.Duration).FirstOrDefault();
+            return best.Id;
+        }
+        return new LogonWaterfall(Math.Round(Math.Max(total, max - min)),
+            ordered.Select(s => new LogonStep(s.Id, Math.Round(s.Start - min), Math.Round(s.Duration), s.Estimated, ParentOf(s),
+                at.TryGetValue(s.Id, out var t) ? t.Start : null, at.TryGetValue(s.Id, out var t2) ? t2.End : null)).ToList());
+    }
+
+    /// <summary>Average length of each step over several earlier logons (milliseconds). Used as the comparison value next to a step.</summary>
+    public static Dictionary<string, double> AverageSteps(IEnumerable<LogonWaterfall> logons)
+    {
+        var sums = new Dictionary<string, List<double>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var w in logons)
+            foreach (var st in w.Steps.Where(x => !x.Estimated && x.Id != "Unaccounted" && x.DurationMs > 0))
+            {
+                if (!sums.TryGetValue(st.Id, out var l)) sums[st.Id] = l = [];
+                l.Add(st.DurationMs);
+            }
+        return sums.Where(kv => kv.Value.Count >= 2).ToDictionary(kv => kv.Key, kv => Math.Round(kv.Value.Average()), StringComparer.OrdinalIgnoreCase);
     }
 
     private static int OrderOf(string id)

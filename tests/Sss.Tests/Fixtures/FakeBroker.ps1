@@ -67,8 +67,8 @@ function Get-SssProcess {
     [CmdletBinding()]
     param([string]$UserSid)
     if ($UserSid -eq 'S-1-5-21-1-1-1-1001') {
-        [pscustomobject]@{ Id = 4120; Name = 'explorer'; SessionId = 2; Started = '2026-10-29T08:00:00.0000000Z'; MemoryMb = 150; Window = ''; IsApp = $true }
-        [pscustomobject]@{ Id = 5304; Name = 'chrome'; SessionId = 2; Started = '2026-10-29T08:30:00.0000000Z'; MemoryMb = 600; Window = 'Wiki - Chrome'; IsApp = $true }
+        [pscustomobject]@{ Id = 4120; Name = 'explorer'; SessionId = 2; Started = '2026-10-29T08:00:00.0000000Z'; MemoryMb = 150; Window = ''; IsApp = $true; Description = 'Windows Explorer' }
+        [pscustomobject]@{ Id = 5304; Name = 'chrome'; SessionId = 2; Started = '2026-10-29T08:30:00.0000000Z'; MemoryMb = 600; Window = 'Wiki - Chrome'; IsApp = $true; Description = 'Google Chrome' }
     }
 }
 function Stop-SssProcess {
@@ -76,6 +76,14 @@ function Stop-SssProcess {
     param([string]$UserSid, [int]$ProcessId, [switch]$Force)
     if ($ProcessId -eq 4120) { return 'not-owned' }
     if ($Force) { 'killed' } else { 'closed' }
+}
+function Get-SssPolicy {
+    [CmdletBinding()]
+    param([string]$UserSid)
+    if ($UserSid -eq 'S-1-5-21-1-1-1-1001') {
+        [pscustomobject]@{ SessionId = 2; Path = 'User'; Name = 'ClipboardRedirection'; Value = '1' }
+        [pscustomobject]@{ SessionId = 2; Path = 'Computer\Printing'; Name = 'AutoCreateClientPrinters'; Value = '2' }
+    }
 }
 function Get-SssProfile {
     [CmdletBinding()]

@@ -2,6 +2,32 @@
 
 All notable changes to SSS. The project follows [Semantic Versioning](docs/COMPATIBILITY.md); versions below 1.0.0 may still change configuration keys between minor versions, and every such change is listed here.
 
+## 0.4.2 - 2026-11-04 (beta)
+
+### Added
+- **Environment tab charts**: sessions by platform and by location (donuts), VDA machines by state, most started applications; not registered machines are listed last.
+- **Expert view**: a connection without a NetScaler Gateway says "No gateway in use: the connection goes directly to the VDA" instead of showing the client as gateway.
+- **Environment tab**: sessions without a client version are listed as "unknown"; VDA machines without an agent version are summed per delivery group (with the number switched off) instead of one "?" row; the helpdesk session list keeps user names and the Open button on one line.
+- **Expert view**: a "Stability of the session" card (connections, failures, automatic reconnects from `SessionAutoReconnects`); application records show the application name; sizes in GB, AppX durations from start and end, no negative Wi-Fi values.
+- **Environment tab**: list of the VDA machines (delivery group, agent, registration, power, maintenance, sessions, last change) and the Local Host Cache report; sessions without a Citrix location form an "unknown" row, so the rows add up to all sessions; the own-networks table is explained as optional.
+- **JEA endpoint: `Get-SssPolicy`** (read only) shows the Citrix policy values in force in a session (helpdesk level 3, new "Policies" tab in the expert view); `Get-SssProcess` also returns the product name of each program. Re-run `Install-SssJea.ps1` on the VDAs (or the master image) to get both; without it SSS keeps working and shows the short names.
+- **Load index of the VDA** now feeds the "Datacenter & VDA" traffic light (it was "not connected yet").
+- **Logon details**: user initialisation and AppX steps, profile type and size, number of large files, slowest group policy extensions, HDX protocol with MTU, gateway location (from the Monitor's `LogOnMetrics`, `SessionLogonMetrics`, `SessionMetricsLatest`, `GatewayPopInfo`).
+- **Environment tab**: VDA machines by agent version and operating system; the program file behind each short application name.
+- **Environment tab** (role Admin, [docs/ENVIRONMENT.md](docs/ENVIRONMENT.md)): Workspace app versions and platforms of all live sessions (devices, sessions, share), sessions per location, with locations defined by your own networks (`Sss:Environment:Locations`). Counts only, cached for a minute.
+- **Outdated client hint**: with a minimum version per platform (`Sss:Environment:MinClientVersion`) outdated clients are marked, and the user sees a hint with the version in the own session list (switch off with `HintOutdatedClient`).
+- **Environment tab**: the Citrix-reported country and city of the connections and the most used applications inside the sessions (names, launches, peak, users, machines), when the Monitor delivers them.
+- **Expert view**: a "Connection" card (endpoint, gateway, VDA with WAN, datacenter and network latency, protocol, encryption), charts for the client device and the VDA machine (CPU, memory, sessions), the applications started in the session with their start duration, application crashes, sub-steps in the logon (group policies and scripts inside the interactive session, power-on and boot below the machine start), precise start and end times, and the user's seven-day average next to each logon step.
+- `Test-SssCitrix.ps1` also prints the properties of record types that may carry logon details, scores or load data.
+- `Test-SssCitrix.ps1` lists the entity sets and properties of the Monitor (client, platform, location, policy and score names) and whether candidate sets contain data, to show what else the site delivers.
+
+### Changed
+- The logon waterfall is drawn smaller and leaves room for the comparison with the user's average.
+- **The ticket number is optional again** (`Sss:Helpdesk:ReasonRequired` defaults to `false`; the field stays available and is logged when filled in). Set it to `true` to require it.
+- The expert view of a helpdesk member below level 3 no longer offers the Profile tab (it answered "something went wrong"); a missing right is now named.
+- Layout: connection card next to the quality explanation, the waterfall below it at full width; property groups pack into columns; the Environment tables have even columns and spacing; table text wraps instead of pushing the action column out of view.
+- The effective-configuration view masks the values of HTTP destination headers (they may carry keys); other key/value lists are shown in clear.
+
 ## 0.4.1 - 2026-11-03 (beta)
 
 ### Added

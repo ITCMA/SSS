@@ -12,7 +12,8 @@ public sealed class CitrixSessionProvider(
     IMonitorClient? monitor,
     QualityEvaluator quality,
     TimeProvider clock,
-    ILogger<CitrixSessionProvider> log) : ISessionProvider, IHelpdeskProvider, ISessionDetailsProvider, IProcessProvider
+    ILogger<CitrixSessionProvider> log,
+    EnvironmentOptions? environment = null) : ISessionProvider, IHelpdeskProvider, ISessionDetailsProvider, IProcessProvider
 {
     public const string WarnHistory = "history-unavailable";
     public const string WarnQuality = "quality-unavailable";
@@ -57,7 +58,7 @@ public sealed class CitrixSessionProvider(
                 m.ClientName,
                 m.ClientAddress,
                 quality.Evaluate(m.IcaRttMs, null, m.LogonSeconds, null),
-                m.SessionKey));
+                m.SessionKey, m.ClientVersion, m.ClientPlatform));
         }
 
         if (warnings.Count > 0) log.LogWarning("Monitor data incomplete: {Warnings}", string.Join(", ", warnings));
@@ -88,7 +89,13 @@ public sealed class CitrixSessionProvider(
     {
         var list = await broker.ProcessesAsync(userSid, uid, ct);
         return new ProcessListResult(list.Machine,
-            list.Processes.Select(p => new ProcessEntry(p.Id, p.Name, p.Started, p.MemoryMb, p.Window, p.IsApp, p.Path)).ToList());
+            list.Processes.Select(p => new ProcessEntry(p.Id, p.Name, p.Started, p.MemoryMb, p.Window, p.IsApp, p.Path, p.Description)).ToList());
+    }
+
+    public async Task<PolicyListResult> GetPoliciesAsync(string userSid, string uid, CancellationToken ct)
+    {
+        var p = await broker.PoliciesAsync(userSid, uid, ct);
+        return new PolicyListResult(p.Machine, p.Entries);
     }
 
     public Task<ProfileInfo> GetProfileAsync(string userSid, string uid, int scanSeconds, CancellationToken ct) =>
@@ -138,8 +145,13 @@ public sealed class CitrixSessionProvider(
         b.IdleSeconds,
         NullIfEmpty(b.ClientName) ?? m?.ClientName,
         NullIfEmpty(b.ClientAddress) ?? m?.ClientAddress,
-        quality.Evaluate(m?.IcaRttMs, m?.BandwidthKbps, m?.LogonSeconds, null, m?.MeasuredAt),
-        b.SessionKey ?? m?.SessionKey);
+        quality.Evaluate(m?.IcaRttMs, m?.BandwidthKbps, m?.LogonSeconds, m?.LoadIndex, m?.MeasuredAt),
+        b.SessionKey ?? m?.SessionKey,
+        m?.ClientVersion, m?.ClientPlatform, Outdated(m));
+
+    // The hint for the user: only when a minimum version is configured and the own client is below it.
+    private bool Outdated(MonitorSession? m) =>
+        environment is { HintOutdatedClient: true } e && m is not null && ClientVersions.IsOutdated(m.ClientPlatform, m.ClientVersion, e.MinClientVersion);
 
     private async Task<IReadOnlyList<MonitorSession>?> TryAsync(Func<Task<IReadOnlyList<MonitorSession>>> call)
     {

@@ -47,6 +47,7 @@
     <button type="button" id="tab-mine" aria-pressed="true" data-i18n="tabMine">My sessions</button>
     <button type="button" id="tab-hd" aria-pressed="false" data-i18n="tabHelpdesk">Helpdesk</button>
     <button type="button" id="tab-sys" aria-pressed="false" data-i18n="tabStatus">Status</button>
+    <button type="button" id="tab-env" aria-pressed="false" data-i18n="tabEnv" hidden>Environment</button>
     <button type="button" id="tab-audit" aria-pressed="false" data-i18n="tabAudit" hidden>Audit</button>
   </nav>
 
@@ -96,6 +97,35 @@
         <div class="table-wrap"><table id="cfg-table"><caption class="sr" data-i18n="cfgTitle"></caption><thead></thead><tbody></tbody></table></div>
         <p id="cfg-none" class="muted" hidden data-i18n="auditNone">Nothing found.</p>
       </details>
+    </section>
+
+    <!-- Environment (admin): Workspace app versions and locations of all live sessions -->
+    <section id="env" hidden aria-labelledby="env-h">
+      <div class="section-head">
+        <h2 id="env-h" data-i18n="envTitle">Environment</h2>
+        <button type="button" id="env-refresh" data-i18n="refresh">Refresh</button>
+      </div>
+      <p class="muted" data-i18n="envIntro">Live sessions of the whole site, counts only.</p>
+      <div id="env-tiles" class="auditgrid"></div>
+      <div id="env-charts" class="envcharts"></div>
+      <h3 data-i18n="envVersions">Workspace app versions</h3>
+      <p id="env-versions-note" class="muted" hidden></p>
+      <div class="table-wrap"><table id="env-versions"><caption class="sr" data-i18n="envVersions"></caption><thead></thead><tbody></tbody></table></div>
+      <h3 data-i18n="envLocations">Own locations (your networks)</h3>
+      <p id="env-locations-note" class="muted" hidden></p>
+      <div class="table-wrap"><table id="env-locations"><caption class="sr" data-i18n="envLocations"></caption><thead></thead><tbody></tbody></table></div>
+      <h3 id="env-citrix-h" data-i18n="envCitrixLocations">Locations reported by Citrix</h3>
+      <div class="table-wrap"><table id="env-citrix"><caption class="sr" data-i18n="envCitrixLocations"></caption><thead></thead><tbody></tbody></table></div>
+      <h3 id="env-machlist-h" data-i18n="envMachineList">VDA machines</h3>
+      <div class="table-wrap"><table id="env-machlist"><caption class="sr" data-i18n="envMachineList"></caption><thead></thead><tbody></tbody></table></div>
+      <h3 id="env-lhc-h" data-i18n="envLhc">Local Host Cache</h3>
+      <p id="env-lhc-note" class="muted" data-i18n="envLhcNote"></p>
+      <div class="table-wrap"><table id="env-lhc"><caption class="sr" data-i18n="envLhc"></caption><thead></thead><tbody></tbody></table></div>
+      <h3 id="env-machines-h" data-i18n="envMachines">VDA machines by agent version</h3>
+      <div class="table-wrap"><table id="env-machines"><caption class="sr" data-i18n="envMachines"></caption><thead></thead><tbody></tbody></table></div>
+      <h3 id="env-apps-h" data-i18n="envApps">Most used applications inside the sessions</h3>
+      <p id="env-apps-note" class="muted"></p>
+      <div class="table-wrap"><table id="env-apps"><caption class="sr" data-i18n="envApps"></caption><thead></thead><tbody></tbody></table></div>
     </section>
 
     <!-- Audit trail (auditor role) -->

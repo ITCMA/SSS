@@ -36,16 +36,20 @@ Members of the AD groups of the [roles](docs/ROLES.md) get a **Helpdesk** tab an
 <p align="center"><em>Logon waterfall and performance graphs; profile type, size, folder tree and findings</em></p>
 
 - **Find a user** or list **all live sessions of the farm**; open any user's sessions and history.
-- **Roles**: level 1 looks, level 2 also logs off and sends messages, level 3 also reads processes and profiles of other users; **auditor** and **admin** are separate roles. A **ticket number or reason** is mandatory for every action that changes something.
+- **Roles**: level 1 looks, level 2 also logs off and sends messages, level 3 also reads processes and profiles of other users; **auditor** and **admin** are separate roles. A **ticket number or reason** can be entered (and made mandatory) for every action that changes something.
 - **Log off** sessions and **send a message** to a session ("please save your work, the server restarts").
 - **Performance data and graphs** over time: ICA round-trip time, available bandwidth, datacenter latency, with values on hover, plus connection history and failure or disconnect reasons.
 - **Logon waterfall**: where the logon time goes (brokering, HDX connection, authentication, group policies, logon scripts, profile load, shell). The slowest step is highlighted, time Citrix does not itemize is shown as such.
 - **Profile analysis, read on the VDA**: local, roaming, Citrix Profile Management or **FSLogix**; container and folder size; a TreeSize-like **folder tree** and the **largest files**; folder redirection; FSLogix and UPM settings and exclusions; and **findings with advice** (container nearly full, Outlook or Teams caches, personal data in the profile, missing exclusions, leftover local profiles, ...).
 - **End applications and processes** of a session through a restricted endpoint on the VDAs (off by default).
 - **"Copy support info"** puts the key facts of a session into the clipboard for a ticket.
+- **Environment tab** for admins, with charts and tables: Workspace app versions and platforms of all live sessions, sessions per location, VDA machines by state and agent version, the most started applications, plus a hint for users with an outdated client.
 - **Status page** with live health checks instead of digging through event logs; **audit trail** of every search, view, log-off, message and process action: who did what to whom, with a hash chain, an **Audit tab** for the auditor and copies to a **central place** (UNC folder, Syslog/CEF, HTTP/SIEM, SNMP).
 
-<p align="center"><img src="docs/img/processes-light.png" alt="Applications and processes of a session" width="60%"></p>
+<p align="center">
+  <img src="docs/img/processes-light.png" alt="Applications and processes of a session" width="49%">
+  <img src="docs/img/environment-light.png" alt="Environment tab with charts for platforms, locations, VDA machines and applications" width="49%">
+</p>
 
 ## Why SSS
 
@@ -76,7 +80,7 @@ Open <http://localhost:5080> and add `?shot=profile` or `?shot=processes` to the
 - Every log-off, message and process action is re-checked server-side against the caller's own live sessions before anything is sent to Citrix; foreign or unknown ids are rejected and audited.
 - Anti-forgery token, per-user rate limits, strict CSP and security headers, no inline scripts, no `innerHTML`.
 - The helpdesk is a separate set of endpoints behind an AD group; everything it does is audited.
-- Process control uses a restricted JEA endpoint with three commands and shows exactly what it can and cannot do ([docs](docs/PROCESSES.md#what-this-exposes-and-what-it-does-not)).
+- Process control uses a restricted JEA endpoint with four commands and shows exactly what it can and cannot do ([docs](docs/PROCESSES.md#what-this-exposes-and-what-it-does-not)).
 - Details and how to report a problem: [SECURITY.md](SECURITY.md), [threat model](docs/THREAT-MODEL.md).
 
 ## Documentation
@@ -89,8 +93,9 @@ Open <http://localhost:5080> and add `?shot=profile` or `?shot=processes` to the
 | [Permissions at a glance](docs/PERMISSIONS.md) | who needs which right, where and why |
 | [Operations](docs/OPERATIONS.md) | update, health probe, status page, audit trail, troubleshooting |
 | [Applications, processes and profiles](docs/PROCESSES.md) | the JEA endpoint on the VDAs, setup, security |
-| [Roles](docs/ROLES.md) | helpdesk levels, auditor, admin, mandatory ticket number |
+| [Roles](docs/ROLES.md) | helpdesk levels, auditor, admin, optional ticket number |
 | [Audit trail and central logging](docs/AUDIT.md) | who did what, destinations (UNC, Syslog/CEF, HTTP, SNMP), integrity |
+| [Environment](docs/ENVIRONMENT.md) | client versions and locations, outdated-client hint |
 | [Delivery Controllers](docs/CONTROLLERS.md) | discovery, load balancing, virtual address |
 | [Several controllers and servers](docs/MULTI-SERVER.md) | server list, configuration sync, draining, load balancer, Kerberos alias, Monitor over HTTPS |
 | [Data sources](docs/DATA-SOURCES.md) | where the data comes from and how quality is rated |
@@ -107,7 +112,7 @@ Open <http://localhost:5080> and add `?shot=profile` or `?shot=processes` to the
 - [x] Expert view with charts, logon waterfall, profile analysis, support info, StoreFront link, status page, setup check
 - [x] End single processes of a session (JEA endpoint on the VDAs)
 - [x] IIS installer with automatic rollback, release builds via GitHub Actions
-- [x] Roles (helpdesk levels, auditor, admin), mandatory ticket number
+- [x] Roles (helpdesk levels, auditor, admin), optional ticket number
 - [x] Central audit trail with hash chain, destinations (UNC, Syslog/CEF, HTTP, SNMP) and Audit tab
 - [x] Delivery Controller discovery and load balancing, server list with drift check, configuration schema and check
 - [ ] Verify several controllers, several web servers and the central destinations on a real site

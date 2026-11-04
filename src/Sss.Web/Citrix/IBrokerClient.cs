@@ -17,7 +17,9 @@ public sealed record BrokerSession(
     string? UserName = null,
     string? UserSid = null);
 
-public sealed record BrokerProcess(int Id, string Name, int SessionId, DateTimeOffset? Started, int MemoryMb, string? Window, bool IsApp = false, string? Path = null);
+public sealed record BrokerProcess(int Id, string Name, int SessionId, DateTimeOffset? Started, int MemoryMb, string? Window, bool IsApp = false, string? Path = null, string? Description = null);
+
+public sealed record BrokerPolicies(string? Machine, IReadOnlyList<PolicyEntry> Entries);
 
 public sealed record BrokerProcessList(string? Machine, IReadOnlyList<BrokerProcess> Processes);
 
@@ -47,6 +49,9 @@ public interface IBrokerClient
     /// <summary>Ends one process of that session: closes its main window, or kills it with <paramref name="force"/>.
     /// Returns closed, killed, no-window, not-closed, not-owned, not-found or protected.</summary>
     Task<string> EndProcessAsync(string userSid, string uid, int processId, bool force, CancellationToken ct);
+
+    /// <summary>The Citrix policy values in force in the sessions of the user on the machine of the given session (JEA command Get-SssPolicy).</summary>
+    Task<BrokerPolicies> PoliciesAsync(string userSid, string uid, CancellationToken ct) => throw new NotSupportedException();
 
     /// <summary>Profile type and size of the user on the machine of the given session (JEA command Get-SssProfile).</summary>
     Task<ProfileInfo> ProfileAsync(string userSid, string uid, int scanSeconds, CancellationToken ct);

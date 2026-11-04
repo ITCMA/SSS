@@ -38,7 +38,7 @@ public static partial class EffectiveConfig
             }
             else if (value is Dictionary<string, string> dict)
             {
-                foreach (var (k, v) in dict.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase)) Add(rows, $"{full}:{k}", "token", v, root);   // header values may carry keys: always masked
+                foreach (var (k, v) in dict.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase)) Add(rows, $"{full}:{k}", full.Contains("Headers", StringComparison.OrdinalIgnoreCase) ? "token" : k, v, root);   // header values may carry keys: masked
             }
             else if (value is string[] list) Add(rows, full, p.Name, string.Join(", ", list), root, listIndexed: true);
             else Add(rows, full, p.Name, value is bool b ? (b ? "true" : "false") : Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture) ?? "", root);

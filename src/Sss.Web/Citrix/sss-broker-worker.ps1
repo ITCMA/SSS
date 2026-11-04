@@ -1,7 +1,7 @@
 <#
   SSS broker worker: a long-running Windows PowerShell 5.1 process that talks to the Citrix Broker SDK.
   Protocol: one JSON request per line on stdin, one JSON response per line on stdout.
-  Only a few operations exist (ping, controllers, list, listall, logoff, message, processes, endprocess, profile) and every value is validated before it reaches a cmdlet.
+  Only a few operations exist (ping, controllers, list, listall, logoff, message, processes, endprocess, profile, policies) and every value is validated before it reaches a cmdlet.
   Keep this file compatible with Windows PowerShell 5.1 (no ternary, no ?? operators).
 #>
 [CmdletBinding()]
@@ -157,9 +157,16 @@ function Get-SessionProcesses([string]$sid, [string]$uid) {
     $machine = Get-OwnedSession $sid $uid
     $list = Use-Jea $machine @('Get-SssProcess') { @(Get-SssProcess -UserSid $sid) }
     $rows = @($list | Where-Object { $_ } | ForEach-Object {
-        @{ id = [int]$_.Id; name = [string]$_.Name; sessionId = [int]$_.SessionId; started = [string]$_.Started; memoryMb = [int]$_.MemoryMb; window = [string]$_.Window; path = [string]$_.Path; isApp = [bool]$_.IsApp }
+        @{ id = [int]$_.Id; name = [string]$_.Name; sessionId = [int]$_.SessionId; started = [string]$_.Started; memoryMb = [int]$_.MemoryMb; window = [string]$_.Window; path = [string]$_.Path; isApp = [bool]$_.IsApp; description = [string]$_.Description }
     })
     return @{ machine = $machine; processes = $rows }
+}
+
+function Get-SessionPolicies([string]$sid, [string]$uid) {
+    $machine = Get-OwnedSession $sid $uid
+    $list = Use-Jea $machine @('Get-SssPolicy') { @(Get-SssPolicy -UserSid $sid) }
+    $rows = @($list | Where-Object { $_ } | ForEach-Object { @{ sessionId = [int]$_.SessionId; path = [string]$_.Path; name = [string]$_.Name; value = [string]$_.Value } })
+    return @{ machine = $machine; policies = $rows }
 }
 
 function Get-SessionProfile([string]$sid, [string]$uid, [int]$scanSeconds) {
@@ -251,6 +258,12 @@ while ($true) {
                 if ($sid -notmatch $SidPattern) { throw 'Invalid SID.' }
                 $res = Get-SessionProcesses $sid ([string]$req.uid)
                 Send @{ id = $id; ok = $true; machine = $res.machine; processes = @($res.processes) }
+            }
+            'policies' {
+                $sid = [string]$req.sid
+                if ($sid -notmatch $SidPattern) { throw 'Invalid SID.' }
+                $res = Get-SessionPolicies $sid ([string]$req.uid)
+                Send @{ id = $id; ok = $true; machine = $res.machine; policies = @($res.policies) }
             }
             'profile' {
                 $sid = [string]$req.sid

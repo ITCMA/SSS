@@ -34,6 +34,16 @@ Broker and Monitor sessions are joined by the **SessionKey**. If Monitor fails, 
 
 The three optional record sets of the expert view may not exist on every site. SSS reports a missing set as "not delivered by this site" and shows the rest. `Test-SssCitrix.ps1` tells you which ones your site has.
 
+### Connection, endpoint and VDA data in the expert view
+
+Besides the session and its metrics the expert view reads, where the site delivers them (checked in `$metadata`, otherwise the part is simply missing):
+
+- the **connection** (Summary tab, "Connection"): endpoint name, address, platform and Workspace app version, location, network type, Gateway (`ConnectedViaHostName`), protocol and encryption, with the latencies between the parts (WAN, datacenter, network, ICARTT) like Director's session topology;
+- **EndpointMetrics** (CPU, memory, GPU, Wi-Fi signal and throughput of the client device) and **ResourceUtilization** of the VDA machine (CPU, memory in percent, session count) as charts in "Over time";
+- the **logon details** the Monitor keeps apart: user initialisation and AppX steps as additional steps of the logon, profile type and size, the number of large files, the slowest group policy extensions, and the HDX protocol with MTU and the gateway location;
+- the **load index** of the VDA machine (0-10000), which feeds the second traffic light ("Datacenter & VDA") like the logon duration;
+- the **applications started in the session** (`ActiveApplicationLaunches`, `HistoricalApplicationLaunches`) with start duration, and **application crashes** (`ApplicationFaults`).
+
 ### Logon waterfall
 
 The expert view draws the logon as bars on one time axis, so the step that eats the time stands out. The steps come from the properties of the `Connection` records Monitor keeps for the session (the original logon is preferred over a later reconnect):
@@ -43,7 +53,7 @@ The expert view draws the logon as bars on one time axis, so the step that eats 
 - time inside the logon window that no step explains (connection set-up, authentication, session start ...) is drawn as a grey "not itemized" bar, so a pause in the chart is visible as missing data and not mistaken for idle time. All positions are the timestamps Monitor delivers, relative to `LogOnStartDate`; steps can overlap, for example group policies and the shell start;
 - the overall window `LogOnStartDate`/`LogOnEndDate` and the session's `LogOnDuration` are the frame, not steps.
 
-SSS does not hard-code the field names beyond this pattern, so new Citrix versions appear automatically. A site that delivers no step data shows no waterfall; `Test-SssCitrix.ps1` lists the `Connection` properties and tells you which steps your site provides. The longest measured step is highlighted with its share of the logon.
+SSS does not hard-code the field names beyond this pattern, so new Citrix versions appear automatically. A site that delivers no step data shows no waterfall; `Test-SssCitrix.ps1` lists the `Connection` properties and tells you which steps your site provides. The longest measured step is highlighted with its share of the logon. Steps that lie completely inside a longer step are shown below it (group policies and logon scripts inside the interactive session; power-on and boot below the machine start), the tooltip names start and end to the millisecond, and for each step the **average of the same user's logons of the last seven days** is shown next to it (▲ clearly slower, ▼ faster, ≈ similar) once at least two earlier logons exist.
 
 ### Profile type and size
 
@@ -67,7 +77,7 @@ The size of the profile folder is counted with a time limit (`Processes:ProfileS
 | Your device & network | ICA round-trip time | `SessionMetrics.IcaRttMS` | below 80 ms / from 80 / from 150 |
 | Your device & network | available bandwidth | `SessionMetrics.OutputBandwidthAvailable` (bit/s, shown as kbit/s) | above 1500 / up to 1500 / up to 400 kbit/s |
 | Datacenter & VDA | logon duration | `Sessions.LogOnDuration` (ms) | below 45 s / from 45 / from 90 |
-| Datacenter & VDA | server load index | not connected yet | from 7000 / from 9000 |
+| Datacenter & VDA | server load index | `LoadIndexes.EffectiveLoadIndex` of the machine (when the site delivers it) | from 7000 / from 9000 |
 
 - The **worst known** value of a light wins. A missing value is "unknown" (?), never red.
 - A value of **0** for ICA round-trip time or bandwidth means "not measured" in Monitor and counts as missing. Monitor writes several kinds of sample rows and the newest one does not always carry every metric, so SSS reads the latest 10 samples and takes the **newest usable value per metric**; the expert view shows when that sample was taken.
