@@ -37,7 +37,7 @@ public sealed record MachineGroup(string AgentVersion, string Os, int Machines, 
 
 /// <summary>One VDA machine as the Monitor sees it. The registration and power states are Citrix' own codes (registration 1 = registered).</summary>
 public sealed record MachineInfo(string Name, string Group, string AgentVersion, string Os, int? Registration, int? Power, bool Maintenance, int? Sessions,
-    DateTimeOffset? RegistrationChanged, string? Fault);
+    DateTimeOffset? RegistrationChanged, string? Fault, string? Id = null);
 
 public sealed record MonitorUser(string Name, string Sid);
 
@@ -58,6 +58,21 @@ public interface IMonitorClient
 
     /// <summary>The Local Host Cache report of the site's controllers as rows of properties (empty when the site does not deliver it).</summary>
     Task<IReadOnlyList<IReadOnlyList<DetailItem>>> GetLhcAsync(CancellationToken ct) => Task.FromResult<IReadOnlyList<IReadOnlyList<DetailItem>>>([]);
+
+    /// <summary>All sessions that have not ended yet, with their latest metrics and load index (Insights).</summary>
+    Task<IReadOnlyList<MonitorSession>> GetFarmLiveAsync(CancellationToken ct) => Task.FromResult<IReadOnlyList<MonitorSession>>([]);
+
+    /// <summary>Sessions of all users that started at or after <paramref name="since"/>, with logon duration, machine and delivery group.</summary>
+    Task<IReadOnlyList<MonitorSession>> GetRecentAsync(DateTimeOffset since, CancellationToken ct) => Task.FromResult<IReadOnlyList<MonitorSession>>([]);
+
+    /// <summary>Users by the numeric id Monitor uses (name and SID).</summary>
+    Task<IReadOnlyDictionary<long, MonitorUser>> GetUsersByIdAsync(IEnumerable<long> ids, CancellationToken ct) => Task.FromResult<IReadOnlyDictionary<long, MonitorUser>>(new Dictionary<long, MonitorUser>());
+
+    /// <summary>The newest load index (0-10000) of each machine id.</summary>
+    Task<IReadOnlyDictionary<string, int>> GetLoadIndexesAsync(IEnumerable<string> machineIds, CancellationToken ct) => Task.FromResult<IReadOnlyDictionary<string, int>>(new Dictionary<string, int>());
+
+    /// <summary>How many rows of a record set (for example ConnectionFailureLogs) exist for each session key.</summary>
+    Task<IReadOnlyDictionary<string, int>> CountBySessionAsync(string recordSet, IEnumerable<string> sessionKeys, CancellationToken ct) => Task.FromResult<IReadOnlyDictionary<string, int>>(new Dictionary<string, int>());
 
     /// <summary>All sessions that have not ended yet, without metrics (Environment view: client versions and addresses).</summary>
     Task<IReadOnlyList<MonitorSession>> GetAllLiveAsync(CancellationToken ct) => Task.FromResult<IReadOnlyList<MonitorSession>>([]);
@@ -164,18 +179,77 @@ public sealed partial class ODataMonitorClient(HttpClient http, CitrixOptions op
     // The load index of the machine (0-10000, like Director's) from the newest LoadIndexes row of each machine the live sessions run on. Best effort.
     private async Task<IReadOnlyList<MonitorSession>> WithLoadIndexAsync(IReadOnlyList<MonitorSession> sessions, CancellationToken ct)
     {
-        var ids = sessions.Select(m => m.MachineId).Where(i => i is not null && Guid.TryParse(i, out _)).Select(i => Guid.Parse(i!).ToString("D")).Distinct().Take(10).ToList();
-        if (ids.Count == 0) return sessions;
+        var latest = await GetLoadIndexesAsync(sessions.Select(m => m.MachineId).OfType<string>(), ct);
+        return latest.Count == 0 ? sessions : sessions.Select(m => m.MachineId is not null && latest.TryGetValue(m.MachineId, out var idx) ? m with { LoadIndex = idx } : m).ToList();
+    }
+
+    public async Task<IReadOnlyDictionary<string, int>> GetLoadIndexesAsync(IEnumerable<string> machineIds, CancellationToken ct)
+    {
+        var ids = machineIds.Where(i => Guid.TryParse(i, out _)).Select(i => Guid.Parse(i).ToString("D")).Distinct().Take(300).ToList();
+        var latest = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         try
         {
-            using var doc = await GetJsonAsync($"LoadIndexes?$filter={Esc(string.Join(" or ", ids.Select(i => $"MachineId eq {i}")))}&$orderby=CreatedDate%20desc&$top={ids.Count * 6}&$select=MachineId,EffectiveLoadIndex", ct);
-            if (!doc.RootElement.TryGetProperty("value", out var arr) || arr.ValueKind != JsonValueKind.Array) return sessions;
-            var latest = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-            foreach (var r in arr.EnumerateArray())
-                if (Str(r, "MachineId") is { } mid && !latest.ContainsKey(mid) && TryGet(r, "EffectiveLoadIndex", out var li) && li.TryGetInt32(out var idx)) latest[mid] = idx;
-            return sessions.Select(m => m.MachineId is not null && latest.TryGetValue(m.MachineId, out var idx) ? m with { LoadIndex = idx } : m).ToList();
+            foreach (var batch in ids.Chunk(10))
+            {
+                using var doc = await GetJsonAsync($"LoadIndexes?$filter={Esc(string.Join(" or ", batch.Select(i => $"MachineId eq {i}")))}&$orderby=CreatedDate%20desc&$top={batch.Length * 6}&$select=MachineId,EffectiveLoadIndex", ct);
+                if (!doc.RootElement.TryGetProperty("value", out var arr) || arr.ValueKind != JsonValueKind.Array) continue;
+                foreach (var r in arr.EnumerateArray())
+                    if (Str(r, "MachineId") is { } mid && !latest.ContainsKey(mid) && TryGet(r, "EffectiveLoadIndex", out var li) && li.TryGetInt32(out var idx)) latest[mid] = idx;
+            }
         }
-        catch (ProviderUnavailableException) { return sessions; }
+        catch (ProviderUnavailableException) { /* best effort */ }
+        return latest;
+    }
+
+    public async Task<IReadOnlyList<MonitorSession>> GetFarmLiveAsync(CancellationToken ct)
+    {
+        var dateField = options.Monitor.MetricsDateField;
+        var query = $"Sessions?$filter={Esc("EndDate eq null")}&$expand={Esc($"{await ExpandAsync(ct)},SessionMetrics($orderby={dateField} desc;$top=3)")}";
+        return await WithLoadIndexAsync(await PagedAsync(query, ct), ct);
+    }
+
+    public async Task<IReadOnlyList<MonitorSession>> GetRecentAsync(DateTimeOffset since, CancellationToken ct)
+    {
+        var iso = since.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
+        var expand = "Machine($select=DnsName;$expand=DesktopGroup($select=Name))";
+        return await PagedAsync($"Sessions?$filter={Esc($"StartDate ge {iso}")}&$select=SessionKey,SessionType,StartDate,EndDate,LogOnDuration,UserId,MachineId&$expand={Esc(expand)}&$orderby=StartDate%20desc", ct);
+    }
+
+    public async Task<IReadOnlyDictionary<long, MonitorUser>> GetUsersByIdAsync(IEnumerable<long> ids, CancellationToken ct)
+    {
+        var result = new Dictionary<long, MonitorUser>();
+        var list = ids.Distinct().Take(60).ToList();
+        if (list.Count == 0) return result;
+        try
+        {
+            foreach (var r in await PagedJsonAsync($"Users?$filter={Esc(string.Join(" or ", list.Select(i => $"Id eq {i.ToString(CultureInfo.InvariantCulture)}")))}&$select=Id,Sid,UserName,Upn,Domain&$top=60", ct))
+            {
+                if (!TryGet(r, "Id", out var idEl) || !idEl.TryGetInt64(out var id)) continue;
+                var sid = Str(r, "Sid"); var sam = Str(r, "UserName") ?? Str(r, "Upn");
+                if (sid is null || sam is null || !SidRegex().IsMatch(sid)) continue;
+                var domain = Str(r, "Domain");
+                result[id] = new MonitorUser(string.IsNullOrEmpty(domain) ? sam : $"{domain}\\{sam}", sid);
+            }
+        }
+        catch (ProviderUnavailableException) { /* names are optional */ }
+        return result;
+    }
+
+    public async Task<IReadOnlyDictionary<string, int>> CountBySessionAsync(string recordSet, IEnumerable<string> sessionKeys, CancellationToken ct)
+    {
+        // only a fixed list of record sets and GUIDs go into the query
+        if (recordSet is not ("ConnectionFailureLogs" or "SessionAutoReconnects")) throw new ArgumentException("Unknown record set.", nameof(recordSet));
+        var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var keys = sessionKeys.Where(k => Guid.TryParse(k, out _)).Select(k => Guid.Parse(k).ToString("D")).Distinct().Take(300).ToList();
+        try
+        {
+            if (!(await MetaAsync(ct)).ContainsKey(recordSet)) return counts;
+            foreach (var batch in keys.Chunk(15))
+                foreach (var r in await PagedJsonAsync($"{recordSet}?$filter={Esc(string.Join(" or ", batch.Select(k => $"SessionKey eq {k}")))}&$select=SessionKey&$top=500", ct))
+                    if (Str(r, "SessionKey") is { } key) counts[key] = counts.GetValueOrDefault(key) + 1;
+        }
+        catch (ProviderUnavailableException) { /* optional */ }
+        return counts;
     }
 
     public async Task<IReadOnlyList<MachineInfo>> GetMachinesAsync(CancellationToken ct)
@@ -195,7 +269,7 @@ public sealed partial class ODataMonitorClient(HttpClient http, CitrixOptions op
                 Short(Str(r, "DnsName") ?? Str(r, "HostedMachineName") ?? Str(r, "Name")) ?? (Str(r, "Id") is { Length: >= 8 } mid ? $"({mid[..8]})" : "?"), Str(r, "DesktopGroupId") is { } dg ? groups.GetValueOrDefault(dg) ?? dg : "",
                 Short(Str(r, "AgentVersion")) ?? "?", Short(Str(r, "OSType")) ?? "?", Int(r, "CurrentRegistrationState"), Int(r, "CurrentPowerState"),
                 TryGet(r, "IsInMaintenanceMode", out var m) && m.ValueKind == JsonValueKind.True, Int(r, "CurrentSessionCount"),
-                Date(r, "RegistrationStateChangeDate"), TryGet(r, "FaultState", out var f) && f.ValueKind == JsonValueKind.Number ? f.GetRawText() : null)).ToList();
+                Date(r, "RegistrationStateChangeDate"), TryGet(r, "FaultState", out var f) && f.ValueKind == JsonValueKind.Number ? f.GetRawText() : null, Str(r, "Id"))).ToList();
         }
         catch (ProviderUnavailableException) { return []; }
     }

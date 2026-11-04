@@ -43,6 +43,7 @@ Members of the AD groups of the [roles](docs/ROLES.md) get a **Helpdesk** tab an
 - **Profile analysis, read on the VDA**: local, roaming, Citrix Profile Management or **FSLogix**; container and folder size; a TreeSize-like **folder tree** and the **largest files**; folder redirection; FSLogix and UPM settings and exclusions; and **findings with advice** (container nearly full, Outlook or Teams caches, personal data in the profile, missing exclusions, leftover local profiles, ...).
 - **End applications and processes** of a session through a restricted endpoint on the VDAs (off by default).
 - **"Copy support info"** puts the key facts of a session into the clipboard for a ticket.
+- **Insights tab**: what is conspicuous right now (slow connections and logons, machines not registered or busy), logon time per delivery group, a machine overview, and the last 30 days of a user at a glance ([docs/INSIGHTS.md](docs/INSIGHTS.md)). Users see their own sessions as clear cards.
 - **Environment tab** for admins, with charts and tables: Workspace app versions and platforms of all live sessions, sessions per location, VDA machines by state and agent version, the most started applications, plus a hint for users with an outdated client.
 - **Status page** with live health checks instead of digging through event logs; **audit trail** of every search, view, log-off, message and process action: who did what to whom, with a hash chain, an **Audit tab** for the auditor and copies to a **central place** (UNC folder, Syslog/CEF, HTTP/SIEM, SNMP).
 
@@ -95,6 +96,7 @@ Open <http://localhost:5080> and add `?shot=profile` or `?shot=processes` to the
 | [Applications, processes and profiles](docs/PROCESSES.md) | the JEA endpoint on the VDAs, setup, security |
 | [Roles](docs/ROLES.md) | helpdesk levels, auditor, admin, optional ticket number |
 | [Audit trail and central logging](docs/AUDIT.md) | who did what, destinations (UNC, Syslog/CEF, HTTP, SNMP), integrity |
+| [Insights](docs/INSIGHTS.md) | what is conspicuous, delivery group comparison, user history, cards |
 | [Environment](docs/ENVIRONMENT.md) | client versions and locations, outdated-client hint |
 | [Delivery Controllers](docs/CONTROLLERS.md) | discovery, load balancing, virtual address |
 | [Several controllers and servers](docs/MULTI-SERVER.md) | server list, configuration sync, draining, load balancer, Kerberos alias, Monitor over HTTPS |

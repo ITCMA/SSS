@@ -46,6 +46,7 @@
   <nav id="tabs" class="tabs" hidden data-i18n-aria="ariaViews" aria-label="Views">
     <button type="button" id="tab-mine" aria-pressed="true" data-i18n="tabMine">My sessions</button>
     <button type="button" id="tab-hd" aria-pressed="false" data-i18n="tabHelpdesk">Helpdesk</button>
+    <button type="button" id="tab-insights" aria-pressed="false" data-i18n="tabInsights" hidden>Insights</button>
     <button type="button" id="tab-sys" aria-pressed="false" data-i18n="tabStatus">Status</button>
     <button type="button" id="tab-env" aria-pressed="false" data-i18n="tabEnv" hidden>Environment</button>
     <button type="button" id="tab-audit" aria-pressed="false" data-i18n="tabAudit" hidden>Audit</button>
@@ -100,6 +101,22 @@
     </section>
 
     <!-- Environment (admin): Workspace app versions and locations of all live sessions -->
+    <!-- Insights (helpdesk): what is conspicuous right now, logon time per delivery group, machines -->
+    <section id="insights" hidden aria-labelledby="ins-h">
+      <div class="section-head">
+        <h2 id="ins-h" data-i18n="insTitle">Insights</h2>
+        <button type="button" id="ins-refresh" data-i18n="refresh">Refresh</button>
+      </div>
+      <p class="muted" data-i18n="insIntro">What is conspicuous right now, read from the Citrix Monitor.</p>
+      <h3 data-i18n="insFindings">Conspicuous now</h3>
+      <ul id="ins-findings" class="hints"></ul>
+      <p id="ins-none" class="muted" hidden data-i18n="insNone">Nothing conspicuous: all measured values are within the limits.</p>
+      <h3 data-i18n="insGroups">Logon time per delivery group (last 7 days)</h3>
+      <div class="table-wrap"><table id="ins-groups"><caption class="sr" data-i18n="insGroups"></caption><thead></thead><tbody></tbody></table></div>
+      <h3 data-i18n="insMachines">Machines</h3>
+      <div class="table-wrap"><table id="ins-machines"><caption class="sr" data-i18n="insMachines"></caption><thead></thead><tbody></tbody></table></div>
+    </section>
+
     <section id="env" hidden aria-labelledby="env-h">
       <div class="section-head">
         <h2 id="env-h" data-i18n="envTitle">Environment</h2>
@@ -170,22 +187,14 @@
       </div>
 
       <section class="toolbar" data-i18n-aria="ariaControls" aria-label="Controls">
-        <label>
-          <span data-i18n="range">History</span>
-          <select id="range">
-            <option value="1h" data-i18n="r1h">Last hour</option>
-            <option value="24h" data-i18n="r24h" selected>Last 24 hours</option>
-            <option value="7d" data-i18n="r7d">Last 7 days</option>
-            <option value="30d" data-i18n="r30d">Last 30 days</option>
-          </select>
-        </label>
         <label class="grow">
           <span data-i18n="filter">Filter</span>
           <input id="filter" type="search" autocomplete="off" data-i18n-ph="filterPlaceholder">
         </label>
         <button type="button" id="refresh" data-i18n="refresh">Refresh</button>
-        <a id="export" class="btn" href="#" data-i18n="exportCsv">Export CSV</a>
       </section>
+
+      <p id="user-summary" class="usersummary" hidden></p>
 
       <section aria-labelledby="live-h">
         <div class="section-head">
@@ -195,12 +204,27 @@
             <button type="button" id="logoff-all" class="danger-outline" hidden data-i18n="logoffAll">Log off all</button>
           </div>
         </div>
-        <div class="table-wrap"><table id="live"><caption class="sr" data-i18n="liveTitle"></caption><thead></thead><tbody></tbody></table></div>
+        <div id="cards" class="cards" hidden></div>
+        <div id="live-wrap" class="table-wrap"><table id="live"><caption class="sr" data-i18n="liveTitle"></caption><thead></thead><tbody></tbody></table></div>
         <p id="live-empty" class="muted" hidden data-i18n="noLive">No active or disconnected sessions.</p>
       </section>
 
       <section aria-labelledby="hist-h">
-        <h2 id="hist-h" data-i18n="historyTitle">History</h2>
+        <div class="section-head">
+          <h2 id="hist-h" data-i18n="historyTitle">History</h2>
+          <div class="bulk">
+            <label>
+              <span data-i18n="range">Period</span>
+              <select id="range">
+                <option value="1h" data-i18n="r1h">Last hour</option>
+                <option value="24h" data-i18n="r24h" selected>Last 24 hours</option>
+                <option value="7d" data-i18n="r7d">Last 7 days</option>
+                <option value="30d" data-i18n="r30d">Last 30 days</option>
+              </select>
+            </label>
+            <a id="export" class="btn" href="#" data-i18n="exportCsv">Export CSV</a>
+          </div>
+        </div>
         <div class="table-wrap"><table id="hist"><caption class="sr" data-i18n="historyTitle"></caption><thead></thead><tbody></tbody></table></div>
         <p id="hist-empty" class="muted" hidden data-i18n="noHistory">No sessions in this period.</p>
       </section>

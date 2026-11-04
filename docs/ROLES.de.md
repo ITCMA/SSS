@@ -6,7 +6,7 @@ Jeder, der sich anmelden kann, sieht und beendet **seine eigenen** Sitzungen. Da
 
 | Rolle | Gruppen-Einstellung | Darf |
 |---|---|---|
-| Stufe 1 | `Sss:Roles:Level1Group` | ansehen: Benutzer suchen, deren Sitzungen, die Experten-Ansicht und die Farm-Übersicht sehen. Ändert nichts. |
+| Stufe 1 | `Sss:Roles:Level1Group` | ansehen: Benutzer suchen, deren Sitzungen, die Experten-Ansicht, die Farm-Übersicht und den Reiter [Insights](INSIGHTS.de.md) sehen. Ändert nichts. |
 | Stufe 2 | `Sss:Roles:Level2Group` | Stufe 1, dazu Sitzungen abmelden und Nachrichten senden. |
 | Stufe 3 | `Sss:Roles:Level3Group` | Stufe 2, dazu Prozesse und Profil anderer Benutzer lesen und Prozesse beenden (braucht den [JEA-Endpunkt](PROCESSES.de.md)). |
 | Auditor | `Sss:Roles:AuditorGroup` | das [Audit-Protokoll](AUDIT.de.md) lesen, auswerten, exportieren und seine Integrität prüfen. Sonst nichts. |

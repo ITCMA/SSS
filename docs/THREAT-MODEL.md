@@ -42,7 +42,7 @@ Identity always comes from IIS Windows authentication. SSS never takes a user or
 | Injection into Citrix queries or PowerShell | every value that reaches a cmdlet or an OData query is validated against a strict pattern (SIDs, numeric ids, GUIDs, host names); field names from configuration must be plain identifiers; no free text reaches a command line | none known |
 | Cross-site request forgery | anti-forgery token in a header plus `SameSite=Strict`, `HttpOnly`, `Secure` cookie on every state-changing request | none known |
 | Cross-site scripting | the interface writes text only with `textContent`; strict Content-Security-Policy (no inline scripts or styles, no external sources); no third-party libraries | none known |
-| Clickjacking, sniffing, referrer leaks | `frame-ancestors 'none'`, `X-Content-Type-Options`, no referrer, same-origin policies, HSTS | none |
+| Clickjacking, sniffing, referrer leaks | `frame-ancestors 'none'` (plus `X-Frame-Options: DENY` in `web.config` for old browsers), `X-Content-Type-Options`, no referrer, same-origin policies, HSTS | none |
 | Denial of service by a user | rate limits per user (log-off, read, helpdesk), bounded worker pool, bounded response sizes | a determined attacker with many accounts can still load the controller |
 | Leaking details in errors | the browser gets only status codes (503 for Citrix side, 500 for bugs); details go to the server log | log files contain details: protect them |
 | Anonymous access | Windows authentication on, anonymous off for the whole application. The only exception is `GET /healthz`, opened on request, which returns `ok`, `degraded` or `unavailable` and nothing else | none |

@@ -221,4 +221,20 @@ public class DirectorDataMonitorTests
         Assert.Equal(("Germany", "Munich", 2, 2, 2), (row.Country, row.City, row.Sessions, row.Devices, row.Users));
         Assert.Equal(("", "", 1), (view.CitrixLocations[1].Country, view.CitrixLocations[1].City, view.CitrixLocations[1].Sessions));   // no location reported: one "unknown" row last
     }
+
+    [Fact]
+    public async Task Insights_read_recent_sessions_load_indexes_and_counts_with_safe_queries()
+    {
+        var (c, h) = Make();
+        var recent = await c.GetRecentAsync(DateTimeOffset.Parse("2026-11-03T00:00:00Z"), default);
+        Assert.Equal(30, recent.Single().LogonSeconds);
+        Assert.Contains(h.Queries, q => q.StartsWith("Sessions?") && q.Contains("StartDate ge 2026-11-03T00:00:00Z") && q.Contains("LogOnDuration") && q.Contains("DesktopGroup"));
+
+        var loads = await c.GetLoadIndexesAsync([Machine, "not a guid"], default);
+        Assert.Equal(6400, loads[Machine]);                                                       // the newest row wins
+        Assert.DoesNotContain(h.Queries, q => q.Contains("not a guid"));
+
+        await Assert.ThrowsAsync<ArgumentException>(() => c.CountBySessionAsync("Users", [Key], default));   // only the two known record sets
+        Assert.Empty(await c.CountBySessionAsync("ConnectionFailureLogs", ["x'; drop"], default));        // only GUIDs reach the query
+    }
 }

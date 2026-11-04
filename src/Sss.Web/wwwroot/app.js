@@ -274,6 +274,30 @@ function emptyNote(p, shown, total, filter, reset, emptyKey = 'noLive') {
   } else p.textContent = t(emptyKey);
 }
 
+// The own sessions as cards: is it running, is there a problem, what can I do. The technical columns are behind "Details".
+function liveCards(live) {
+  const problem = live.some((s) => [s.quality.frontend, s.quality.backend].some((h) => h === 'warning' || h === 'critical'));
+  const active = live.filter((s) => s.state === 'active').length;
+  const summary = el('p', { class: `cardsummary ${problem ? 'attention' : 'fine'}` },
+    el('strong', { text: `${problem ? '▲' : '✔'} ${t(problem ? 'cardsAttention' : 'cardsAllGood')}` }),
+    ` ${t('cardsCount', { n: live.length, a: active, d: live.length - active })}`);
+  return [summary, ...live.map((s) => {
+    const logoff = el('button', { type: 'button', class: 'danger-outline', text: t('logoff'), 'aria-label': `${t('logoff')}: ${s.resourceName} (${s.machine})` });
+    logoff.addEventListener('click', () => logoffSelected(s, t('confirmOne', { name: s.resourceName, machine: s.machine })));
+    const row = (k, v) => v == null || v === '' ? '' : el('div', {}, el('dt', { text: t(k) }), el('dd', { text: v }));
+    return el('article', { class: 'card' },
+      el('div', { class: 'card-head' },
+        el('h3', { text: s.resourceName }), el('small', { class: 'muted', text: t(s.resourceType === 'Desktop' ? 'typeDesktop' : 'typeApp') }),
+        el('span', { class: `state-${s.state}`, text: ` ${t(s.state === 'active' ? 'stateActive' : 'stateDisconnected')}` })),
+      qualityCell(s.quality, true),
+      el('div', { class: 'rowactions' }, logoff),
+      el('details', {}, el('summary', { text: t('details') }),
+        el('dl', { class: 'facts' }, row('colGroup', s.deliveryGroup), row('colMachine', s.machine), row('colStarted', fmtDate(s.startTime)),
+          row('colDuration', fmtDur(durationOf(s))), row('colIdle', s.idleSeconds == null ? '' : fmtDur(s.idleSeconds)),
+          row('colClient', [s.clientName, s.clientAddress && `(${s.clientAddress})`].filter(Boolean).join(' ')))));
+  })];
+}
+
 function render() { keepFocus(renderTables); }
 function renderTables() {
   // headings that depend on the view (setLang resets the data-i18n texts, so set them on every render)
@@ -307,7 +331,11 @@ function renderTables() {
       cell(t('colAction'), actions(s, btn, true)));
   }));
   emptyNote($('live-empty'), live.length, state.data.live.length, f, () => { state.filter = ''; $('filter').value = ''; render(); });
+  const asCards = state.view === 'mine' && !state.expert;
   $('live').hidden = live.length === 0;
+  $('live-wrap').hidden = asCards || live.length === 0;
+  $('cards').hidden = !asCards || live.length === 0;
+  if (asCards) $('cards').replaceChildren(...liveCards(live));
 
   const hb = $('hist').tBodies[0];
   hb.replaceChildren(...hist.map((s) => el('tr', {},
@@ -330,6 +358,7 @@ function renderTables() {
   $('updated').textContent = t('lastUpdated', { time: new Intl.DateTimeFormat(state.lang, { timeStyle: 'medium' }).format(new Date(state.data.generatedAt)) });
   $('export').href = `api/sessions.csv?range=${encodeURIComponent(state.range)}`;
   $('export').hidden = state.view !== 'mine';
+  loadUserSummary();
 }
 
 // ---------- helpdesk ----------
@@ -342,7 +371,8 @@ function showView(view) {
   $('sys').hidden = view !== 'sys';
   $('audit').hidden = view !== 'audit';
   $('env').hidden = view !== 'env';
-  $('panel').hidden = hdList || view === 'sys' || view === 'audit' || view === 'env';
+  $('insights').hidden = view !== 'insights';
+  $('panel').hidden = hdList || view === 'sys' || view === 'audit' || view === 'env' || view === 'insights';
   $('target').hidden = view !== 'hduser';
   syncTabs();
   $('tab-mine').setAttribute('aria-pressed', String(view === 'mine'));
@@ -350,6 +380,7 @@ function showView(view) {
   $('tab-sys').setAttribute('aria-pressed', String(view === 'sys'));
   $('tab-audit').setAttribute('aria-pressed', String(view === 'audit'));
   $('tab-env').setAttribute('aria-pressed', String(view === 'env'));
+  $('tab-insights').setAttribute('aria-pressed', String(view === 'insights'));
   setStatus('');
   render();
   load();
@@ -361,6 +392,7 @@ function syncTabs() {
   $('tab-sys').hidden = !state.caps.admin;
   $('tab-audit').hidden = !state.caps.audit;
   $('tab-env').hidden = !state.caps.admin;
+  $('tab-insights').hidden = !state.helpdesk;
   $('tabs').hidden = !(state.helpdesk || state.caps.admin || state.caps.audit);
 }
 
@@ -676,6 +708,83 @@ function renderEnv(d) {
   $('env-apps').tBodies[0].replaceChildren(...apps.map((a) => el('tr', {},
     cell(t('colApp'), el('span', {}, a.name, a.process ? el('small', { class: 'block muted', text: a.process }) : '')), cell(t('colLaunches'), String(a.launches)), cell(t('colPeak'), String(a.peakConcurrent)),
     cell(t('colUsersDay'), String(a.usersPerDay)), cell(t('colMachines'), String(a.machines)), cell(t('colShare'), shareBar(a.launches, maxA)))));
+}
+
+// ---------- insights (helpdesk) ----------
+const SEV = { crit: ['✖', 'crit'], warn: ['▲', 'warn'], info: ['ℹ', ''] };
+
+function insightText(f) {
+  const p = { subject: f.subject, detail: f.detail, group: f.group ?? '', machine: f.machine ?? '', n: f.value ?? '' };
+  return t(`insKind_${f.kind}`, p);
+}
+
+// "Open user" for findings about a person, "Show sessions" (filtered list) for a machine or delivery group.
+function findingAction(f) {
+  const b = (key, fn) => { const x = el('button', { type: 'button', text: t(key) }); x.addEventListener('click', fn); return x; };
+  if (f.userSid) return b('insOpenUser', () => openUser(f.userSid, f.userName ?? f.subject));
+  const term = f.kind === 'group' ? f.group : f.machine ? f.machine.split('.')[0] : '';
+  if (!term) return null;
+  return b('insShowSessions', () => { state.hdFilter = term; $('hd-filter').value = term; showView('hdlist'); });
+}
+
+async function loadInsights() {
+  const r = await fetch('api/helpdesk/insights', { credentials: 'same-origin' });
+  if (r.status === 403) { showView('mine'); return; }
+  if (r.status === 429) { setStatus(t('rateLimited'), true); return; }
+  if (r.status === 503) { setStatus(t('unavailable'), true); return; }
+  if (!r.ok) throw new Error(String(r.status));
+  renderInsights(await r.json());
+}
+
+function renderInsights(d) {
+  $('ins-findings').replaceChildren(...d.findings.map((f) => {
+    const [sym, cls] = SEV[f.severity] ?? SEV.info;
+    return el('li', { class: `finding ${cls}` }, el('span', { class: 'sym', 'aria-hidden': 'true', text: sym }),
+      el('span', { class: 'grow', text: insightText(f) }), findingAction(f) ?? '');
+  }));
+  $('ins-none').hidden = d.findings.length > 0;
+
+  const maxG = Math.max(1, ...d.groups.map((g) => g.avgSeconds));
+  $('ins-groups').tHead.replaceChildren(el('tr', {}, ...['colGroup', 'colSessions', 'insAvg', 'insMedian', 'insP90', 'colShare'].map((k) => el('th', { scope: 'col', text: t(k) }))));
+  $('ins-groups').tBodies[0].replaceChildren(...d.groups.map((g) => el('tr', {},
+    cell(t('colGroup'), g.group), cell(t('colSessions'), String(g.sessions)), cell(t('insAvg'), `${g.avgSeconds} s`), cell(t('insMedian'), `${g.medianSeconds} s`),
+    cell(t('insP90'), `${g.p90Seconds} s`), cell(t('colShare'), shareBar(g.avgSeconds, maxG, g.avgSeconds >= (state.quality?.logonWarnSeconds ?? 45))))));
+  $('ins-groups').hidden = d.groups.length === 0;
+
+  const HEALTH = { crit: ['✖', 'state-disconnected', 'insHealthCrit'], warn: ['▲', 'state-disconnected', 'insHealthWarn'], good: ['✔', 'state-active', 'insHealthGood'], info: ['ℹ', '', 'insHealthMaint'], off: ['○', '', 'insHealthOff'] };
+  $('ins-machines').tHead.replaceChildren(el('tr', {}, ...['colMachine', 'colGroup', 'colState', 'insLoad', 'colSessions'].map((k) => el('th', { scope: 'col', text: t(k) }))));
+  $('ins-machines').tBodies[0].replaceChildren(...d.machines.map((m) => {
+    const [sym, cls, key] = HEALTH[m.health] ?? HEALTH.off;
+    return el('tr', {}, cell(t('colMachine'), m.name), cell(t('colGroup'), m.group),
+      cell(t('colState'), el('span', { class: cls, text: `${sym} ${t(key)}` })),
+      cell(t('insLoad'), m.loadIndex == null ? '' : el('span', {}, `${m.loadIndex} `, shareBar(m.loadIndex, 10000, m.health === 'crit' || m.health === 'warn'))),
+      cell(t('colSessions'), m.sessions == null ? '' : String(m.sessions)));
+  }));
+  $('ins-machines').hidden = d.machines.length === 0;
+}
+
+// A short history of the user whose sessions are shown (helpdesk): sessions, logon time against the delivery group, failures, reconnects.
+const summaryCache = new Map();
+async function loadUserSummary() {
+  const p = $('user-summary');
+  if (state.view !== 'hduser' || !state.target) { p.hidden = true; return; }
+  const sid = state.target.sid;
+  let s = summaryCache.get(sid);
+  if (!s || Date.now() - s.at > 300000) {
+    try {
+      const r = await fetch(`api/helpdesk/users/summary?sid=${encodeURIComponent(sid)}&days=30`, { credentials: 'same-origin' });
+      s = { at: Date.now(), data: r.ok ? await r.json() : null };
+    } catch { s = { at: Date.now(), data: null }; }
+    summaryCache.set(sid, s);
+  }
+  if (state.view !== 'hduser' || state.target?.sid !== sid) return;
+  const d = s.data;
+  p.hidden = !d || d.sessions === 0;
+  if (p.hidden) return;
+  const sym = { ok: '✔', attention: '▲', poor: '✖' }[d.verdict] ?? '';
+  const logon = d.avgLogonSeconds == null ? '' : ` · ${t('sumLogon', { avg: d.avgLogonSeconds })}${d.groupAvgSeconds != null ? ` ${t('sumGroup', { avg: d.groupAvgSeconds })}` : ''}`;
+  p.className = `usersummary ${d.verdict}`;
+  p.textContent = `${sym} ${t('sumTitle', { days: d.days })}: ${t('sumSessions', { n: d.sessions })}${logon} · ${t('sumFailures', { n: d.failures })} · ${t('sumReconnects', { n: d.reconnects })}`;
 }
 
 // ---------- audit trail (auditor role) ----------
@@ -1023,6 +1132,21 @@ function buildCharts(series) {
 // ---------- why a traffic light is what it is ----------
 const rateValue = (v, warn, crit, higher) => v == null ? 'unknown' : higher ? (v >= crit ? 'critical' : v >= warn ? 'warning' : 'good') : (v <= crit ? 'critical' : v <= warn ? 'warning' : 'good');
 const healthWord = (h) => t('health' + h[0].toUpperCase() + h.slice(1));
+
+// The logon time of this session against the delivery group's last 7 days (helpdesk only; the group statistics need the Monitor).
+function buildGroupLogon(s) {
+  const p = el('p', { class: 'muted grouplogon', hidden: 'hidden' });
+  if (!state.helpdesk || !s.deliveryGroup || !s.quality?.logonSeconds) return p;
+  fetch(`api/helpdesk/insights/group?name=${encodeURIComponent(s.deliveryGroup)}`, { credentials: 'same-origin' })
+    .then((r) => (r.ok ? r.json() : null))
+    .then((g) => {
+      if (!g || g.sessions < 3) return;
+      const own = s.quality.logonSeconds, rel = own > g.avgSeconds * 1.33 ? '▲' : own < g.avgSeconds * 0.75 ? '▼' : '≈';
+      p.textContent = t('groupLogon', { own, group: s.deliveryGroup, avg: g.avgSeconds, median: g.medianSeconds, p90: g.p90Seconds, rel });
+      p.hidden = false;
+    }).catch(() => {});
+  return p;
+}
 
 // Counts of connections, connection failures and automatic reconnects of the session: how stable the connection was.
 function buildStability(d) {
@@ -1392,7 +1516,7 @@ async function openDetails(s, tab = 'summary') {
     $('details-msg').textContent = d.unavailable.length
       ? t('detailsPartial', { parts: d.unavailable.map((p) => t(TABLE_TITLE[p] ?? p)).join(', ') }) : '';
     const defs = [
-      { id: 'summary', label: t('tabSummary'), node: el('div', {}, el('div', { class: 'summary' }, buildQuality(ctx.s), buildTopology(d, ctx.s)), buildStability(d), buildWaterfall(d.waterfall)) },
+      { id: 'summary', label: t('tabSummary'), node: el('div', {}, el('div', { class: 'summary' }, buildQuality(ctx.s), buildTopology(d, ctx.s)), buildStability(d), buildGroupLogon(ctx.s), buildWaterfall(d.waterfall)) },
       { id: 'charts', label: t('tabCharts'), node: buildCharts(d.series) },
       { id: 'props', label: t('tabProps'), node: el('div', {}, el('div', { class: 'groups' }, ...d.groups.map(groupBox)), ...d.tables.map(detailTable)) },
       ...(state.profile && ctx.s.uid && ctx.s.state !== 'ended' && state.view === 'hduser' && state.caps.deep ? [{ id: 'policies', label: t('tabPolicies'), node: buildPolicySection(ctx) }] : []),
@@ -1481,6 +1605,7 @@ async function load() {
     if (state.view === 'sys') { await loadSys(); return; }
     if (state.view === 'audit') { await loadAudit(); return; }
     if (state.view === 'env') { await loadEnv(); return; }
+    if (state.view === 'insights') { await loadInsights(); return; }
     const url = state.view === 'hduser'
       ? `api/helpdesk/sessions?sid=${encodeURIComponent(state.target.sid)}&range=${encodeURIComponent(state.range)}`
       : `api/sessions?range=${encodeURIComponent(state.range)}`;
@@ -1571,6 +1696,8 @@ async function init() {
   $('tab-hd').addEventListener('click', () => showView('hdlist'));
   $('tab-audit').addEventListener('click', () => showView('audit'));
   $('tab-env').addEventListener('click', () => showView('env'));
+  $('tab-insights').addEventListener('click', () => showView('insights'));
+  $('ins-refresh').addEventListener('click', () => loadInsights().catch(() => setStatus(t('error'), true)));
   $('env-refresh').addEventListener('click', () => loadEnv().catch(() => setStatus(t('error'), true)));
   $('cfg').addEventListener('toggle', () => { if ($('cfg').open) loadCfg().catch(() => setStatus(t('error'), true)); });
   $('cfg-filter').addEventListener('input', renderCfg);
@@ -1606,7 +1733,7 @@ async function init() {
   }
   await load();
   // demo mode only (README screenshots): ?shot=details opens the expert view of the first session, ?shot=profile also reads its
-  // profile, ?shot=processes opens its process list, ?shot=env the Environment tab
+  // profile, ?shot=processes opens its process list, ?shot=env the Environment tab, ?shot=insights the Insights tab
   const shot = QUERY.get('shot');
   if (!$('demo').hidden && state.data?.live[0] && ['details', 'profile', 'processes'].includes(shot)) {
     setExpert(true);
@@ -1614,6 +1741,7 @@ async function init() {
     else { await openDetails(state.data.live[0], shot === 'profile' ? 'profile' : 'summary'); if (shot === 'profile') document.querySelector('.profile button')?.click(); }
   }
   if (!$('demo').hidden && shot === 'env' && state.caps.admin) { showView('env'); await loadEnv(); }
+  if (!$('demo').hidden && shot === 'insights' && state.helpdesk) { showView('insights'); await loadInsights(); }
   state.timer = setInterval(() => { if (!document.hidden && !$('confirm').open && state.view !== 'audit' && state.view !== 'env') load(); }, refreshSeconds * 1000);
 }
 

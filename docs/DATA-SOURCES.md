@@ -40,6 +40,7 @@ Besides the session and its metrics the expert view reads, where the site delive
 
 - the **connection** (Summary tab, "Connection"): endpoint name, address, platform and Workspace app version, location, network type, Gateway (`ConnectedViaHostName`), protocol and encryption, with the latencies between the parts (WAN, datacenter, network, ICARTT) like Director's session topology;
 - **EndpointMetrics** (CPU, memory, GPU, Wi-Fi signal and throughput of the client device) and **ResourceUtilization** of the VDA machine (CPU, memory in percent, session count) as charts in "Over time";
+- the **Insights** ([INSIGHTS.md](INSIGHTS.md)): all live sessions with their latest metrics, the sessions of the last 7 days with logon duration and delivery group, the machines with their newest load index, and the counts of `ConnectionFailureLogs` and `SessionAutoReconnects` per session;
 - the **logon details** the Monitor keeps apart: user initialisation and AppX steps as additional steps of the logon, profile type and size, the number of large files, the slowest group policy extensions, and the HDX protocol with MTU and the gateway location;
 - the **load index** of the VDA machine (0-10000), which feeds the second traffic light ("Datacenter & VDA") like the logon duration;
 - the **applications started in the session** (`ActiveApplicationLaunches`, `HistoricalApplicationLaunches`) with start duration, and **application crashes** (`ApplicationFaults`).

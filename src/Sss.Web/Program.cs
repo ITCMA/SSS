@@ -121,6 +121,7 @@ builder.Services.AddSingleton(sp => new AuditForwarder(options.Audit.OpsStream ?
     options.Audit.RetentionDays, options.Audit.PerServerFiles, sp.GetRequiredService<TimeProvider>(), sp.GetRequiredService<ILogger<AuditForwarder>>()));
 builder.Services.AddHostedService(sp => sp.GetRequiredService<AuditForwarder>());
 builder.Services.AddSingleton(sp => new EnvironmentService(options, sp.GetService<IMonitorClient>(), sp.GetRequiredService<TimeProvider>(), mockProvider));
+builder.Services.AddSingleton(sp => new InsightsService(options, sp.GetService<IMonitorClient>(), sp.GetRequiredService<TimeProvider>(), mockProvider));
 builder.Services.AddSingleton<SessionService>();
 builder.Services.AddSingleton<DetailsService>();
 builder.Services.AddSingleton<ProcessService>();
@@ -547,6 +548,16 @@ hd.MapPost("/message", async (HttpContext http, HelpdeskMessageRequest body, Hel
 // What SSS runs with and where each value comes from (secrets masked). Read only: the files are edited on the server.
 hd.MapGet("/config", (IConfigurationRoot root) => Results.Ok(EffectiveConfig.Build(options, root))).RequireCap(Cap.Admin);
 // Environment tab: Workspace app versions and locations of all live sessions (counts only).
+// Insights: what is conspicuous right now, the logon time of each delivery group and a short history of one user (counts and times only).
+hd.MapGet("/insights", async (InsightsService svc, CancellationToken ct) => Results.Ok(await svc.GetAsync(ct))).RequireCap(Cap.View);
+hd.MapGet("/insights/group", async (string? name, InsightsService svc, CancellationToken ct) =>
+    name is null || name.Length is 0 or > 80 ? Results.BadRequest("Invalid group.") : await svc.GroupAsync(name, ct) is { } g ? Results.Ok(g) : Results.NotFound()).RequireCap(Cap.View);
+hd.MapGet("/users/summary", async (string? sid, int? days, InsightsService svc, CancellationToken ct) =>
+{
+    if (sid is null || !HelpdeskService.SidRegex().IsMatch(sid) || sid.Length > 184) return Results.BadRequest("Invalid user.");
+    return await svc.UserSummaryAsync(sid, days ?? 30, ct) is { } u ? Results.Ok(u) : Results.NotFound();
+}).RequireCap(Cap.View);
+
 hd.MapGet("/environment", async (EnvironmentService svc, CancellationToken ct) => Results.Ok(await svc.GetAsync(ct))).RequireCap(Cap.Admin);
 hd.MapGet("/instances", (InstanceRegistry registry) => Results.Ok(registry.View())).RequireCap(Cap.Admin);
 hd.MapGet("/status", async (StatusService svc, CancellationToken ct) => Results.Ok(await svc.RunAsync(ct))).RequireCap(Cap.Admin);

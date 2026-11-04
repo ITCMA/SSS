@@ -4,7 +4,14 @@ All notable changes to SSS. The project follows [Semantic Versioning](docs/COMPA
 
 ## Unreleased
 
+### Added
+- **Insights tab** ([docs/INSIGHTS.md](docs/INSIGHTS.md)) for every helpdesk level: conspicuous slow connections and logons, machines not registered or busy, each with a button to open the user or the filtered session list; logon time per delivery group (average, median, 90 %); machine overview with load index.
+- **Delivery group comparison**: the expert view shows the logon time of a session against its group's last 7 days.
+- **History of a user**: sessions, logon time against the group, connection failures and automatic reconnects of the last 30 days above the user's sessions.
+- **Cards for users**: the own sessions as cards (one sentence on whether all is fine, quality lights, log off, technical data under "Details"); the helpdesk and the expert view keep the table. History period and export moved to the history section.
+
 ### Changed
+- `web.config` sends `X-Frame-Options: DENY` (the CSP `frame-ancestors 'none'` was already there); closes the code-scanning alert about missing clickjacking protection.
 - Accessibility and feedback: the message field has a visible label, the area names "Views" and "Controls" are translated, a log-off says "Logging off the session …" and locks the row actions until it is done, an empty filter says "No sessions match the filter" with a button to reset it (instead of "no sessions"), and the keyboard focus stays on the same button when the tables refresh.
 
 ## 0.4.2 - 2026-11-04 (beta)

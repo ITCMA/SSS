@@ -6,7 +6,7 @@ Everybody who can sign in sees and logs off **their own** sessions. On top of th
 
 | Role | Group setting | May |
 |---|---|---|
-| Level 1 | `Sss:Roles:Level1Group` | look: search users, see their sessions, the expert view and the farm overview. Changes nothing. |
+| Level 1 | `Sss:Roles:Level1Group` | look: search users, see their sessions, the expert view, the farm overview and the [Insights](INSIGHTS.md) tab. Changes nothing. |
 | Level 2 | `Sss:Roles:Level2Group` | level 1, plus log off sessions and send messages. |
 | Level 3 | `Sss:Roles:Level3Group` | level 2, plus list processes and read the profile of other users, end processes (needs the [JEA endpoint](PROCESSES.md)). |
 | Auditor | `Sss:Roles:AuditorGroup` | read, evaluate and export the [audit trail](AUDIT.md) and check its integrity. Nothing else. |

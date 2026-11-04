@@ -40,6 +40,7 @@ Neben der Sitzung und ihren Messwerten liest die Experten-Ansicht, wo die Site s
 
 - die **Verbindung** (Reiter Übersicht, „Verbindung“): Endpunktname, Adresse, Plattform und Workspace-App-Version, Standort, Netzwerktyp, Gateway (`ConnectedViaHostName`), Protokoll und Verschlüsselung, mit den Latenzen dazwischen (WAN, Rechenzentrum, Netzwerk, ICARTT) wie Directors Sitzungstopologie;
 - **EndpointMetrics** (CPU, Speicher, GPU, WLAN-Signal und Durchsatz des Endgeräts) und **ResourceUtilization** der VDA-Maschine (CPU, Speicher in Prozent, Sitzungszahl) als Diagramme unter „Verlauf“;
+- die **Insights** ([INSIGHTS.de.md](INSIGHTS.de.md)): alle Live-Sitzungen mit ihren neuesten Messwerten, die Sitzungen der letzten 7 Tage mit Anmeldedauer und Bereitstellungsgruppe, die Maschinen mit ihrem neuesten Lastindex und die Zahl der `ConnectionFailureLogs` und `SessionAutoReconnects` je Sitzung;
 - die **Anmeldedetails**, die der Monitor getrennt führt: Benutzerinitialisierung und AppX-Schritte als weitere Schritte der Anmeldung, Profiltyp und -größe, die Zahl großer Dateien, die langsamsten Gruppenrichtlinien-Erweiterungen sowie das HDX-Protokoll mit MTU und der Gateway-Standort;
 - den **Lastindex** der VDA-Maschine (0-10000), der wie die Anmeldedauer die zweite Ampel („Rechenzentrum & VDA“) speist;
 - die **in der Sitzung gestarteten Anwendungen** (`ActiveApplicationLaunches`, `HistoricalApplicationLaunches`) mit Startdauer sowie **Anwendungsabstürze** (`ApplicationFaults`).

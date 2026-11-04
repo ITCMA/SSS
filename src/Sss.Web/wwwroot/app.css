@@ -22,6 +22,17 @@ body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.45 sys
 h1 { font-size: 1.25rem; margin: 0; }
 h2 { font-size: 1.1rem; margin: 0; }
 .muted { color: var(--muted); margin: 0; }
+.cards { display: grid; gap: 12px; }
+.cardsummary { margin: 4px 0 0; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); }
+.cardsummary.attention { border-color: var(--warn); } .cardsummary.fine { border-color: var(--good); }
+.card { border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; background: var(--surface); display: grid; gap: 10px; }
+.card-head { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
+.card-head h3 { margin: 0; font-size: 1.05rem; }
+.card details summary { cursor: pointer; font-weight: 600; }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px 16px; margin: 10px 0 0; }
+.facts dt { font-size: .8rem; color: var(--muted); } .facts dd { margin: 0; overflow-wrap: anywhere; }
+.usersummary { margin: 8px 0; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); }
+.usersummary.attention { border-color: var(--warn); } .usersummary.poor { border-color: var(--crit); }
 .fieldlabel { display: block; font-size: .85rem; color: var(--muted); margin: 6px 0 2px; }
 body.busy .rowactions button, body.busy button.danger-outline { pointer-events: none; opacity: .5; }
 .sr, .skip:not(:focus) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

@@ -43,6 +43,7 @@ Mitglieder der AD-Gruppen der [Rollen](docs/ROLES.de.md) bekommen einen **Helpde
 - **Profilanalyse, auf dem VDA gelesen**: lokal, servergespeichert, Citrix Profile Management oder **FSLogix**; Container- und Ordnergröße; ein **Ordnerbaum** wie bei TreeSize und die **größten Dateien**; Ordnerumleitung; FSLogix- und UPM-Einstellungen samt Ausschlüssen; dazu **Befunde mit Empfehlung** (Container fast voll, Outlook- oder Teams-Caches, persönliche Daten im Profil, fehlende Ausschlüsse, alte lokale Profile, ...).
 - **Anwendungen und Prozesse beenden** einer Sitzung über einen eingeschränkten Endpunkt auf den VDAs (standardmäßig aus).
 - **„Support-Info kopieren“** legt die wichtigsten Fakten einer Sitzung für ein Ticket in die Zwischenablage.
+- **Insights-Reiter**: was gerade auffällig ist (langsame Verbindungen und Anmeldungen, nicht registrierte oder ausgelastete Maschinen), Anmeldezeit je Bereitstellungsgruppe, Maschinenübersicht und die letzten 30 Tage eines Benutzers auf einen Blick ([docs/INSIGHTS.de.md](docs/INSIGHTS.de.md)). Benutzer sehen ihre Sitzungen als übersichtliche Karten.
 - **Umgebungs-Reiter** für Admins, mit Diagrammen und Tabellen: Workspace-App-Versionen und Plattformen aller Live-Sitzungen, Sitzungen je Standort, VDA-Maschinen nach Zustand und Agent-Version, die am häufigsten gestarteten Anwendungen, dazu ein Hinweis für Benutzer mit veraltetem Client.
 - **Statusseite** mit Live-Prüfungen statt Suche in der Ereignisanzeige; **Audit-Protokoll** für jede Suche, Ansicht, Abmeldung, Nachricht und Prozessaktion: wer was an wem getan hat, mit Hash-Kette, einem **Audit-Reiter** für den Auditor und Kopien an einen **zentralen Ort** (UNC-Ordner, Syslog/CEF, HTTP/SIEM, SNMP).
 
@@ -95,6 +96,7 @@ ASPNETCORE_ENVIRONMENT=Development ASPNETCORE_URLS=http://localhost:5080 dotnet 
 | [Anwendungen, Prozesse und Profile](docs/PROCESSES.de.md) | der JEA-Endpunkt auf den VDAs, Einrichtung, Sicherheit |
 | [Rollen](docs/ROLES.de.md) | Helpdesk-Stufen, Auditor, Admin, optionale Ticketnummer |
 | [Audit-Protokoll und zentrales Logging](docs/AUDIT.de.md) | wer hat was getan, Ziele (UNC, Syslog/CEF, HTTP, SNMP), Integrität |
+| [Insights](docs/INSIGHTS.de.md) | Auffälligkeiten, Gruppenvergleich, Benutzer-Verlauf, Karten |
 | [Umgebung](docs/ENVIRONMENT.de.md) | Client-Versionen und Standorte, Hinweis bei veraltetem Client |
 | [Delivery Controller](docs/CONTROLLERS.de.md) | Erkennung, Lastverteilung, virtuelle Adresse |
 | [Mehrere Controller und Server](docs/MULTI-SERVER.de.md) | Serverliste, Konfigurationsabgleich, Ausleiten, Load Balancer, Kerberos-Alias, Monitor über HTTPS |
