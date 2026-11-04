@@ -583,6 +583,20 @@ hd.MapGet("/config", (IConfigurationRoot root) => Results.Ok(EffectiveConfig.Bui
 // Insights: what is conspicuous right now, the logon time of each delivery group and a short history of one user (counts and times only).
 hd.MapGet("/insights", async (InsightsService svc, CancellationToken ct) => Results.Ok(await svc.GetAsync(ct))).RequireCap(Cap.View);
 hd.MapGet("/insights/map", async (InsightsService svc, CancellationToken ct) => Results.Ok(await svc.MapAsync(ct))).RequireCap(Cap.View);
+hd.MapGet("/insights/more", async (HttpContext http, InsightsService svc, AuditReader reader, HelpdeskAccess access, CancellationToken ct) =>
+{
+    var more = await svc.MoreAsync(ct);
+    if (!access.Has(http, Cap.Audit)) return Results.Ok(more);
+    // administrative actions of the last 7 days (only for the auditor: the audit trail names people)
+    var now = TimeProvider.System.GetUtcNow();
+    var audit = reader.Query(new AuditQuery(now.AddDays(-7), now.AddMinutes(1), null, null, null, "success", null, null, "audit", 400)).Events
+        .Where(e => e.Action.Contains("logoff", StringComparison.OrdinalIgnoreCase) || e.Action is "helpdesk-message" or "end-process")
+        .Select(e => new TimelineEvent(e.Time, e.Action.Contains("logoff", StringComparison.OrdinalIgnoreCase) ? "logoff" : e.Action, e.User ?? "", e.Reason, e.Actor)).Take(100);
+    return Results.Ok(more with { Timeline = more.Timeline.Concat(audit).OrderByDescending(e => e.At).Take(150).ToList() });
+}).RequireCap(Cap.View);
+hd.MapGet("/insights/machine", async (string? name, InsightsService svc, CancellationToken ct) =>
+    name is null || name.Length is 0 or > 120 || !name.All(c => char.IsLetterOrDigit(c) || c is '.' or '-' or '_') ? Results.BadRequest("Invalid machine.")
+        : await svc.MachineAsync(name, ct) is { } m ? Results.Ok(m) : Results.NotFound()).RequireCap(Cap.View);
 hd.MapGet("/insights/records", async (string? kind, int? hours, InsightsService svc, CancellationToken ct) =>
     kind is not ("faults" or "failures") || !InsightsService.Periods.Contains(hours ?? 24) ? Results.BadRequest("Unknown kind or period.") : Results.Ok(await svc.RecordsAsync(kind, hours ?? 24, ct))).RequireCap(Cap.View);
 hd.MapGet("/insights/group", async (string? name, InsightsService svc, CancellationToken ct) =>

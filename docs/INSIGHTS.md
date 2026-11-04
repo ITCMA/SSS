@@ -48,3 +48,35 @@ A normal user (expert view off) sees the own sessions as **cards**: first one se
 ## Data sources and limits
 
 `Sessions`, `Users`, `Machines`, `LoadIndexes`, `ConnectionFailureLogs` and `SessionAutoReconnects` of the Monitor (see [DATA-SOURCES](DATA-SOURCES.md)). Nothing is stored by SSS. A farm with very many sessions is read up to `Sss:Citrix:Monitor:MaxPages` pages. A record set the site does not have simply leaves its part out.
+
+
+## Health score, load, start times, costs and timeline
+
+The lower part of the Insights tab reads more of the Monitor's own tables. Every part says so when your site delivers no data for it.
+
+| Part | Source | What it shows |
+|---|---|---|
+| **Health** (machines) | registration, load index, running time | 0-100 per machine: not registered while switched on -60, load above the critical limit -40, above the warning limit -20, running 14 days or more -10. Machines in maintenance or switched off have no score. |
+| **Health score** (user) | the user history card | 0-100: connection failures (10 each, at most 40), automatic reconnects (3 each, at most 15), logon time 1.5 times (-20) or twice (-30) the group's average. |
+| **Machine load, last 7 days** | `ResourceUtilizationSummary` | CPU and memory, average and peak. Critical from 85 % CPU or 95 % memory peak, warning from 65 % CPU or 85 % average memory. |
+| **Application start times** | `HistoricalApplicationLaunches` | per application average and 90 % under; if one machine takes 1.5 times longer than the average, it is named. Applications with fewer than 3 starts are left out. User names are not read. |
+| **Costs, last 30 days** | `MachineCostAllocationSummaries` | compute, storage and savings per delivery group in the currency the Monitor reports. |
+| **What changed, last 7 days** | machines, audit trail | machine registered, lost its registration, switched on; for the **auditor** also log-offs, messages and ended processes with who did them. |
+
+Where the Monitor keeps the same figures in several granularities (minute, hour, day), the most common one is used, so nothing is counted twice. The result is cached for 10 minutes.
+
+
+## Machines, tiles and charts
+
+- **Machines**: the search field filters tiles and table together while you type; every word must be part of the machine name, the delivery group or the state ("rds busy"). "only conspicuous" keeps machines that are busy or have a problem. The tiles are grouped per delivery group (groups with a problem open on their own) and can be hidden with one button; on a site with more than 40 machines they start hidden, and the choice is remembered in the browser. A click on a tile or on "Show sessions" in the table opens the helpdesk list filtered to that machine.
+- **The day at a glance** (top of the tab): five key figures and one chart of the last 24 hours. Bars are the logons per hour (scale left), the line is the average logon time (scale right, dashed = warning limit), and below the same time axis crashes (triangles) and connection failures (dots) are marked. Tooltips name time, count, machine and user. Use it to see at once whether crashes or failures coincide with a logon peak or a slow hour.
+- **Logon time per delivery group**: lines over 7 days with the warning limit, for groups with at least 5 sessions.
+- **User of a crash**: taken from the session of the record; without one, from the launch record of the program (same program on the same machine, running at the time), as a last resort from the one session that ran on that machine then. If several users shared the machine and nothing identifies one, the user stays empty.
+
+
+## Delivery groups, load strips and the machine page
+
+- **Delivery groups at a glance**: one card per group (sorted worst first). The light is the worst of four lines: average logon time against the limits, machines that are busy or have a problem, crashes and connection failures of the last 24 hours (a light from the first, red from 5). Each line names its reason; a click filters the machine list to the group.
+- **Load of the machines over the day**: one row per machine and one cell per hour of the last 24 hours (the hourly utilisation of the Monitor): the darker, the more CPU (orange from 65 %, red from 85 %). A red cross marks an hour in which the machine lost its registration. Sixty busiest machines are shown. A click on a name opens the machine page.
+- **Machine page**: state and health score, sessions, load index, running time, agent version and operating system, CPU and memory of the last 7 days, the load strip, crashes and connection failures on this machine in the last 24 hours, what changed, and the sessions running on it (each with *Open user*).
+- **Hover**: pointing at an hour of the day chart (or tapping it) shows that hour with its logons, average logon time and every crash and failure with machine and user.

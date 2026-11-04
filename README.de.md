@@ -34,6 +34,10 @@ Mitglieder der AD-Gruppen der [Rollen](docs/ROLES.de.md) bekommen einen **Helpde
   <img src="docs/img/profile-light.png" alt="Profilanalyse mit Befunden und Ordnerbaum" width="49%">
 </p>
 <p align="center"><em>Anmelde-Wasserfall und Leistungsdiagramme; Profiltyp, Größe, Ordnerbaum und Befunde</em></p>
+<p align="center">
+  <img src="docs/img/overtime-light.png" alt="Verlauf: Latenz-, Bandbreiten-, Rechenzentrums- und Lastdiagramme einer Sitzung" width="49%">
+</p>
+<p align="center"><em>Verlauf: die Leistungsdiagramme einer Sitzung</em></p>
 
 - **Benutzer finden** oder **alle Live-Sitzungen der Farm** auflisten; Sitzungen und Verlauf jedes Benutzers öffnen.
 - **Rollen**: Stufe 1 sieht an, Stufe 2 meldet auch ab und sendet Nachrichten, Stufe 3 liest zusätzlich Prozesse und Profile anderer Benutzer; **Auditor** und **Admin** sind eigene Rollen. Für jede ändernde Aktion lässt sich eine **Ticketnummer oder ein Grund** eintragen (auf Wunsch als Pflicht).
@@ -129,7 +133,7 @@ ASPNETCORE_ENVIRONMENT=Development ASPNETCORE_URLS=http://localhost:5080 dotnet 
 - [ ] Engere eigene Citrix-Rolle für das Dienstkonto ([so leitest du sie her](docs/PERMISSIONS.de.md#die-rolle-enger-fassen-offen-vor-10))
 - [x] Citrix-Cloud-Backend (DaaS), nur lesend ([Beschreibung](docs/CLOUD.de.md)), noch nicht gegen einen echten Mandanten getestet
 - [ ] Citrix Cloud: Abmelden und Nachrichten über die DaaS-REST-API
-- [ ] Als Nächstes: Zeitleiste „Was hat sich geändert“ aus dem Audit, Gesundheitswert je Benutzer und Maschine, Auslastung der Maschinen und Anwendungsnutzung, Kostenansicht, Anwendungsstartzeiten
+- [x] Insights: Zeitleiste „Was hat sich geändert“, Gesundheitswert je Benutzer und Maschine, Auslastung der Maschinen, Anwendungsstartzeiten, Kostenansicht
 - [ ] Langzeitverlauf (Wochen und Monate) mit einer optionalen kleinen Datenbank (SQL) zusätzlich zur Variante nur mit Dateien
 - [ ] 1.0 nach einer öffentlichen Beta-Phase
 

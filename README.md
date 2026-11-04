@@ -34,6 +34,10 @@ Members of the AD groups of the [roles](docs/ROLES.md) get a **Helpdesk** tab an
   <img src="docs/img/profile-light.png" alt="Profile analysis with findings and folder tree" width="49%">
 </p>
 <p align="center"><em>Logon waterfall and performance graphs; profile type, size, folder tree and findings</em></p>
+<p align="center">
+  <img src="docs/img/overtime-light.png" alt="Over time: latency, bandwidth, datacenter and load graphs of a session" width="49%">
+</p>
+<p align="center"><em>Over time: the performance graphs of a session</em></p>
 
 - **Find a user** or list **all live sessions of the farm**; open any user's sessions and history.
 - **Roles**: level 1 looks, level 2 also logs off and sends messages, level 3 also reads processes and profiles of other users; **auditor** and **admin** are separate roles. A **ticket number or reason** can be entered (and made mandatory) for every action that changes something.
@@ -129,7 +133,7 @@ Open <http://localhost:5080> and add `?shot=profile` or `?shot=processes` to the
 - [ ] Stricter custom Citrix role for the service account ([how to derive it](docs/PERMISSIONS.md#narrowing-the-role-open-item-before-10))
 - [x] Citrix Cloud (DaaS) backend, read-only ([description](docs/CLOUD.md)), not yet tested against a real tenant
 - [ ] Citrix Cloud: log-off and messages through the DaaS REST API
-- [ ] Next: timeline "what changed" from the audit trail, health score per user and machine, machine utilisation and application usage, cost view, application start times
+- [x] Insights: timeline "what changed", health score per user and machine, machine load, application start times, cost view
 - [ ] Long-term history (weeks and months) with an optional small database (SQL) in addition to the file-only setup
 - [ ] 1.0 after a public beta period
 

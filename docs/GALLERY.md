@@ -24,6 +24,10 @@ All pictures show the built-in demo mode with invented data; none comes from a r
 
 ![Expert view: diagnosis, topology, logon waterfall, graphs](img/expert-light.png)
 
+## Over time: performance graphs of a session
+
+![Over time: performance graphs of a session](img/overtime-light.png)
+
 ## Profile analysis with findings and folder tree
 
 ![Profile analysis with findings and folder tree](img/profile-light.png)

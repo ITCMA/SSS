@@ -64,3 +64,8 @@ Locations and device lists are personal data in the sense of data protection law
 
 - Citrix Cloud features that come from cloud telemetry (device trust and posture policies, geolocation maps) are not available for an on-premises site and are not built.
 - SSS does not collect history: it shows the situation of the live sessions at the time of the request. A statistics over days needs a database and is a different product (use Director or uberAgent for that).
+
+
+## Connection path
+
+A bar shows how the live sessions reach their machine: through a gateway (one segment per gateway host), directly, or unknown. It uses the "connected via" host the Monitor records for the connection: a host that is neither the client nor the machine is a gateway; no host at all is counted as unknown.

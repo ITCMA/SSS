@@ -47,10 +47,12 @@ public sealed record VersionRow(string Version, string Platform, int Devices, in
 public sealed record LocationRow(string Name, int Sessions, int Devices, int Users);
 /// <summary>Country and city as Citrix itself reports them for the connection (empty parts: unknown).</summary>
 public sealed record CitrixLocationRow(string Country, string City, int Sessions, int Devices, int Users);
+/// <summary>How the sessions reach the VDA: through a gateway (named), directly, or unknown (Citrix reports no "connected via" host).</summary>
+public sealed record PathRow(string Name, int Sessions, string Kind);
 public sealed record EnvironmentView(DateTimeOffset At, int Sessions, int Devices, int Users, int Outdated, int WithoutVersion,
     bool VersionAvailable, bool LocationsConfigured, IReadOnlyList<VersionRow> Versions, IReadOnlyList<LocationRow> Locations, bool Demo,
     IReadOnlyList<CitrixLocationRow>? CitrixLocations = null, IReadOnlyList<AppUsage>? Apps = null, IReadOnlyList<MachineGroup>? Machines = null,
-    IReadOnlyList<MachineInfo>? MachineList = null, IReadOnlyList<IReadOnlyList<DetailItem>>? Lhc = null);
+    IReadOnlyList<MachineInfo>? MachineList = null, IReadOnlyList<IReadOnlyList<DetailItem>>? Lhc = null, IReadOnlyList<PathRow>? Paths = null);
 
 /// <summary>Aggregates the live sessions of the whole site by Workspace app version and platform and by location (networks you assigned to a
 /// name). Only counts are produced, nothing per person. The result is cached for a minute because it reads every live session.</summary>
@@ -120,8 +122,23 @@ public sealed class EnvironmentService(SssOptions options, IMonitorClient? monit
 
         return new EnvironmentView(clock.GetUtcNow(), sessions.Count, sessions.Select(Device).Distinct().Count(), sessions.Select(User).Distinct().Count(),
             versions.Where(v => v.Outdated).Sum(v => v.Sessions), sessions.Count(s => string.IsNullOrWhiteSpace(s.ClientVersion)),
-            sessions.Any(s => !string.IsNullOrWhiteSpace(s.ClientVersion)), nets.Count > 0, versions, locs, Demo, citrixLocs);
+            sessions.Any(s => !string.IsNullOrWhiteSpace(s.ClientVersion)), nets.Count > 0, versions, locs, Demo, citrixLocs, Paths: Paths(sessions));
     }
+
+    /// <summary>Direct or through which gateway: a "connected via" host that is neither the client nor the machine is a gateway; no host at all is unknown.</summary>
+    public static IReadOnlyList<PathRow> Paths(IReadOnlyList<MonitorSession> sessions)
+    {
+        static string Short(string? h) => (h ?? "").Trim().ToLowerInvariant().Split('.')[0];
+        (string Name, string Kind) Of(MonitorSession s) =>
+            string.IsNullOrWhiteSpace(s.ConnectedVia) ? ("", "unknown")
+            : IsLoopback(s.ConnectedVia) ? ("", "direct")
+            : Short(s.ConnectedVia) == Short(s.ClientName) || Short(s.ConnectedVia) == Short(s.Machine) ? ("", "direct")
+            : (s.ConnectedVia!.Trim(), "gateway");
+        return sessions.Select(Of).GroupBy(x => x).Select(g => new PathRow(g.Key.Name, g.Count(), g.Key.Kind))
+            .OrderBy(r => r.Kind switch { "gateway" => 0, "direct" => 1, _ => 2 }).ThenByDescending(r => r.Sessions).Take(12).ToList();
+    }
+
+    private static bool IsLoopback(string host) => host.Trim() is var h && (h.Equals("localhost", StringComparison.OrdinalIgnoreCase) || (IPAddress.TryParse(h, out var ip) && IPAddress.IsLoopback(ip)));
 
     /// <summary>"10.20.0.0/16" or a single address.</summary>
     public static IPNetwork? ParseNetwork(string text)
@@ -175,7 +192,8 @@ public sealed class EnvironmentService(SssOptions options, IMonitorClient? monit
             for (var i = 0; i < count; i++, n++)
                 list.Add(new MonitorSession($"demo-{n}", "vdi-01.demo.local", "DG-Desktops", true, null, null, null, $"DEMO-PC-{n:000}",
                     $"{nets[rnd.Next(nets.Length)]}.{rnd.Next(1, 250)}.{rnd.Next(1, 250)}", null, ClientVersion: version, ClientPlatform: platform, UserId: 1000 + n % 60,
-                    ClientCountry: n % 7 == 0 ? null : "Germany", ClientCity: n % 7 == 0 ? null : n % 3 == 0 ? "Munich" : "Berlin"));
+                    ClientCountry: n % 7 == 0 ? null : "Germany", ClientCity: n % 7 == 0 ? null : n % 3 == 0 ? "Munich" : "Berlin",
+                    ConnectedVia: n % 5 == 0 ? null : n % 3 == 0 ? "gw-01.demo.local" : $"DEMO-PC-{n:000}"));
         return list;
     }
 }

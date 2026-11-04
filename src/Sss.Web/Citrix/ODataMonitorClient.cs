@@ -29,7 +29,8 @@ public sealed record MonitorSession(
     string? MachineId = null,
     int? LoadIndex = null,
     int? ConnectionState = null,
-    DateTimeOffset? StateChanged = null);
+    DateTimeOffset? StateChanged = null,
+    string? ConnectedVia = null);
 
 /// <summary>One locally started application as the Monitor counts it (uberAgent data): launches, peak and users per day over the last days.</summary>
 public sealed record AppUsage(string Name, int Launches, int PeakConcurrent, int UsersPerDay, int Machines, string? Process = null);
@@ -45,6 +46,18 @@ public sealed record MachineInfo(string Name, string Group, string AgentVersion,
 public sealed record FaultRecord(string Name, string? MachineId, DateTimeOffset? At = null, string? SessionKey = null, long? UserId = null, IReadOnlyList<DetailItem>? Items = null);
 
 public sealed record MonitorUser(string Name, string Sid);
+
+/// <summary>One utilisation sample of a machine (a row of ResourceUtilizationSummary): CPU and memory in percent.</summary>
+public sealed record UsageSample(string MachineId, double? Cpu, double? PeakCpu, double? Memory, double? PeakMemory, int? Granularity, DateTimeOffset? At = null);
+
+/// <summary>One start of an application as the Monitor measured it (HistoricalApplicationLaunches); the user is deliberately not read.</summary>
+public sealed record AppLaunch(string Name, string? MachineId, int StartupMs);
+
+/// <summary>Who ran a program on a machine and when (HistoricalApplicationLaunches), to find the user of a crash that has no usable session.</summary>
+public sealed record LaunchUser(string Process, string? MachineId, DateTimeOffset? Start, DateTimeOffset? End, string User, string? SessionKey);
+
+/// <summary>One cost sample of a machine (MachineCostAllocationSummaries).</summary>
+public sealed record CostSample(string MachineId, string Currency, double Compute, double Storage, double Savings, int? Granularity);
 
 /// <summary>History and quality metrics from the Citrix Monitor Service (the data source of Director).</summary>
 public interface IMonitorClient
@@ -81,6 +94,21 @@ public interface IMonitorClient
 
     /// <summary>The sessions with these session keys (user id, machine, delivery group, client, logon time).</summary>
     Task<IReadOnlyList<MonitorSession>> GetSessionsByKeyAsync(IEnumerable<string> sessionKeys, CancellationToken ct) => Task.FromResult<IReadOnlyList<MonitorSession>>([]);
+
+    /// <summary>Launches of the given programs since the given time with the user who started them (empty when the site does not deliver them).</summary>
+    Task<IReadOnlyList<LaunchUser>> GetLaunchUsersAsync(IEnumerable<string> processNames, DateTimeOffset since, CancellationToken ct) => Task.FromResult<IReadOnlyList<LaunchUser>>([]);
+
+    /// <summary>Utilisation samples of the machines since the given time (empty when the site does not deliver them).</summary>
+    Task<IReadOnlyList<UsageSample>> GetUsageAsync(DateTimeOffset since, CancellationToken ct) => Task.FromResult<IReadOnlyList<UsageSample>>([]);
+
+    /// <summary>The hourly utilisation samples since the given time, with their time (empty when the site does not deliver them).</summary>
+    Task<IReadOnlyList<UsageSample>> GetHourlyUsageAsync(DateTimeOffset since, CancellationToken ct) => Task.FromResult<IReadOnlyList<UsageSample>>([]);
+
+    /// <summary>Application starts with their start-up time since the given time (empty when the site does not deliver them).</summary>
+    Task<IReadOnlyList<AppLaunch>> GetAppLaunchesAsync(DateTimeOffset since, CancellationToken ct) => Task.FromResult<IReadOnlyList<AppLaunch>>([]);
+
+    /// <summary>Cost and savings samples of the machines since the given time (empty when the site does not deliver them).</summary>
+    Task<IReadOnlyList<CostSample>> GetCostsAsync(DateTimeOffset since, CancellationToken ct) => Task.FromResult<IReadOnlyList<CostSample>>([]);
 
     /// <summary>The newest load index (0-10000) of each machine id.</summary>
     Task<IReadOnlyDictionary<string, int>> GetLoadIndexesAsync(IEnumerable<string> machineIds, CancellationToken ct) => Task.FromResult<IReadOnlyDictionary<string, int>>(new Dictionary<string, int>());
@@ -157,7 +185,7 @@ public sealed partial class ODataMonitorClient(HttpClient http, CitrixOptions op
     {
         var meta = await MetaAsync(ct);
         if (!meta.TryGetValue("Connection", out var props)) return "";
-        string[] wanted = [options.Monitor.ClientVersionField, options.Monitor.ClientPlatformField, "ClientLocationCountry", "ClientLocationCity", "ClientNetworkInterfaceType"];
+        string[] wanted = [options.Monitor.ClientVersionField, options.Monitor.ClientPlatformField, "ClientLocationCountry", "ClientLocationCity", "ClientNetworkInterfaceType", "ConnectedViaHostName"];
         return string.Concat(wanted.Distinct().Where(props.ContainsKey).Select(n => "," + n));
     }
 
@@ -338,6 +366,104 @@ public sealed partial class ODataMonitorClient(HttpClient http, CitrixOptions op
                 Short(Str(r, "AgentVersion")) ?? "?", Short(Str(r, "OSType")) ?? "?", Int(r, "CurrentRegistrationState"), Int(r, "CurrentPowerState"),
                 TryGet(r, "IsInMaintenanceMode", out var m) && m.ValueKind == JsonValueKind.True, Int(r, "CurrentSessionCount"),
                 Date(r, "RegistrationStateChangeDate"), TryGet(r, "FaultState", out var f) && f.ValueKind == JsonValueKind.Number ? f.GetRawText() : null, Str(r, "Id"), Date(r, "PoweredOnDate"))).ToList();
+        }
+        catch (ProviderUnavailableException) { return []; }
+    }
+
+    private static double? Dbl(JsonElement e, string n) => TryGet(e, n, out var v) && v.ValueKind == JsonValueKind.Number && v.TryGetDouble(out var d) ? d : null;
+    private static int? Int32(JsonElement e, string n) => Dbl(e, n) is { } d && d >= int.MinValue && d <= int.MaxValue ? (int)d : null;
+    private static string Iso(DateTimeOffset t) => t.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
+
+    private async Task<bool> HasAsync(string entity, string prop, CancellationToken ct) =>
+        (await MetaAsync(ct)).FirstOrDefault(e => e.Key.StartsWith(entity, StringComparison.OrdinalIgnoreCase)).Value is { } props && props.ContainsKey(prop);
+
+    public async Task<IReadOnlyList<UsageSample>> GetUsageAsync(DateTimeOffset since, CancellationToken ct)
+    {
+        if (!await HasAsync("ResourceUtilizationSummary", "AvgPercentCpu", ct)) return [];
+        // The table holds rows per minute, hour and day. One page would be filled by the finest rows of a few machines, so the daily rows (1440 minutes) are asked
+        // for first, then the hourly ones, and only then anything.
+        foreach (var filter in new[] { " and Granularity eq 1440", " and Granularity eq 60", "" })
+        {
+            try
+            {
+                var rows = (await PagedJsonAsync($"ResourceUtilizationSummary?$filter={Esc($"SummaryDate ge {Iso(since)}{filter}")}&$top=2000", ct))
+                    .Select(r => (R: r, Id: Str(r, "MachineId"))).Where(x => x.Id is not null)
+                    .Select(x =>
+                    {
+                        double? Pct(string used) => Dbl(x.R, used) is { } u && Dbl(x.R, "AvgTotalMemory") is { } t && t > 0 ? Math.Round(u / t * 100, 1) : null;
+                        return new UsageSample(x.Id!, Dbl(x.R, "AvgPercentCpu"), Dbl(x.R, "PeakPercentCpu"), Pct("AvgUsedMemory"), Pct("PeakUsedMemory"), Int32(x.R, "Granularity"), Date(x.R, "SummaryDate"));
+                    }).ToList();
+                if (rows.Count > 0) return rows;
+            }
+            catch (ProviderUnavailableException) { /* the next, simpler query */ }
+        }
+        return [];
+    }
+
+    public async Task<IReadOnlyList<LaunchUser>> GetLaunchUsersAsync(IEnumerable<string> processNames, DateTimeOffset since, CancellationToken ct)
+    {
+        var names = processNames.Where(n => n.Length is > 0 and <= 64 && n.All(c => char.IsLetterOrDigit(c) || c is '.' or '_' or '-' or ' ')).Distinct(StringComparer.OrdinalIgnoreCase).Take(12).ToList();
+        if (names.Count == 0) return [];
+        var result = new List<LaunchUser>();
+        foreach (var set in new[] { "HistoricalApplicationLaunches", "ActiveApplicationLaunches" })
+        {
+            try
+            {
+                if (!await HasAsync(set.Replace("Launches", "Launch"), "UserName", ct)) continue;
+                var filter = $"({string.Join(" or ", names.Select(n => $"ProcessName eq '{n}'"))}) and StartDate ge {Iso(since)}";
+                result.AddRange((await PagedJsonAsync($"{set}?$filter={Esc(filter)}&$orderby=StartDate%20desc&$select=ProcessName,MachineId,StartDate,UserName,SessionGUID{(set.StartsWith("Hist") ? ",EndDate" : "")}&$top=1500", ct))
+                    .Select(r => (R: r, P: Short(Str(r, "ProcessName")), U: Short(Str(r, "UserName"))))
+                    .Where(x => x.P is not null && x.U is not null)
+                    .Select(x => new LaunchUser(x.P!, Str(x.R, "MachineId"), Date(x.R, "StartDate"), Date(x.R, "EndDate"), x.U!, Str(x.R, "SessionGUID"))));
+            }
+            catch (ProviderUnavailableException) { /* the next set */ }
+        }
+        return result;
+    }
+
+    public async Task<IReadOnlyList<UsageSample>> GetHourlyUsageAsync(DateTimeOffset since, CancellationToken ct)
+    {
+        try
+        {
+            if (!await HasAsync("ResourceUtilizationSummary", "AvgPercentCpu", ct)) return [];
+            return (await PagedJsonAsync($"ResourceUtilizationSummary?$filter={Esc($"SummaryDate ge {Iso(since)} and Granularity eq 60")}&$top=3000", ct))
+                .Select(r => (R: r, Id: Str(r, "MachineId"), At: Date(r, "SummaryDate"))).Where(x => x.Id is not null && x.At is not null)
+                .Select(x => new UsageSample(x.Id!, Dbl(x.R, "AvgPercentCpu"), Dbl(x.R, "PeakPercentCpu"), null, null, 60, x.At)).ToList();
+        }
+        catch (ProviderUnavailableException) { return []; }
+    }
+
+    public async Task<IReadOnlyList<AppLaunch>> GetAppLaunchesAsync(DateTimeOffset since, CancellationToken ct)
+    {
+        // Historical launches and the ones still running; the date filter is left out in the second try in case the site does not accept it.
+        var result = new List<AppLaunch>();
+        foreach (var (set, hasDate) in new[] { ("HistoricalApplicationLaunches", true), ("ActiveApplicationLaunches", true), ("HistoricalApplicationLaunches", false) })
+        {
+            if (result.Count > 0 && !hasDate) break;
+            try
+            {
+                if (!await HasAsync(set.Replace("Launches", "Launch"), "StartupTimeMs", ct)) continue;
+                var query = hasDate ? $"{set}?$filter={Esc($"StartDate ge {Iso(since)}")}&$select=ProcessName,StartupTimeMs,MachineId&$top=3000"
+                    : $"{set}?$orderby=StartDate%20desc&$select=ProcessName,StartupTimeMs,MachineId&$top=1500";
+                result.AddRange((await PagedJsonAsync(query, ct))
+                    .Select(r => (Name: Short(Str(r, "ProcessName")), Ms: Int32(r, "StartupTimeMs"), M: Str(r, "MachineId")))
+                    .Where(x => x.Name is not null && x.Ms is > 0).Select(x => new AppLaunch(x.Name!, x.M, x.Ms!.Value)));
+            }
+            catch (ProviderUnavailableException) { /* the next try */ }
+        }
+        return result;
+    }
+
+    public async Task<IReadOnlyList<CostSample>> GetCostsAsync(DateTimeOffset since, CancellationToken ct)
+    {
+        try
+        {
+            if (!await HasAsync("MachineCostAllocationSummar", "TotalComputeCost", ct)) return [];
+            return (await PagedJsonAsync($"MachineCostAllocationSummaries?$filter={Esc($"SummaryDate ge {Iso(since)}")}&$top=3000", ct))
+                .Select(r => (R: r, Id: Str(r, "MachineId"))).Where(x => x.Id is not null)
+                .Select(x => new CostSample(x.Id!, Short(Str(x.R, "Currency")) ?? "", Dbl(x.R, "TotalComputeCost") ?? 0, Dbl(x.R, "TotalStorageCost") ?? 0,
+                    (Dbl(x.R, "TotalAutoscaleComputeSavings") ?? 0) + (Dbl(x.R, "TotalAutoscaleStorageSavings") ?? 0) + (Dbl(x.R, "TotalEndUserComputeSavings") ?? 0) + (Dbl(x.R, "TotalEndUserStorageSavings") ?? 0),
+                    Int32(x.R, "Granularity"))).ToList();
         }
         catch (ProviderUnavailableException) { return []; }
     }
@@ -523,7 +649,7 @@ public sealed partial class ODataMonitorClient(HttpClient http, CitrixOptions op
         var key = Str(s, "SessionKey");
         if (key is null) return null;
 
-        string? machine = null, group = null, client = null, address = null, version = null, platform = null, country = null, city = null, network = null;
+        string? machine = null, group = null, client = null, address = null, version = null, platform = null, country = null, city = null, network = null, via = null;
         if (TryGet(s, "Machine", out var m) && m.ValueKind == JsonValueKind.Object)
         {
             machine = Str(m, "DnsName");
@@ -538,6 +664,7 @@ public sealed partial class ODataMonitorClient(HttpClient http, CitrixOptions op
             country = Short(Str(c, "ClientLocationCountry"));
             city = Short(Str(c, "ClientLocationCity"));
             network = Short(Str(c, "ClientNetworkInterfaceType"));
+            via = Short(Str(c, "ConnectedViaHostName"));
         }
 
         int? logon = TryGet(s, "LogOnDuration", out var ld) && ld.ValueKind == JsonValueKind.Number && ld.TryGetInt64(out var ms)
@@ -549,7 +676,7 @@ public sealed partial class ODataMonitorClient(HttpClient http, CitrixOptions op
         return new MonitorSession(key, machine, group, isDesktop, Date(s, "StartDate"), Date(s, "EndDate"),
             logon, client, address, rtt, bandwidth, at, version, platform, userId, country, city, network, Str(s, "MachineId"),
             ConnectionState: TryGet(s, "ConnectionState", out var cs) && cs.ValueKind == JsonValueKind.Number && cs.TryGetInt32(out var csv) ? csv : null,
-            StateChanged: Date(s, "ConnectionStateChangeDate"));
+            StateChanged: Date(s, "ConnectionStateChangeDate"), ConnectedVia: via);
     }
 
     /// <summary>Newest usable value per metric. 0 means "not measured" in Monitor, so it never counts as a (perfect or

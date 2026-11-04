@@ -230,7 +230,8 @@ function sorted(list, cols, so) {
 function actions(s, logoffBtn, live = false) {
   const box = el('div', { class: 'rowactions' });
   if (logoffBtn) box.append(logoffBtn);
-  if (state.expert && state.processes && s.state !== 'ended' && s.uid && live && (state.view !== 'hduser' || state.caps.deep)) {
+  // in a user's helpdesk view the button is always there (level 3); elsewhere it belongs to the expert view
+  if ((state.expert || state.view === 'hduser') && state.processes && s.state !== 'ended' && s.uid && live && (state.view !== 'hduser' || state.caps.deep)) {
     const p = el('button', { type: 'button', text: t('procButton'), 'aria-label': `${t('procButton')}: ${s.resourceName} (${s.machine})` });
     p.addEventListener('click', () => openProcesses(s));
     box.append(p);
@@ -429,6 +430,10 @@ function renderHdTable() {
     const s = h.session;
     const open = el('button', { type: 'button', text: t('hdOpen'), 'aria-label': `${t('hdOpen')}: ${h.userName}` });
     open.addEventListener('click', () => openUser(h.userSid, h.userName));
+    // level 3: straight to the processes of this session (opens the user's view first, where the reason is entered)
+    const procs = state.processes && state.caps.deep && s.uid
+      ? el('button', { type: 'button', text: t('procButton'), 'aria-label': `${t('procButton')}: ${s.resourceName} (${s.machine}) ${h.userName}` }) : null;
+    procs?.addEventListener('click', () => { state.afterOpen = s.uid; openUser(h.userSid, h.userName); });
     return el('tr', {},
       cell(t('colUser'), h.userName),
       resCell(s),
@@ -437,7 +442,7 @@ function renderHdTable() {
       cell(t('colState'), el('span', { class: `state-${s.state}`, text: t(s.state === 'active' ? 'stateActive' : 'stateDisconnected') })),
       cell(t('colStarted'), fmtDate(s.startTime)),
       cell(t('colClient'), clientCell(s)),
-      cell(t('colAction'), open));
+      cell(t('colAction'), el('div', { class: 'rowactions' }, open, procs)));
   }));
   $('hd-live').hidden = rows.length === 0;
   emptyNote($('hd-live-empty'), rows.length, d.sessions.length, f, () => { state.hdFilter = ''; $('hd-filter').value = ''; renderHd(); });
@@ -505,7 +510,7 @@ const logoffSelected = (s, question) => state.view === 'hduser'
 
 // ---------- status page (helpdesk) ----------
 const CHECK_LABEL = { version: 'stVersion', provider: 'stProvider', identity: 'stIdentity', uptime: 'stUptime', audit: 'stAudit', config: 'stConfig',
-  helpdesk: 'stHelpdesk', broker: 'stBroker', monitor: 'stMonitor', 'monitor-https': 'stMonitorHttps',
+  helpdesk: 'stHelpdesk', 'processes-role': 'stProcessesRole', broker: 'stBroker', monitor: 'stMonitor', 'monitor-https': 'stMonitorHttps',
   controllers: 'stControllers', controller: 'stController', sink: 'stSink', instances: 'stInstances', instance: 'stInstance' };
 
 async function loadSys() {
@@ -601,7 +606,7 @@ function stackBar(title, parts) {
   parts = parts.filter((p) => p.value > 0);
   const total = parts.reduce((a, p) => a + p.value, 0);
   if (!total) return null;
-  const W = 300, svg = svgEl('svg', { viewBox: `0 0 ${W} 26`, class: 'stack', role: 'img', 'aria-label': title });
+  const W = 300, svg = svgEl('svg', { viewBox: `0 0 ${W} 26`, preserveAspectRatio: 'none', class: 'stack', role: 'img', 'aria-label': title });
   let x = 0;
   for (const p of parts) {
     const w = (p.value / total) * W, rect = svgEl('rect', { class: `slice ${p.cls}`, x, y: 2, width: Math.max(1, w - 1), height: 22 });
@@ -616,10 +621,11 @@ function barChart(title, rows) {
   rows.forEach((r, i) => {
     const y = 2 + i * rowH;
     const name = svgEl('text', { x: L - 6, y: y + 14, 'text-anchor': 'end' }); name.textContent = r.label.length > 22 ? `${r.label.slice(0, 21)}…` : r.label;
-    const bar = svgEl('rect', { class: 'slice cat0', x: L, y: y + 2, width: Math.max(2, (r.value / max) * (W - L - 40)), height: rowH - 8, rx: 3 });
+    const track = svgEl('rect', { class: 'track', x: L, y: y + 2, width: W - L - 40, height: rowH - 8, rx: (rowH - 8) / 2 });
+    const bar = svgEl('rect', { class: 'slice cat0', x: L, y: y + 2, width: Math.max(4, (r.value / max) * (W - L - 40)), height: rowH - 8, rx: (rowH - 8) / 2, 'fill-opacity': String(1 - 0.6 * (i / Math.max(1, rows.length - 1))) });
     const val = svgEl('text', { x: L + Math.max(2, (r.value / max) * (W - L - 40)) + 5, y: y + 14 }); val.textContent = String(r.value);
     const tip = svgEl('title'); tip.textContent = `${r.label}: ${r.value}`; bar.append(tip);
-    svg.append(name, bar, val);
+    svg.append(name, track, bar, val);
   });
   return el('figure', { class: 'envchart wide' }, el('h3', { text: title }), svg);
 }
@@ -638,8 +644,12 @@ function renderEnvCharts(d) {
     donutChart(t('envChartPlatform'), top([...byPlatform].map(([label, value]) => ({ label, value })), 5, t('envOther'))),
     donutChart(t('envChartLocation'), top(loc, 5, t('envOther'))),
     stackBar(t('envChartMachines'), [{ label: t('regRegistered'), value: reg, cls: 'cat1' }, { label: t('colMaintenance'), value: maint, cls: 'cat3' }, { label: t('envNotRegistered'), value: notReg, cls: 'cat4' }]),
+    donutChart(t('envChartVersions'), top(d.versions.filter((v) => v.sessions > 0).map((v) => ({ label: `${v.version || t('envUnknown')} - ${v.platform === '?' ? t('envUnknown') : v.platform}`, value: v.sessions })), 6, t('envOther'))),
+    stackBar(t('envChartPath'), (d.paths ?? []).map((p, i) => ({ label: p.kind === 'gateway' ? `${t('envPathGateway')} ${p.name.split('.')[0]}` : p.kind === 'direct' ? t('envPathDirect') : t('envUnknown'), value: p.sessions, cls: p.kind === 'direct' ? 'cat1' : p.kind === 'unknown' ? 'cat5' : ['cat0', 'cat2', 'cat3', 'cat4'][i % 4] }))),
     barChart(t('envChartApps'), apps),
+    barChart(t('envChartPeak'), [...(d.apps ?? [])].sort((a, b) => b.peakConcurrent - a.peakConcurrent).slice(0, 8).map((a) => ({ label: a.name, value: a.peakConcurrent })).filter((a) => a.value > 0)),
   ].filter(Boolean);
+  charts.find((c) => c.querySelector('h3')?.textContent === t('envChartPath'))?.classList.add('fullrow');
   $('env-charts').replaceChildren(...charts);
 }
 
@@ -737,6 +747,7 @@ async function loadInsights() {
   if (r.status === 503) { setStatus(t('unavailable'), true); return; }
   if (!r.ok) throw new Error(String(r.status));
   renderInsights(await r.json());
+  loadMore().catch(() => {});
 }
 
 // The average logon time of the last days as a small curve (gaps for days without sessions).
@@ -778,6 +789,11 @@ function renderRecords(kind) {
   }));
   table.hidden = sum.length === 0;
   $(`ins-${kind}-none`).hidden = sum.length > 0;
+  // how many of the machines are affected, so "3 of 15" is stated and not guessed
+  let note = $(`ins-${kind}-note`);
+  if (!note) { note = el('p', { id: `ins-${kind}-note`, class: 'muted' }); table.closest('.table-wrap').after(note); }
+  const total = st.data?.machines ?? 0, hit = new Set((st.data?.rows ?? []).map((r) => r.machine).filter(Boolean)).size;
+  note.textContent = sum.length > 0 && total > 0 ? t('insMachinesAffected', { n: hit, m: total }) : '';
 }
 
 function openRecordDetail(kind, s) {
@@ -813,8 +829,23 @@ function renderDisconnected(rows) {
   $('ins-disc-none').hidden = rows.length > 0;
 }
 
+// A row of buttons instead of a drop-down (like the period switch of Director); the hidden select keeps the value and the existing handlers.
+function segmented(select) {
+  select.hidden = true;
+  let box = select.parentElement.querySelector('.seg');
+  if (!box) { box = el('div', { class: 'seg', role: 'group', 'aria-label': t('insPeriod') }); select.after(box); }
+  box.replaceChildren(...[...select.options].map((o) => {
+    const b = el('button', { type: 'button', text: t('insHoursShort', { n: o.value }), 'aria-pressed': String(o.value === select.value) });
+    b.addEventListener('click', () => { select.value = o.value; select.dispatchEvent(new Event('change')); for (const x of box.children) x.setAttribute('aria-pressed', String(x === b)); });
+    return b;
+  }));
+}
+
 function renderInsights(d) {
+  state.groups = d.groups;
   for (const o of document.querySelectorAll('.ins-hours option')) o.textContent = t('insLastHours', { n: o.value });
+  for (const sel of document.querySelectorAll('.ins-hours')) segmented(sel);
+  $('ins-asof').textContent = t('envAsOf', { time: fmtDate(d.at) });
   renderDisconnected(d.disconnected ?? []);
   loadRecords('faults').catch(() => {});
   loadRecords('failures').catch(() => {});
@@ -833,18 +864,310 @@ function renderInsights(d) {
     cell(t('insP90'), `${g.p90Seconds} s`), cell(t('insTrend'), sparkline(g.daily, g.sessions >= 5 && g.avgSeconds >= (state.quality?.logonWarnSeconds ?? 45))),
     cell(t('colShare'), shareBar(g.avgSeconds, maxG, g.sessions >= 5 && g.avgSeconds >= (state.quality?.logonWarnSeconds ?? 45))))));
   $('ins-groups').hidden = d.groups.length === 0;
+  // the days of each group as lines in one chart (the small curves in the table show the same without axes)
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const lines = d.groups.filter((g) => g.sessions >= 5).slice(0, 4).map((g) => ({ name: g.group, unit: 's',
+    points: g.daily.map((v, i) => (v == null ? null : [today.getTime() - (g.daily.length - 1 - i) * 86400000, v])).filter(Boolean) })).filter((x) => x.points.length > 1);
+  const q = state.quality;
+  $('ins-grouptrend').replaceChildren(...(lines.length ? [chart(t('insTrendTitle'), lines, q ? { width: 1000, height: 170, lines: [{ y: q.logonWarnSeconds, cls: 'warn', label: `${t('healthWarning')} ${q.logonWarnSeconds} s` }] } : { width: 1000, height: 170 })] : []));
 
   const HEALTH = { crit: ['✖', 'state-disconnected', 'insHealthCrit'], warn: ['▲', 'state-disconnected', 'insHealthWarn'], good: ['✔', 'state-active', 'insHealthGood'], info: ['ℹ', '', 'insHealthMaint'], off: ['○', '', 'insHealthOff'] };
-  $('ins-machines').tHead.replaceChildren(el('tr', {}, ...['colMachine', 'colGroup', 'colState', 'insLoad', 'colSessions', 'insUptime'].map((k) => el('th', { scope: 'col', text: t(k) }))));
-  $('ins-machines').tBodies[0].replaceChildren(...d.machines.map((m) => {
-    const [sym, cls, key] = HEALTH[m.health] ?? HEALTH.off;
-    return el('tr', {}, cell(t('colMachine'), m.name), cell(t('colGroup'), m.group),
+  state.machines = d.machines;
+  if (state.tilesInit === undefined) {
+    // tiles are on for a small site and off for a big one, unless the choice was made before
+    let saved = null; try { saved = localStorage.getItem('sss.tiles'); } catch { /* no storage */ }
+    const on = saved === null ? d.machines.length <= 40 : saved === '1';
+    state.tilesInit = true;
+    $('ins-mtoggle').setAttribute('aria-expanded', String(on));
+    $('ins-mtoggle').textContent = t(on ? 'insTilesHide' : 'insTilesShow');
+  }
+  renderMachines();
+}
+
+// Machines: tiles per delivery group (collapsible) and the table, both filtered while you type (every word must be part of the name, group or state).
+const MHEALTH = { crit: ['✖', 'state-disconnected', 'insHealthCrit'], warn: ['▲', 'state-disconnected', 'insHealthWarn'], good: ['✔', 'state-active', 'insHealthGood'], info: ['ℹ', '', 'insHealthMaint'], off: ['○', '', 'insHealthOff'] };
+function machineMatches(m) {
+  const words = ($('ins-mq').value || '').toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length === 0 && !$('ins-mprob').checked) return true;
+  if ($('ins-mprob').checked && !['crit', 'warn'].includes(m.health)) return false;
+  const hay = `${m.name} ${m.group} ${t((MHEALTH[m.health] ?? MHEALTH.off)[2])}`.toLowerCase();
+  return words.every((w) => hay.includes(w));
+}
+const showMachineSessions = (m) => { state.hdFilter = m.name.split('.')[0]; $('hd-filter').value = state.hdFilter; showView('hdlist'); };
+
+function renderMachines() {
+  const all = state.machines ?? [], list = all.filter(machineMatches);
+  $('ins-mcount').textContent = t('insMachinesShown', { n: list.length, m: all.length });
+  $('ins-machines-wrap').hidden = all.length === 0;
+  // table
+  $('ins-machines').tHead.replaceChildren(el('tr', {}, ...['colMachine', 'colGroup', 'colState', 'insLoad', 'colSessions', 'insUptime', 'insScore', 'colAction'].map((k) => el('th', { scope: 'col', text: t(k) }))));
+  $('ins-machines').tBodies[0].replaceChildren(...list.map((m) => {
+    const [sym, cls, key] = MHEALTH[m.health] ?? MHEALTH.off;
+    const go = el('button', { type: 'button', text: t('insShowSessions'), 'aria-label': `${t('insShowSessions')}: ${m.name}` });
+    go.addEventListener('click', () => showMachineSessions(m));
+    const nm = el('button', { type: 'button', class: 'linkish', text: m.name }); nm.addEventListener('click', () => openMachine(m.name));
+    return el('tr', {}, cell(t('colMachine'), nm), cell(t('colGroup'), m.group),
       cell(t('colState'), el('span', { class: cls, text: `${sym} ${t(key)}` })),
       cell(t('insLoad'), m.loadIndex == null ? '' : el('span', {}, `${m.loadIndex} `, shareBar(m.loadIndex, 10000, m.health === 'crit' || m.health === 'warn'))),
       cell(t('colSessions'), m.sessions == null ? '' : String(m.sessions)),
-      cell(t('insUptime'), m.uptimeDays == null ? '' : t('insDays', { n: m.uptimeDays })));
+      cell(t('insUptime'), m.uptimeDays == null ? '' : t('insDays', { n: m.uptimeDays })),
+      cell(t('insScore'), scoreCell(m.score)), cell(t('colAction'), go));
   }));
-  $('ins-machines').hidden = d.machines.length === 0;
+  $('ins-machines').hidden = list.length === 0;
+  // tiles, grouped by delivery group; a group with a problem is open, the others as chosen
+  const tilesOn = $('ins-mtoggle').getAttribute('aria-expanded') === 'true';
+  $('ins-tiles').hidden = !tilesOn;
+  const groups = new Map();
+  for (const m of list) { if (!groups.has(m.group)) groups.set(m.group, []); groups.get(m.group).push(m); }
+  const filtering = !!$('ins-mq').value || $('ins-mprob').checked;
+  $('ins-tiles').replaceChildren(...[...groups].map(([g, ms]) => {
+    const bad = ms.filter((m) => m.health === 'crit').length, warn = ms.filter((m) => m.health === 'warn').length;
+    const sum = el('summary', {}, el('strong', { text: g || '?' }), el('span', { class: 'muted', text: ` (${ms.length})` }),
+      bad ? el('span', { class: 'state-disconnected', text: ` ✖ ${bad}` }) : '', warn ? el('span', { class: 'state-disconnected', text: ` ▲ ${warn}` }) : '');
+    const grid = el('div', { class: 'mtiles', role: 'list' }, ...ms.map((m) => {
+      const [sym, cls, key] = MHEALTH[m.health] ?? MHEALTH.off;
+      const b = el('button', { type: 'button', class: `mtile h-${m.health}`, role: 'listitem', title: `${m.name}\n${m.group}\n${t(key)}${m.score == null ? '' : ` · ${t('insScore')} ${m.score}`}`,
+        'aria-label': `${m.name}: ${t(key)}, ${t('colSessions')} ${m.sessions ?? 0}` },
+        el('span', { class: 'mt-name' }, el('span', { class: cls, 'aria-hidden': 'true', text: `${sym} ` }), m.name.split('.')[0]),
+        el('span', { class: 'mt-load' }, m.loadIndex == null ? el('span', { class: 'muted', text: '–' }) : shareBar(m.loadIndex, 10000, m.health === 'crit' || m.health === 'warn')),
+        el('span', { class: 'mt-meta', text: `${m.sessions ?? 0} ${t('colSessions')}${m.score == null ? '' : ` · ${m.score}`}` }));
+      b.addEventListener('click', () => openMachine(m.name));
+      return b;
+    }));
+    const det = el('details', { class: 'mgroup' }, sum, grid);
+    if (filtering || bad || warn || groups.size === 1) det.open = true;
+    return det;
+  }));
+}
+
+// Health score 0-100 as number with word and symbol (never colour alone).
+function scoreCell(score) {
+  if (score == null) return '';
+  const [sym, cls] = score >= 80 ? ['✔', 'state-active'] : score >= 50 ? ['▲', 'state-disconnected'] : ['✖', 'state-disconnected'];
+  return el('span', { class: cls, text: `${sym} ${score}` });
+}
+
+// One card per delivery group: the worst of logon time, machines, crashes and failures decides the light; every line names its own reason.
+function renderGroupCards(faults, failures) {
+  const q = state.quality ?? { logonWarnSeconds: 45, logonCritSeconds: 90 }, rank = { good: 0, warn: 1, crit: 2 };
+  const names = new Set([...(state.groups ?? []).map((g) => g.group), ...(state.machines ?? []).map((m) => m.group).filter(Boolean)]);
+  const lvl = (v, warn, crit) => (v >= crit ? 'crit' : v >= warn ? 'warn' : 'good');
+  const mark = { good: ['✔', 'state-active'], warn: ['▲', 'state-disconnected'], crit: ['✖', 'state-disconnected'] };
+  const cards = [...names].map((g) => {
+    const lg = (state.groups ?? []).find((x) => x.group === g), ms = (state.machines ?? []).filter((m) => m.group === g);
+    const crashes = faults.filter((r) => r.group === g).length, fails = failures.filter((r) => r.group === g).length;
+    const parts = [
+      lg && lg.sessions >= 5 ? [lvl(lg.avgSeconds, q.logonWarnSeconds, q.logonCritSeconds), t('insGcLogon', { s: lg.avgSeconds })] : null,
+      ms.length ? [ms.some((m) => m.health === 'crit') ? 'crit' : ms.some((m) => m.health === 'warn') ? 'warn' : 'good', t('insGcMachines', { n: ms.filter((m) => ['crit', 'warn'].includes(m.health)).length, m: ms.length })] : null,
+      [lvl(crashes, 1, 5), t('insGcCrashes', { n: crashes })], [lvl(fails, 1, 5), t('insGcFailures', { n: fails })],
+    ].filter(Boolean);
+    const worst = parts.reduce((a, p) => (rank[p[0]] > rank[a] ? p[0] : a), 'good');
+    const b = el('button', { type: 'button', class: `gcard g-${worst}` },
+      el('span', { class: 'gh' }, el('strong', { text: g || '?' }), el('span', { class: mark[worst][1], text: ` ${mark[worst][0]} ${t(worst === 'good' ? 'insHealthGood' : worst === 'warn' ? 'insGcAttention' : 'insHealthCrit')}` })),
+      ...parts.map(([l, txt]) => el('span', { class: 'gl' }, el('span', { class: mark[l][1], 'aria-hidden': 'true', text: `${mark[l][0]} ` }), txt)));
+    b.addEventListener('click', () => { $('ins-mq').value = g; $('ins-mprob').checked = false; renderMachines(); $('ins-machines-wrap').scrollIntoView({ behavior: 'smooth', block: 'start' }); });
+    return { worst, b };
+  }).sort((a, b) => rank[b.worst] - rank[a.worst]);
+  $('ins-groupcards').replaceChildren(...cards.map((c) => c.b));
+}
+
+// The load of each machine hour by hour over the last 24 hours as a row of cells (darker = busier); a red mark where it lost its registration.
+function renderStrips(more) {
+  const rows = more.strips ?? [], box = $('ins-strips');
+  if (!rows.length) { box.replaceChildren(el('p', { class: 'muted', text: t('insStripsNone') })); return; }
+  state.stripStart = new Date(more.hourly?.[0]?.at ?? Date.now()).getTime();
+  state.stripLost = (more.timeline ?? []).filter((e) => e.kind === 'unregistered');
+  const grid = el('div', { class: 'stripgrid' });
+  renderStripRows(grid, rows);
+  const legend = el('div', { class: 'striplegend' }, ...[['c0', '< 15 %'], ['c1', '15–40'], ['c2', '40–65'], ['c3', '65–85'], ['c4', '≥ 85 %'], ['none', t('insStripNone')]].map(([c, l]) => el('span', {}, el('span', { class: `swatch ${c}` }), l)));
+  box.replaceChildren(grid, legend);
+}
+
+// The cells of the rows (also used in the machine dialog).
+const shade = (v) => (v == null ? 'none' : v >= 85 ? 'c4' : v >= 65 ? 'c3' : v >= 40 ? 'c2' : v >= 15 ? 'c1' : 'c0');
+function renderStripRows(grid, rows) {
+  const start = state.stripStart ?? Date.now() - 23 * 3600000, tf = new Intl.DateTimeFormat(state.lang, { hour: '2-digit', minute: '2-digit' });
+  for (const r of rows) {
+    const name = el('button', { type: 'button', class: 'linkish', text: r.machine.split('.')[0], title: r.machine });
+    name.addEventListener('click', () => openMachine(r.machine));
+    const svg = svgEl('svg', { viewBox: '0 0 240 16', class: 'strip', role: 'img', 'aria-label': `${r.machine}: CPU` });
+    r.cpu.forEach((v, i) => {
+      const c = svgEl('rect', { class: `cell ${shade(v)}`, x: i * 10, y: 0, width: 9, height: 16, rx: 2 });
+      const tip = svgEl('title'); tip.textContent = `${tf.format(new Date(start + i * 3600000))}: ${v == null ? t('insStripNone') : `${v} % CPU`}`; c.append(tip); svg.append(c);
+    });
+    for (const e of (state.stripLost ?? []).filter((x) => x.subject.split('.')[0] === r.machine.split('.')[0])) {
+      const i = Math.floor((new Date(e.at).getTime() - start) / 3600000);
+      if (i >= 0 && i < 24) { const m = svgEl('text', { x: i * 10 + 4.5, y: 12, 'text-anchor': 'middle', class: 'lostmark' }); m.textContent = '✖'; const tip = svgEl('title'); tip.textContent = `${tf.format(new Date(e.at))}: ${t('tl_unregistered')}`; m.append(tip); svg.append(m); }
+    }
+    grid.append(name, svg, el('span', { class: 'muted sg', text: r.group }));
+  }
+}
+
+// One machine on one page: state, load, the strip, crashes and failures there, what changed, and the sessions running on it.
+async function openMachine(name) {
+  const dlg = $('machine-dlg'), body = $('machine-body');
+  $('machine-h').textContent = name.split('.')[0];
+  $('machine-sub').textContent = t('detailsLoading');
+  body.replaceChildren();
+  if (!dlg.open) dlg.showModal();
+  const r = await fetch(`api/helpdesk/insights/machine?name=${encodeURIComponent(name)}`, { credentials: 'same-origin' });
+  if (!r.ok) { $('machine-sub').textContent = t(r.status === 404 ? 'detailsNone' : 'error'); return; }
+  const d = await r.json(), row = d.row, fmt = (iso) => (iso ? fmtTime(iso) : '–');
+  const [sym, cls, key] = MHEALTH[row.health] ?? MHEALTH.off;
+  $('machine-sub').replaceChildren(el('span', { class: cls, text: `${sym} ${t(key)}` }), ` · ${row.group || '?'}${row.score == null ? '' : ` · ${t('insScore')} ${row.score}/100`}`);
+  const facts = [[t('colSessions'), row.sessions ?? 0], [t('insLoad'), row.loadIndex ?? '–'], [t('insUptime'), row.uptimeDays == null ? '–' : t('insDays', { n: row.uptimeDays })],
+    d.info ? [t('envColAgent'), d.info.agentVersion] : null, d.info ? [t('envColOs'), d.info.os] : null, d.info?.registrationChanged ? [t('machRegChanged'), fmt(d.info.registrationChanged)] : null,
+    d.usage ? [t('insCpu'), `${d.usage.cpu} % / ${d.usage.peakCpu} %`] : null, d.usage ? [t('insMem'), `${d.usage.memory} % / ${d.usage.peakMemory} %`] : null].filter(Boolean);
+  const sect = (title, ...kids) => el('section', { class: 'group' }, el('h3', { text: title }), ...kids);
+  const recTable = (rows) => rows.length ? el('div', { class: 'table-wrap' }, el('table', { class: 'smalltable' }, el('tbody', {}, ...rows.map((x) => el('tr', {},
+    el('td', { text: fmt(x.at) }), el('td', { text: x.name }), el('td', { text: x.user ?? '' })))))) : el('p', { class: 'muted', text: t('machNone') });
+  body.replaceChildren(
+    el('dl', { class: 'facts' }, ...facts.flatMap(([k, v]) => [el('dt', { text: k }), el('dd', { text: String(v) })])),
+    d.strip ? sect(t('insStrips'), (() => { const w = el('div', { class: 'stripgrid one' }); renderStripsInto(w, d.strip); return w; })()) : '',
+    sect(t('insFaults'), recTable(d.faults)), sect(t('insFailures'), recTable(d.failures)),
+    sect(t('insTimeline'), d.events.length ? el('ul', { class: 'hints' }, ...d.events.map((e) => el('li', { text: `${fmt(e.at)} · ${t(`tl_${e.kind}`)}` }))) : el('p', { class: 'muted', text: t('machNone') })),
+    sect(t('machSessions'), el('div', { id: 'machine-sessions' }, el('p', { class: 'muted', text: t('detailsLoading') }))));
+  const lr = await fetch('api/helpdesk/live', { credentials: 'same-origin' });
+  const list = lr.ok ? (await lr.json()).sessions.filter((h) => (h.session.machine ?? '').split('.')[0].toLowerCase() === name.split('.')[0].toLowerCase()) : [];
+  $('machine-sessions').replaceChildren(list.length ? el('div', { class: 'table-wrap' }, el('table', { class: 'smalltable' }, el('tbody', {}, ...list.map((h) => {
+    const b = el('button', { type: 'button', text: t('insOpenUser'), 'aria-label': `${t('insOpenUser')}: ${h.userName}` });
+    b.addEventListener('click', () => { dlg.close(); openUser(h.userSid, h.userName); });
+    return el('tr', {}, el('td', { text: h.userName }), el('td', { text: h.session.resourceName }), el('td', { text: t(h.session.state === 'active' ? 'stateActive' : 'stateDisconnected') }), el('td', {}, b));
+  })))) : el('p', { class: 'muted', text: t('machNone') }));
+}
+function renderStripsInto(box, strip) { renderStripRows(box, [strip]); }
+
+// The day at a glance: logons per hour as bars, the average logon time as a line (its own scale on the right) and crashes and connection failures
+// as marks on the same time axis, so "what happened when" reads off one picture.
+function niceStep(max) { const m = Math.max(1, max), p = 10 ** Math.floor(Math.log10(m)), n = m / p; return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * p; }
+
+function incidentDayChart(hours, faults, failures) {
+  const W = 1100, H = 200, L = 70, R = 46, base = 128, top = 14, slot = (W - L - R) / hours.length, bw = slot - 16;
+  const maxN = niceStep(Math.max(1, ...hours.map((h) => h.logons))), warn = state.quality?.logonWarnSeconds ?? 45;
+  const maxS = niceStep(Math.max(warn, ...hours.map((h) => h.avgSeconds ?? 0)));
+  const yN = (n) => base - (n / maxN) * (base - top), yS = (v) => base - (v / maxS) * (base - top);
+  const start = new Date(hours[0].at).getTime(), xAt = (ms) => Math.min(W - R, Math.max(L, L + ((ms - start) / 3600000) * slot));
+  const svg = svgEl('svg', { viewBox: `0 0 ${W} ${H}`, class: 'dayc', role: 'img', 'aria-label': t('insDayTitle') });
+  const hl = svgEl('rect', { class: 'dhl', x: 0, y: top - 4, width: slot, height: 0 });
+  svg.append(hl);
+  const tx = (x, y, txt, anchor = 'start', cls = '') => { const e = svgEl('text', { x, y, 'text-anchor': anchor, class: cls }); e.textContent = txt; return e; };
+  const tf = new Intl.DateTimeFormat(state.lang, { hour: '2-digit', minute: '2-digit' });
+  for (let i = 0; i <= 3; i++) {
+    const n = (maxN / 3) * i, y = yN(n);
+    svg.append(svgEl('line', { class: i === 0 ? 'axis' : 'grid', x1: L, y1: y, x2: W - R, y2: y }), tx(L - 5, y + 4, String(Math.round(n)), 'end'), tx(W - R + 5, y + 4, `${Math.round((maxS / 3) * i)} s`, 'start', 'sline'));
+  }
+  hours.forEach((h, i) => {
+    const bh = h.logons === 0 ? 2 : Math.max(3, base - yN(h.logons));
+    const bar = svgEl('rect', { class: 'dbar', x: L + i * slot + 8, y: base - bh, width: bw, height: bh, rx: 2 });
+    const tip = svgEl('title'); tip.textContent = `${tf.format(new Date(h.at))}: ${t('insHourlyTip', { n: h.logons })}${h.avgSeconds == null ? '' : ` · Ø ${h.avgSeconds} s`}`; bar.append(tip); svg.append(bar);
+    if (i % 3 === 0) svg.append(tx(L + i * slot, H - 3, tf.format(new Date(h.at))));
+  });
+  const pts = hours.map((h, i) => (h.avgSeconds == null ? null : [L + i * slot + 8 + bw / 2, yS(h.avgSeconds)]));
+  const seg = []; let cur = [];
+  for (const p of pts) { if (p) cur.push(p); else if (cur.length) { seg.push(cur); cur = []; } }
+  if (cur.length) seg.push(cur);
+  for (const sgm of seg) svg.append(sgm.length > 1 ? svgEl('polyline', { class: 'sline', fill: 'none', points: sgm.map((p) => p.join(',')).join(' ') }) : svgEl('circle', { class: 'sdot', cx: sgm[0][0], cy: sgm[0][1], r: 3 }));
+  svg.append(svgEl('line', { class: 'ref warn', x1: L, y1: yS(warn), x2: W - R, y2: yS(warn) }));
+  const peak = hours.reduce((a, h) => (h.logons > a.logons ? h : a), hours[0]);
+  if (peak.logons > 0) { const i = hours.indexOf(peak); svg.append(tx(Math.min(W - R - 150, L + i * slot + 10), yN(peak.logons) - 5, `${tf.format(new Date(peak.at))} · ${t('insHourlyTip', { n: peak.logons })}${peak.avgSeconds == null ? '' : ` · Ø ${peak.avgSeconds} s`}`, 'start', 'peak')); }
+  svg.append(svgEl('line', { class: 'grid', x1: L, y1: base + 8, x2: W - R, y2: base + 8 }), tx(L - 5, base + 28, t('insDayCrash'), 'end'), tx(L - 5, base + 50, t('insDayFail'), 'end'));
+  const place = (list, row, make) => {
+    const used = [];
+    for (const r of list) {
+      const x = xAt(new Date(r.at).getTime()); let lift = 0;
+      while (used.some((u) => u.lift === lift && Math.abs(u.x - x) < 11)) lift += 1;
+      used.push({ x, lift });
+      const m = make(x, base + row - lift * 9), tip = svgEl('title'); tip.textContent = `${tf.format(new Date(r.at))} · ${r.name}${r.machine ? ` · ${r.machine}` : ''}${r.user ? ` · ${r.user}` : ''}`; m.append(tip); svg.append(m);
+    }
+  };
+  place(faults, 30, (x, y) => svgEl('polygon', { class: 'mcrash', points: `${x - 6},${y} ${x},${y - 12} ${x + 6},${y}` }));
+  place(failures, 52, (x, y) => svgEl('circle', { class: 'mfail', cx: x, cy: y - 4, r: 5 }));
+  // one invisible column per hour: hovering (or tapping) it shows the hour with its logons, crashes and failures in a tip
+  const tipBox = el('div', { class: 'daytip', role: 'status', hidden: '' });
+  const inHour = (list, h) => list.filter((r) => { const x = new Date(r.at).getTime(), a = new Date(h.at).getTime(); return x >= a && x < a + 3600000; });
+  hours.forEach((h, i) => {
+    const col = svgEl('rect', { class: 'dhit', x: L + i * slot, y: top - 4, width: slot, height: base + 62 - top, fill: 'transparent' });
+    const show = (ev) => {
+      const f = inHour(faults, h), g = inHour(failures, h), a = new Date(h.at), b = new Date(a.getTime() + 3600000);
+      tipBox.replaceChildren(el('strong', { text: `${tf.format(a)} – ${tf.format(b)}` }),
+        el('div', { text: `${t('insHourlyTip', { n: h.logons })}${h.avgSeconds == null ? '' : ` · Ø ${h.avgSeconds} s`}` }),
+        ...f.slice(0, 6).map((r) => el('div', { class: 'tcrash', text: `▲ ${r.name} · ${r.machine ?? ''}${r.user ? ` · ${r.user}` : ''}` })),
+        ...g.slice(0, 6).map((r) => el('div', { class: 'tfail', text: `● ${r.name} · ${r.machine ?? ''}${r.user ? ` · ${r.user}` : ''}` })),
+        f.length + g.length > 12 ? el('div', { class: 'muted', text: '…' }) : '');
+      tipBox.hidden = false;
+      const host = tipBox.parentElement.getBoundingClientRect(), r = col.getBoundingClientRect();
+      const left = Math.min(host.width - tipBox.offsetWidth - 4, Math.max(4, r.left - host.left + r.width / 2 - tipBox.offsetWidth / 2));
+      tipBox.style.left = `${left}px`; tipBox.style.top = `${Math.max(0, r.top - host.top - tipBox.offsetHeight - 6)}px`;
+      hl.setAttribute('x', L + i * slot); hl.setAttribute('height', base + 62 - top);
+    };
+    col.addEventListener('mouseenter', show); col.addEventListener('click', show);
+    svg.addEventListener('mouseleave', () => { tipBox.hidden = true; hl.setAttribute('height', 0); });
+    svg.append(col);
+  });
+  const key = (cls, txt) => el('span', {}, el('span', { class: cls }), txt);
+  return el('div', { class: 'daycard' },
+    el('div', { class: 'dayhead' }, el('strong', { text: t('insDayTitle') }),
+      el('div', { class: 'daykey' }, key('kbar', t('insDayLogons')), key('kline', t('insDayAvg')), key('ktri', t('insDayCrash')), key('kdot', t('insDayFail')))),
+    el('div', { class: 'daywrap' }, svg, tipBox), el('p', { class: 'muted', text: t('insDayHint') }));
+}
+
+function renderKpis(more, faults, failures) {
+  const hours = more.hourly ?? [], logons = hours.reduce((a, h) => a + h.logons, 0);
+  const weighted = hours.filter((h) => h.avgSeconds != null && h.logons > 0), wsum = weighted.reduce((a, h) => a + h.logons, 0);
+  const avg = wsum ? Math.round(weighted.reduce((a, h) => a + h.avgSeconds * h.logons, 0) / wsum) : null;
+  const peak = hours.reduce((a, h) => (h.logons > (a?.logons ?? 0) ? h : a), null);
+  const gs = (state.groups ?? []).filter((g) => g.sessions >= 5), gAvg = gs.length ? Math.round(gs.reduce((a, g) => a + g.avgSeconds * g.sessions, 0) / gs.reduce((a, g) => a + g.sessions, 0)) : null;
+  const ms = state.machines ?? [], bad = ms.filter((m) => ['crit', 'warn'].includes(m.health)).length, down = ms.filter((m) => m.health === 'crit').length;
+  const tf = new Intl.DateTimeFormat(state.lang, { hour: '2-digit', minute: '2-digit' });
+  const card = (label, value, sub, cls, target) => {
+    const b = el('button', { type: 'button', class: `kpi ${cls}` }, el('span', { class: 'kl', text: label }), el('span', { class: 'kv', text: value }), el('span', { class: 'ks', text: sub }));
+    b.addEventListener('click', () => $(target)?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    return b;
+  };
+  const users = (list) => new Set(list.map((r) => r.user).filter(Boolean)).size, machines = (list) => new Set(list.map((r) => r.machine).filter(Boolean)).size;
+  $('ins-kpi').replaceChildren(
+    card(t('insKpiLogons'), String(logons), peak?.logons ? t('insKpiPeak', { time: tf.format(new Date(peak.at)), n: peak.logons }) : '', '', 'ins-day'),
+    card(t('insKpiAvg'), avg == null ? '–' : `${avg} s`, gAvg == null ? '' : t('insKpiGroup', { s: gAvg }), avg != null && avg >= (state.quality?.logonWarnSeconds ?? 45) ? 'warn' : '', 'ins-groups'),
+    card(t('insKpiCrashes'), String(faults.length), faults.length ? t('insKpiOnMachines', { n: machines(faults) }) : '', faults.length ? 'crit' : '', 'ins-faults'),
+    card(t('insKpiFailures'), String(failures.length), failures.length ? t('insKpiUsers', { n: users(failures) }) : '', failures.length ? 'warn' : '', 'ins-failures'),
+    card(t('insKpiMachines'), `${bad} / ${ms.length}`, down ? t('insKpiUnreg', { n: down }) : '', bad ? 'crit' : '', 'ins-machines-wrap'));
+}
+
+// Utilisation, application start times, costs and the timeline of changes (their own request, cached for ten minutes on the server).
+async function loadMore() {
+  const r = await fetch('api/helpdesk/insights/more', { credentials: 'same-origin' });
+  if (!r.ok) return;
+  const d = await r.json();
+  const fill = (id, noneId, heads, rows, make) => {
+    const tb = $(id);
+    tb.tHead.replaceChildren(el('tr', {}, ...heads.map((k) => el('th', { scope: 'col', text: t(k), ...(state.dict[`${k}Tip`] ?? state.fallback[`${k}Tip`] ? { title: t(`${k}Tip`) } : {}) }))));
+    tb.tBodies[0].replaceChildren(...rows.map(make));
+    tb.hidden = rows.length === 0;
+    $(noneId).hidden = rows.length > 0;
+  };
+  const rec = async (kind) => { const x = await fetch(`api/helpdesk/insights/records?kind=${kind}&hours=24`, { credentials: 'same-origin' }); return x.ok ? (await x.json()).rows ?? [] : []; };
+  const [faults, failures] = await Promise.all([rec('faults'), rec('failures')]);
+  renderKpis(d, faults, failures);
+  renderGroupCards(faults, failures);
+  renderStrips(d);
+  $('ins-day').replaceChildren(d.hourly?.length ? incidentDayChart(d.hourly, faults, failures) : el('p', { class: 'muted', text: t('insHourlyNone') }));
+  const HEALTH = { crit: ['✖', 'state-disconnected'], warn: ['▲', 'state-disconnected'], good: ['✔', 'state-active'] };
+  const sec = (ms) => `${(ms / 1000).toFixed(1)} s`;
+  fill('ins-usage', 'ins-usage-none', ['colMachine', 'colGroup', 'insCpu', 'insMem', 'colState'], d.usage, (u) => el('tr', {},
+    cell(t('colMachine'), u.machine), cell(t('colGroup'), u.group),
+    cell(t('insCpu'), el('span', {}, `${u.cpu} % / ${u.peakCpu} % `, shareBar(u.cpu, 100, u.health !== 'good'))),
+    cell(t('insMem'), el('span', {}, `${u.memory} % / ${u.peakMemory} % `, shareBar(u.memory, 100, u.health !== 'good'))),
+    cell(t('colState'), el('span', { class: HEALTH[u.health][1], text: `${HEALTH[u.health][0]} ${t(u.health === 'good' ? 'insHealthGood' : u.health === 'warn' ? 'insHealthWarn' : 'insHealthCrit')}` }))));
+  $('ins-starts-none').textContent = d.appLaunchesRead > 0 ? t('insStartsFew', { n: d.appLaunchesRead }) : t('insStartsNone');
+  $('ins-usage-none').textContent = d.usageSamples === 0 ? t('insUsageNone') : t('insUsageNoMatch');
+  fill('ins-starts', 'ins-starts-none', ['colApp', 'insStarts', 'insAvgStart', 'insP90Start', 'insSlowOn'], d.appStarts, (a) => el('tr', {},
+    cell(t('colApp'), a.name), cell(t('insStarts'), String(a.launches)), cell(t('insAvgStart'), sec(a.avgMs)), cell(t('insP90Start'), sec(a.p90Ms)),
+    cell(t('insSlowOn'), a.slowMachine ? `${a.slowMachine} (${sec(a.slowMachineMs)})` : '')));
+  const money = (v, cur) => `${new Intl.NumberFormat(state.lang, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v)} ${cur}`.trim();
+  fill('ins-costs', 'ins-costs-none', ['colGroup', 'insCompute', 'insStorage', 'insSavings'], d.costs, (c) => el('tr', {},
+    cell(t('colGroup'), c.group), cell(t('insCompute'), money(c.compute, c.currency)), cell(t('insStorage'), money(c.storage, c.currency)), cell(t('insSavings'), money(c.savings, c.currency))));
+  fill('ins-timeline', 'ins-timeline-none', ['colWhen', 'insWhat', 'insSubject', 'insBy'], d.timeline, (e) => el('tr', {},
+    cell(t('colWhen'), fmtTime(e.at)), cell(t('insWhat'), (state.dict[`tl_${e.kind}`] ?? state.fallback[`tl_${e.kind}`]) ? t(`tl_${e.kind}`) : e.kind), cell(t('insSubject'), [e.subject, e.detail].filter(Boolean).join(' · ')), cell(t('insBy'), e.actor ?? '')));
 }
 
 // A short history of the user whose sessions are shown (helpdesk): sessions, logon time against the delivery group, failures, reconnects.
@@ -884,7 +1207,7 @@ async function loadUserSummary() {
   ].filter(Boolean);
   p.className = `usersummary ${d.verdict}`;
   $('user-summary-body').replaceChildren(
-    el('p', { class: 'sumverdict' }, el('span', { class: 'sumsym', 'aria-hidden': 'true', text: sym }), el('strong', { text: ` ${t(`sumVerdict_${d.verdict}`)}` }), el('span', { class: 'muted', text: ` · ${t('sumTitle', { days: d.days })}` })),
+    el('p', { class: 'sumverdict' }, el('span', { class: 'sumsym', 'aria-hidden': 'true', text: sym }), el('strong', { text: ` ${t(`sumVerdict_${d.verdict}`)}` }), d.score == null ? '' : el('span', { class: 'muted', text: ` · ${t('sumScore')}: ${d.score}/100` }), el('span', { class: 'muted', text: ` · ${t('sumTitle', { days: d.days })}` })),
     el('div', { class: 'sumtiles' }, ...tiles));
 }
 
@@ -1059,7 +1382,7 @@ function timeTicks(x0, x1, maxTicks) {
 
 // opts.lines: horizontal reference lines [{ y, cls }] (e.g. the warning and critical limit of the traffic light).
 function chart(title, series, opts = {}) {
-  const W = 420, H = 180, L = 46, R = 10, T = 12, B = 24;
+  const W = opts.width ?? 420, H = opts.height ?? 180, L = 46, R = 10, T = 12, B = 24;
   const pts = series.flatMap((s) => s.points);
   const x0 = Math.min(...pts.map((p) => p[0])), x1 = Math.max(...pts.map((p) => p[0]));
   const refs = opts.lines ?? [];
@@ -1185,8 +1508,9 @@ function buildTopology(d, s) {
   const same = (a, b) => a && b && a.toLowerCase().split('.')[0] === b.toLowerCase().split('.')[0];
   const viaHost = v('ConnectedViaHostName'), viaIp = v('ConnectedViaIPAddress');
   const vdaName = s.machine, vdaIp = v('Machine.IPAddress') ?? v('IPAddress');
-  const isClientOrVda = viaHost ? same(viaHost, v('ClientName')) || same(viaHost, vdaName)
-    : same(viaIp, v('ClientAddress')) || same(viaIp, v('ClientPublicIP')) || (viaIp && vdaIp && viaIp === vdaIp);
+  const loopback = (h) => /^(localhost|127\.\d+\.\d+\.\d+|::1)$/i.test((h ?? '').trim());   // a connection from the machine itself is no gateway
+  const isClientOrVda = loopback(viaHost) || loopback(viaIp) || (viaHost ? same(viaHost, v('ClientName')) || same(viaHost, vdaName)
+    : same(viaIp, v('ClientAddress')) || same(viaIp, v('ClientPublicIP')) || (viaIp && vdaIp && viaIp === vdaIp));
   const direct = !v('GatewayPopName') && (viaHost || viaIp) && isClientOrVda;
   const via = direct ? null : viaHost ?? viaIp;
   const popName = v('GatewayPopName');
@@ -1722,6 +2046,11 @@ async function load() {
     if (!r.ok) throw new Error(String(r.status));
     state.data = await r.json();
     render();
+    if (state.afterOpen && state.view === 'hduser') {
+      const uid = state.afterOpen; state.afterOpen = null;
+      const target = state.data.live.find((x) => x.uid === uid);
+      if (target) openProcesses(target);
+    }
     const w = state.data.warnings || [];
     if (w.includes('history-unavailable')) setStatus(t('warnHistory'), true);
     else if (w.includes('quality-unavailable')) setStatus(t('warnQuality'), true);
@@ -1811,6 +2140,16 @@ async function init() {
     sel.addEventListener('change', () => { recState[kind].hours = Number(sel.value); loadRecords(kind).catch(() => setStatus(t('error'), true)); });
   }
   $('ins-detail-close').addEventListener('click', () => $('ins-detail').close());
+  $('machine-close').addEventListener('click', () => $('machine-dlg').close());
+  $('ins-mq').addEventListener('input', renderMachines);
+  $('ins-mprob').addEventListener('change', renderMachines);
+  $('ins-mtoggle').addEventListener('click', () => {
+    const on = $('ins-mtoggle').getAttribute('aria-expanded') !== 'true';
+    $('ins-mtoggle').setAttribute('aria-expanded', String(on));
+    $('ins-mtoggle').textContent = t(on ? 'insTilesHide' : 'insTilesShow');
+    try { localStorage.setItem('sss.tiles', on ? '1' : '0'); } catch { /* no storage: the choice is not kept */ }
+    renderMachines();
+  });
   $('ins-refresh').addEventListener('click', () => loadInsights().catch(() => setStatus(t('error'), true)));
   $('env-refresh').addEventListener('click', () => loadEnv().catch(() => setStatus(t('error'), true)));
   $('cfg').addEventListener('toggle', () => { if ($('cfg').open) loadCfg().catch(() => setStatus(t('error'), true)); });
@@ -1851,10 +2190,10 @@ async function init() {
   // demo mode only (README screenshots): ?shot=details opens the expert view of the first session, ?shot=profile also reads its
   // profile, ?shot=processes opens its process list, ?shot=env the Environment tab, ?shot=insights the Insights tab
   const shot = QUERY.get('shot');
-  if (!$('demo').hidden && state.data?.live[0] && ['details', 'profile', 'processes'].includes(shot)) {
+  if (!$('demo').hidden && state.data?.live[0] && ['details', 'profile', 'processes', 'charts'].includes(shot)) {
     setExpert(true);
     if (shot === 'processes') await openProcesses(state.data.live[0]);
-    else { await openDetails(state.data.live[0], shot === 'profile' ? 'profile' : 'summary'); if (shot === 'profile') document.querySelector('.profile button')?.click(); }
+    else { await openDetails(state.data.live[0], shot === 'profile' ? 'profile' : shot === 'charts' ? 'charts' : 'summary'); if (shot === 'profile') document.querySelector('.profile button')?.click(); }
   }
   if (!$('demo').hidden && shot === 'env' && state.caps.admin) { showView('env'); await loadEnv(); }
   if (!$('demo').hidden && shot === 'insights' && state.helpdesk) { showView('insights'); await loadInsights(); }

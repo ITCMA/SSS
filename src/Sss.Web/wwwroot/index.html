@@ -136,11 +136,17 @@
         <h2 id="ins-h" data-i18n="insTitle">Insights</h2>
         <button type="button" id="ins-refresh" data-i18n="refresh">Refresh</button>
       </div>
+      <p id="ins-asof" class="muted"></p>
       <p class="muted" data-i18n="insIntro">What is conspicuous right now, read from the Citrix Monitor.</p>
+      <div id="ins-kpi" class="kpis"></div>
+      <div id="ins-day" class="daybox"></div>
+      <h3 data-i18n="insGroupCards">Delivery groups at a glance</h3>
+      <div id="ins-groupcards" class="gcards"></div>
       <h3 data-i18n="insFindings">Conspicuous now</h3>
       <ul id="ins-findings" class="hints"></ul>
       <p id="ins-none" class="muted" hidden data-i18n="insNone">Nothing conspicuous: all measured values are within the limits.</p>
       <h3 data-i18n="insGroups">Logon time per delivery group (last 7 days)</h3>
+      <div id="ins-grouptrend" class="trendbox"></div>
       <div class="table-wrap"><table id="ins-groups"><caption class="sr" data-i18n="insGroups"></caption><thead></thead><tbody></tbody></table></div>
       <h3 data-i18n="insDisconnected">Disconnected sessions</h3>
       <p id="ins-disc-none" class="muted" hidden data-i18n="insDiscNone">No disconnected sessions.</p>
@@ -158,7 +164,36 @@
       <p id="ins-failures-none" class="muted" hidden data-i18n="insRecNone">Nothing recorded in this period (or the site does not deliver these records).</p>
       <div class="table-wrap"><table id="ins-failures"><caption class="sr" data-i18n="insFailures"></caption><thead></thead><tbody></tbody></table></div>
       <h3 data-i18n="insMachines">Machines</h3>
-      <div class="table-wrap"><table id="ins-machines"><caption class="sr" data-i18n="insMachines"></caption><thead></thead><tbody></tbody></table></div>
+      <div id="ins-machines-wrap">
+        <div class="mbar">
+          <label class="sr" for="ins-mq" data-i18n="insMachineSearch">Search machines</label>
+          <input id="ins-mq" type="search" autocomplete="off" data-i18n-ph="insMachineSearchPh" placeholder="Filter by name, group or state">
+          <label class="check"><input type="checkbox" id="ins-mprob"> <span data-i18n="insOnlyProblems">only conspicuous</span></label>
+          <button type="button" id="ins-mtoggle" aria-expanded="true" data-i18n="insTilesHide">Hide tiles</button>
+          <span id="ins-mcount" class="muted" aria-live="polite"></span>
+        </div>
+        <div id="ins-tiles"></div>
+        <div class="table-wrap"><table id="ins-machines"><caption class="sr" data-i18n="insMachines"></caption><thead></thead><tbody></tbody></table></div>
+      </div>
+      <h3 data-i18n="insStrips">Load of the machines over the day</h3>
+      <p class="muted" data-i18n="insStripsHelp"></p>
+      <div id="ins-strips" class="strips"></div>
+      <h3 data-i18n="insUsage">Machine load, last 7 days</h3>
+      <p class="muted" data-i18n="insUsageHelp"></p>
+      <p id="ins-usage-none" class="muted" hidden data-i18n="insUsageNone">The site delivers no utilisation data.</p>
+      <div class="table-wrap"><table id="ins-usage"><caption class="sr" data-i18n="insUsage"></caption><thead></thead><tbody></tbody></table></div>
+      <h3 data-i18n="insAppStarts">Application start times, last 7 days</h3>
+      <p class="muted" data-i18n="insStartsHelp"></p>
+      <p id="ins-starts-none" class="muted" hidden data-i18n="insStartsNone">The site delivers no application start times.</p>
+      <div class="table-wrap"><table id="ins-starts"><caption class="sr" data-i18n="insAppStarts"></caption><thead></thead><tbody></tbody></table></div>
+      <h3 data-i18n="insCosts">Costs, last 30 days</h3>
+      <p class="muted" data-i18n="insCostsHelp"></p>
+      <p id="ins-costs-none" class="muted" hidden data-i18n="insCostsNone">The site delivers no cost data.</p>
+      <div class="table-wrap"><table id="ins-costs"><caption class="sr" data-i18n="insCosts"></caption><thead></thead><tbody></tbody></table></div>
+      <h3 data-i18n="insTimeline">What changed, last 7 days</h3>
+      <p class="muted" data-i18n="insTimelineHelp"></p>
+      <p id="ins-timeline-none" class="muted" hidden data-i18n="insTimelineNone">No changes recorded.</p>
+      <div class="table-wrap"><table id="ins-timeline"><caption class="sr" data-i18n="insTimeline"></caption><thead></thead><tbody></tbody></table></div>
     </section>
 
     <section id="env" hidden aria-labelledby="env-h">
@@ -289,6 +324,17 @@
       <p id="ins-detail-hint" class="finding"></p>
       <div class="table-wrap"><table class="smalltable" id="ins-detail-table"></table></div>
     </div>
+  </dialog>
+
+  <dialog id="machine-dlg" class="wide" aria-labelledby="machine-h">
+    <div class="dlg-head">
+      <div class="section-head">
+        <h2 id="machine-h"></h2>
+        <button type="button" id="machine-close" data-i18n="close">Close</button>
+      </div>
+      <p id="machine-sub" class="muted"></p>
+    </div>
+    <div class="dlg-body" id="machine-body"></div>
   </dialog>
 
   <dialog id="procs" class="wide" aria-labelledby="procs-h">

@@ -24,6 +24,10 @@ Alle Bilder zeigen den eingebauten Demo-Modus mit erfundenen Daten; keines stamm
 
 ![Expertenansicht: Diagnose, Topologie, Anmelde-Wasserfall, Diagramme](img/expert-light.png)
 
+## Verlauf: die Leistungsdiagramme einer Sitzung
+
+![Verlauf: die Leistungsdiagramme einer Sitzung](img/overtime-light.png)
+
 ## Profilanalyse mit Befunden und Ordnerbaum
 
 ![Profilanalyse mit Befunden und Ordnerbaum](img/profile-light.png)

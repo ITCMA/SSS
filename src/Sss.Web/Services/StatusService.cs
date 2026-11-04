@@ -50,6 +50,8 @@ public sealed class StatusService(
             new("helpdesk", helpdesk.Enabled ? true : null, helpdesk.Enabled ? RoleGroups() : "not configured"),
         };
 
+        if (options.Citrix.Processes.Enabled && options.Roles.Level3Group.Length == 0 && options.Helpdesk.Group.Length == 0)
+            checks.Add(new("processes-role", null, "Processes are on, but Sss:Roles:Level3Group is empty: nobody may read other users' processes (set the group of level 3)."));
         if (broker is not null)
             checks.Add(await TimedAsync("broker", () => broker.PingAsync(ct)));
         if (monitor is not null)

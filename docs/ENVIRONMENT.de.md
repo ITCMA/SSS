@@ -62,3 +62,8 @@ Standorte und Gerätelisten sind personenbezogene Daten im Sinne des Datenschutz
 
 - Citrix-Cloud-Funktionen aus der Cloud-Telemetrie (Device-Trust- und Posture-Richtlinien, Geolokalisierungskarten) gibt es für eine lokale Site nicht, und sie werden nicht nachgebaut.
 - SSS sammelt keinen Verlauf: Es zeigt die Lage der Live-Sitzungen zum Zeitpunkt der Anfrage. Eine Statistik über Tage braucht eine Datenbank und ist ein anderes Produkt (dafür Director oder uberAgent nutzen).
+
+
+## Verbindungsweg
+
+Ein Balken zeigt, wie die Live-Sitzungen ihre Maschine erreichen: über ein Gateway (ein Abschnitt je Gateway-Host), direkt oder unbekannt. Grundlage ist der Host „verbunden über“, den der Monitor zur Verbindung aufzeichnet: ein Host, der weder der Client noch die Maschine ist, ist ein Gateway; fehlt der Host ganz, zählt die Sitzung als unbekannt.

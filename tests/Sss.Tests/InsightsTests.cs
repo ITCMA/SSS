@@ -165,6 +165,7 @@ public class InsightsTests
 public class InsightsApiTests : IClassFixture<HelpdeskOnFactory>, IClassFixture<AuditorFactory>
 {
     private readonly HttpClient _helpdesk, _auditor;
+    private readonly InsightsService _insights = new(new SssOptions(), null, null, TimeProvider.System);
     public InsightsApiTests(HelpdeskOnFactory a, AuditorFactory b) { _helpdesk = a.NewClient(); _auditor = b.NewClient(); }
 
     [Fact]
@@ -200,6 +201,130 @@ public class InsightsApiTests : IClassFixture<HelpdeskOnFactory>, IClassFixture<
         var users = new Dictionary<long, Sss.Web.Citrix.MonitorUser> { [7] = new("Alex Demo", "S-1-5-21-1-1-1-7") };
         var p = Assert.Single(InsightsService.MapPoints(live, users));
         Assert.Equal(("Alex Demo", "Germany", "Munich", "PC1"), (p.User, p.Country, p.City, p.Device));
+    }
+
+    private static Sss.Web.Citrix.MachineInfo Machine(string id, string name, string group = "DG") => new(name, group, "1", "Windows", 1, 3, false, 1, null, null, id, null);
+
+    [Fact]
+    public void A_record_without_a_session_key_gets_the_one_session_that_ran_on_the_machine_at_that_time()
+    {
+        var t0 = DateTimeOffset.UtcNow;
+        MonitorSession S(string key, string machine, DateTimeOffset start, DateTimeOffset? end, long user) => new(key, "vdi", "DG", true, start, end, 5, "PC", "10.0.0.1", null, UserId: user, MachineId: machine);
+        var byKey = new[] { S("k1", "m1", t0.AddHours(-3), null, 1), S("k2", "m2", t0.AddHours(-3), null, 2), S("k3", "m2", t0.AddHours(-2), null, 3) }.ToDictionary(x => x.SessionKey);
+        Assert.Equal(1, InsightsService.SessionOf(new FaultRecord("x", "m1", t0.AddHours(-1)), byKey)?.UserId);   // one session on m1
+        Assert.Null(InsightsService.SessionOf(new FaultRecord("x", "m2", t0.AddHours(-1)), byKey));   // two sessions on m2: not told apart
+        Assert.Equal(3, InsightsService.SessionOf(new FaultRecord("x", "m2", t0.AddHours(-1), "k3"), byKey)?.UserId);   // the key wins
+    }
+
+    [Fact]
+    public void A_crash_is_matched_to_the_launch_that_was_running_and_hours_are_counted()
+    {
+        var t0 = DateTimeOffset.UtcNow;
+        var launches = new List<LaunchUser>
+        {
+            new("OUTLOOK.EXE", "m1", t0.AddHours(-5), t0.AddHours(-3), "DEMO\\anna", null),    // ended before the crash
+            new("OUTLOOK.EXE", "m1", t0.AddHours(-2), null, "DEMO\\ben", null),                 // still running: this one
+            new("OUTLOOK.EXE", "m2", t0.AddHours(-2), null, "DEMO\\carl", null),                // other machine
+        };
+        Assert.Equal("DEMO\\ben", InsightsService.LaunchOf(new FaultRecord("outlook.exe", "m1", t0.AddHours(-1)), launches)?.User);
+        Assert.Null(InsightsService.LaunchOf(new FaultRecord("excel.exe", "m1", t0.AddHours(-1)), launches));
+        var sessions = new[] { new MonitorSession("k", "vdi", "DG", true, t0.AddMinutes(-90), null, 20, "PC", "10.0.0.1", null), new MonitorSession("l", "vdi", "DG", true, t0.AddMinutes(-10), null, 40, "PC", "10.0.0.1", null) };
+        var hours = InsightsService.Hourly(sessions, t0);
+        Assert.Equal(24, hours.Count);
+        Assert.Equal(2, hours.Sum(h => h.Logons));
+    }
+
+    [Fact]
+    public void Connection_paths_tell_direct_gateway_and_unknown_apart()
+    {
+        MonitorSession S(string? via, string client = "PC1") => new("k" + via + client, "vdi-01.demo.local", "DG", true, null, null, null, client, null, null, ConnectedVia: via);
+        var rows = EnvironmentService.Paths([S("gw.demo.local"), S("gw.demo.local", "PC2"), S("PC3", "PC3"), S("vdi-01.demo.local"), S("127.0.0.1"), S(null)]);
+        Assert.Equal([("gw.demo.local", 2, "gateway"), ("", 3, "direct"), ("", 1, "unknown")], rows.Select(r => (r.Name, r.Sessions, r.Kind)).ToArray());
+    }
+
+    [Fact]
+    public void Load_strips_average_the_samples_per_hour_and_leave_gaps()
+    {
+        var now = new DateTimeOffset(2026, 11, 4, 12, 30, 0, TimeSpan.Zero);
+        var machines = new Dictionary<string, MachineInfo> { ["m1"] = Machine("m1", "rds-01") };
+        var s = new[] { new UsageSample("m1", 40, 50, null, null, 60, now.AddMinutes(-20)), new UsageSample("m1", 60, 70, null, null, 60, now.AddMinutes(-10)), new UsageSample("m1", 10, 20, null, null, 60, now.AddHours(-3)), new UsageSample("zz", 99, 99, null, null, 60, now) };
+        var strip = Assert.Single(InsightsService.Strips(s, machines, now));
+        Assert.Equal(24, strip.Cpu.Count);
+        Assert.Equal(50.0, strip.Cpu[23]);   // the current hour: average of 40 and 60
+        Assert.Equal(10.0, strip.Cpu[20]);
+        Assert.Null(strip.Cpu[0]);
+    }
+
+    [Fact]
+    public async Task One_machine_has_its_own_page_and_unknown_machines_are_not_found()
+    {
+        var ok = await (await _helpdesk.GetAsync("/api/helpdesk/insights/machine?name=rds-01")).Json();
+        Assert.Equal("rds-01.demo.local", ok.GetProperty("row").GetProperty("name").GetString());
+        Assert.Equal(System.Net.HttpStatusCode.NotFound, (await _helpdesk.GetAsync("/api/helpdesk/insights/machine?name=nope")).StatusCode);
+        Assert.Equal(System.Net.HttpStatusCode.BadRequest, (await _helpdesk.GetAsync("/api/helpdesk/insights/machine?name=a%27b")).StatusCode);
+        Assert.Equal(System.Net.HttpStatusCode.Forbidden, (await _auditor.GetAsync("/api/helpdesk/insights/machine?name=rds-01")).StatusCode);
+    }
+
+    [Fact]
+    public void Usage_uses_the_most_common_granularity_and_rates_the_load()
+    {
+        var machines = new Dictionary<string, Sss.Web.Citrix.MachineInfo> { ["m1"] = Machine("m1", "rds-01"), ["m2"] = Machine("m2", "rds-02") };
+        var samples = new[]
+        {
+            new Sss.Web.Citrix.UsageSample("m1", 90, 99, 80, 97, 60), new Sss.Web.Citrix.UsageSample("m1", 80, 95, 70, 90, 60), new Sss.Web.Citrix.UsageSample("m1", 10, 10, 10, 10, 1440),
+            new Sss.Web.Citrix.UsageSample("m2", 20, 40, 30, 50, 60), new Sss.Web.Citrix.UsageSample("zz", 20, 40, 30, 50, 60),
+        };
+        var rows = _insights.Usage(samples, machines);
+        Assert.Equal(["rds-01", "rds-02"], rows.Select(r => r.Machine).ToArray());   // unknown machine left out, worst first
+        Assert.Equal(("crit", 85.0, 99.0), (rows[0].Health, rows[0].Cpu, rows[0].PeakCpu));
+        Assert.Equal("good", rows[1].Health);
+    }
+
+    [Fact]
+    public void Application_start_times_name_the_machine_where_it_is_slow()
+    {
+        var machines = new Dictionary<string, Sss.Web.Citrix.MachineInfo> { ["m1"] = Machine("m1", "rds-01"), ["m2"] = Machine("m2", "rds-02") };
+        var launches = Enumerable.Range(0, 4).Select(_ => new Sss.Web.Citrix.AppLaunch("sap.exe", "m1", 9000))
+            .Concat(Enumerable.Range(0, 4).Select(_ => new Sss.Web.Citrix.AppLaunch("sap.exe", "m2", 3000)))
+            .Concat([new Sss.Web.Citrix.AppLaunch("rare.exe", "m1", 100)]).ToList();
+        var row = Assert.Single(InsightsService.AppStarts(launches, machines));   // fewer than 3 starts: not listed
+        Assert.Equal(("sap.exe", 8, 6000, "rds-01", 9000), (row.Name, row.Launches, row.AvgMs, row.SlowMachine, row.SlowMachineMs));
+    }
+
+    [Fact]
+    public void Costs_add_up_per_delivery_group_without_double_counting_granularities()
+    {
+        var machines = new Dictionary<string, Sss.Web.Citrix.MachineInfo> { ["m1"] = Machine("m1", "a", "DG-A"), ["m2"] = Machine("m2", "b", "DG-A") };
+        var rows = InsightsService.Costs([new("m1", "EUR", 10, 2, 1, 1440), new("m2", "EUR", 5, 1, 0.5, 1440), new("m1", "EUR", 999, 999, 999, 43200)], machines);
+        Assert.Equal(("DG-A", 15.0, 3.0, 1.5), (rows.Single().Group, rows.Single().Compute, rows.Single().Storage, rows.Single().Savings));
+    }
+
+    [Fact]
+    public void Machine_events_list_registration_changes_and_power_on_of_the_last_week()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var m = Machine("m1", "rds-01") with { RegistrationChanged = now.AddHours(-2), PoweredOn = now.AddHours(-3) };
+        var old = Machine("m2", "rds-02") with { RegistrationChanged = now.AddDays(-30), PoweredOn = now.AddDays(-30) };
+        Assert.Equal(["registered", "poweredOn"], InsightsService.MachineEvents([m, old], now).Select(e => e.Kind).ToArray());
+    }
+
+    [Theory]
+    [InlineData(0, null, null, 0, 0, null)]
+    [InlineData(10, 30, 30, 0, 0, 100)]
+    [InlineData(10, 30, 30, 2, 2, 74)]
+    [InlineData(10, 70, 30, 9, 9, 15)]
+    public void The_user_score_follows_failures_reconnects_and_logon_time(int sessions, int? avg, int? group, int failures, int reconnects, int? expected) =>
+        Assert.Equal(expected, InsightsService.UserScore(sessions, avg, group, failures, reconnects));
+
+    [Fact]
+    public async Task More_insights_are_available_to_the_helpdesk_and_the_demo_has_data()
+    {
+        var more = await (await _helpdesk.GetAsync("/api/helpdesk/insights/more")).Json();
+        Assert.True(more.GetProperty("usage").GetArrayLength() > 0);
+        Assert.True(more.GetProperty("appStarts").GetArrayLength() > 0);
+        Assert.True(more.GetProperty("costs").GetArrayLength() > 0);
+        Assert.True(more.GetProperty("timeline").GetArrayLength() > 0);
+        Assert.Equal(System.Net.HttpStatusCode.Forbidden, (await _auditor.GetAsync("/api/helpdesk/insights/more")).StatusCode);
     }
 
     [Fact]

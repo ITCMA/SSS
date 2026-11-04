@@ -2,6 +2,31 @@
 
 All notable changes to SSS. The project follows [Semantic Versioning](docs/COMPATIBILITY.md); versions below 1.0.0 may still change configuration keys between minor versions, and every such change is listed here.
 
+## Unreleased
+
+### Added
+- **Insights, more**: machine load of the last 7 days (CPU and memory, average and peak, from `ResourceUtilizationSummary`), start times of applications (average, 90th percentile and the machine where an application starts slowest, from `HistoricalApplicationLaunches`; user names are not read), costs and savings of the last 30 days per delivery group (`MachineCostAllocationSummaries`) and a timeline "What changed" (machine registered, lost its registration, switched on; for the auditor also log-offs, messages and ended processes from the audit trail). Each part says so when the site delivers no data.
+- **Health score** from 0 to 100 per machine (Insights, machines table) and per user (user history card), as a number with symbol and word.
+- **Director-like look**: the period of crashes and failures is a row of buttons (like Director's 24 hours / 7 days switch), bars have a light track and fade by rank, the Environment tab has a ring for the Workspace app versions and the applications by peak of concurrent instances, Insights says "as of" when the data was read. The "Over time" graphs are in the gallery.
+- Insights: costs, load, start times and the timeline explain themselves (help text under each heading and tooltips on the columns); crashes and failures say "n of m machines"; the Status tab warns when processes are on but `Sss:Roles:Level3Group` is empty (nobody can then read processes).
+- **Insights starts with the day**: five key figures (logons, average logon time, crashes, connection failures, conspicuous machines; a click jumps to the part) and one chart of the last 24 hours: bars for the logons per hour, a line for the average logon time with its own scale and the warning limit, and crashes (triangles) and connection failures (dots) on the same time axis, with machine and user in the tooltip. It replaces the separate bar strips under the tables.
+- **Machine page**: a click on a machine (tile, table or load strip) opens everything on one page: state and health score, load and utilisation, the last 24 hours, crashes and connection failures there, what changed, and the sessions running on it with an Open user button. For this, `GET api/helpdesk/insights/machine?name=` (helpdesk).
+- **Load of the machines over the day**: one row per machine, one cell per hour of the last 24 hours (darker = more CPU, a red cross where the registration was lost), from the hourly utilisation of the Monitor.
+- **Delivery groups at a glance**: one card per group; the worst of logon time, machines, crashes and failures sets the light and each line names its reason; a click filters the machines to that group.
+- **Connection path** on the Environment tab: how many sessions run through which gateway, directly, or unknown (from the "connected via" host the Monitor records).
+- **Day chart with hover**: pointing at (or tapping) an hour shows a tip with its logons, average logon time and every crash and failure of that hour with machine and user.
+- **Machines, for big sites**: a search field filters tiles and table while you type (each word must be part of the name, group or state), "only conspicuous", tiles grouped per delivery group and collapsible (hidden by default above 40 machines, the choice is remembered), the count "n of m machines", and a **Show sessions** button per table row.
+- **Insights, more pictures**: the logon time of every delivery group as lines over 7 days with the warning limit.
+- **Machine tiles** in Insights: one tile per VDA with a colour and symbol by health, load bar and sessions; a click lists the machine's sessions. The charts of the Environment tab are arranged in a calm grid (four cards in a row, two bar charts side by side).
+- Helpdesk list: a **Processes** button per session for level 3 (opens the user's view and the process list); in the user's view the button no longer needs the expert view.
+
+### Fixed
+- Connection path and diagnosis: a "connected via" host of the machine itself (`127.0.0.1`, `::1`, `localhost`) counts as direct, not as a gateway.
+- The day chart is more compact (smaller type, lower), the logon time per group uses the full width, and the Environment charts are in the grid of four cards, the connection path on its own row, the two bar charts side by side.
+- Crashes without a session of the Monitor now name the user from the launch record of the program (same program, same machine, running at the time of the crash).
+- Crash details without a session key (or with a session the Monitor no longer lists) take the user from the one session that ran on that machine at that time; on a machine with several sessions at once the user stays empty.
+- Machine load listed only a few machines (one page of minute values): the daily values are asked for first. Crash and failure details find the user from the sessions of the last 7 days and the live sessions. Application start times also read the running launches and name the number of starts read when none is usable.
+
 ## 0.4.3 - 2026-11-04 (beta)
 
 ### Added

@@ -18,8 +18,9 @@ shot() { # name, query, height
 }
 shot overview "" 900
 shot expert "&shot=details" 1100
+shot overtime "&shot=charts" 1300
 shot profile "&shot=profile" 1100
 shot processes "&shot=processes" 1000
-shot environment "&shot=env" 1000
-shot insights "&shot=insights" 1300
+shot environment "&shot=env" 1500
+shot insights "&shot=insights" 3300
 shot map "&shot=map" 900
