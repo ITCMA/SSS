@@ -234,9 +234,16 @@ public sealed partial class ODataMonitorClient(HttpClient http, CitrixOptions op
             if ((await MetaAsync(ct)).FirstOrDefault(e => e.Key.StartsWith("ConnectionFailureLog", StringComparison.OrdinalIgnoreCase)).Value is not { } props) return [];
             var date = new[] { "FailureDate", "CreatedDate" }.FirstOrDefault(props.ContainsKey);
             if (date is null) return [];
-            var reasonProp = new[] { "FailureReason", "ConnectionFailureEnumValue", "FailureId", "FailureCategory" }.FirstOrDefault(props.ContainsKey);
-            return (await PagedJsonAsync($"ConnectionFailureLogs?$filter={Esc($"{date} ge {iso}")}&$orderby={date}%20desc&$top=500", ct))
-                .Select(r => ToRecord(r, date, reasonProp is null || !TryGet(r, reasonProp, out var v) ? "?" : v.ValueKind == JsonValueKind.String ? Short(v.GetString())! : v.GetRawText())).ToList();
+            // the text of the failure (ConnectionFailureText) when the site has it, else the code under one of the usual names
+            var textProp = new[] { "ConnectionFailureText", "FailureReason" }.FirstOrDefault(props.ContainsKey);
+            var codeProp = new[] { "ConnectionFailureEnumValue", "FailureId", "FailureCategory" }.FirstOrDefault(props.ContainsKey);
+            string Name(JsonElement r)
+            {
+                if (textProp is not null && Str(r, textProp) is { Length: > 0 } text) return Short(text)!;
+                if (textProp is not null && TryGet(r, textProp, out var tv) && tv.ValueKind == JsonValueKind.Number) return $"Code {tv.GetRawText()}";
+                return codeProp is not null && TryGet(r, codeProp, out var cv) ? $"Code {cv.GetRawText()}" : "?";
+            }
+            return (await PagedJsonAsync($"ConnectionFailureLogs?$filter={Esc($"{date} ge {iso}")}&$orderby={date}%20desc&$top=500", ct)).Select(r => ToRecord(r, date, Name(r))).ToList();
         }
         catch (ProviderUnavailableException) { return []; }
     }

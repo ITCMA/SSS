@@ -79,7 +79,7 @@ public class DirectorDataMonitorTests
             var query = Uri.UnescapeDataString(request.RequestUri.Query);
             if (path.EndsWith("$metadata"))
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(
-                    $"""<edmx:Edmx xmlns:edmx="http://docs.oasis-open.org/odata/ns/edmx" Version="4.0"><edmx:DataServices><Schema xmlns="http://docs.oasis-open.org/odata/ns/edm" Namespace="C"><EntityType Name="Connection"><Property Name="ClientName" Type="Edm.String"/><Property Name="ClientLocationCountry" Type="Edm.String"/><Property Name="ClientLocationCity" Type="Edm.String"/></EntityType><EntityType Name="HistoricalApplicationLaunch"><Property Name="SessionGUID" Type="{sessionGuidType}"/></EntityType><EntityType Name="ApplicationFault"><Property Name="FaultReportedDate" Type="Edm.DateTimeOffset"/><Property Name="ProcessName" Type="Edm.String"/></EntityType><EntityType Name="ConnectionFailureLog"><Property Name="FailureDate" Type="Edm.DateTimeOffset"/><Property Name="FailureReason" Type="Edm.Int32"/><Property Name="MachineId" Type="Edm.Guid"/></EntityType></Schema></edmx:DataServices></edmx:Edmx>""",
+                    $"""<edmx:Edmx xmlns:edmx="http://docs.oasis-open.org/odata/ns/edmx" Version="4.0"><edmx:DataServices><Schema xmlns="http://docs.oasis-open.org/odata/ns/edm" Namespace="C"><EntityType Name="Connection"><Property Name="ClientName" Type="Edm.String"/><Property Name="ClientLocationCountry" Type="Edm.String"/><Property Name="ClientLocationCity" Type="Edm.String"/></EntityType><EntityType Name="HistoricalApplicationLaunch"><Property Name="SessionGUID" Type="{sessionGuidType}"/></EntityType><EntityType Name="ApplicationFault"><Property Name="FaultReportedDate" Type="Edm.DateTimeOffset"/><Property Name="ProcessName" Type="Edm.String"/></EntityType><EntityType Name="ConnectionFailureLog"><Property Name="FailureDate" Type="Edm.DateTimeOffset"/><Property Name="ConnectionFailureEnumValue" Type="Edm.Int32"/><Property Name="ConnectionFailureText" Type="Edm.String"/><Property Name="UserId" Type="Edm.Int64"/><Property Name="MachineId" Type="Edm.Guid"/></EntityType></Schema></edmx:DataServices></edmx:Edmx>""",
                     Encoding.UTF8, "application/xml") });
             Queries.Add(path.Split('/').Last() + "?" + query);
             var body = path.Split('/').Last() switch
@@ -103,7 +103,7 @@ public class DirectorDataMonitorTests
                 "EndpointMetrics" => """{"value":[{"SessionKey":"x","CollectedDate":"2026-11-04T08:10:00Z","PercentCPU":12,"PercentMemory":40,"WifiSignalStrength":0},{"SessionKey":"x","CollectedDate":"2026-11-04T08:11:00Z","PercentCPU":20,"PercentMemory":41,"WifiSignalStrength":0}]}""",
                 "ResourceUtilization" => """{"value":[{"CollectedDate":"2026-11-04T08:10:00Z","PercentCpu":30,"UsedMemory":4000,"TotalMemory":8000,"SessionCount":5},{"CollectedDate":"2026-11-04T08:11:00Z","PercentCpu":50,"UsedMemory":6000,"TotalMemory":8000,"SessionCount":6}]}""",
                 "ApplicationFaults" => """{"value":[{"Id":1,"SessionKey":"x","ProcessName":"outlook","FaultingApplicationPath":"C:\\o.exe","Description":"crash"}]}""",
-                "ConnectionFailureLogs" => """{"value":[{"FailureDate":"2026-11-04T08:00:00Z","FailureReason":7,"MachineId":"@MACHINE@"},{"FailureDate":"2026-11-04T08:05:00Z","FailureReason":7,"MachineId":"@MACHINE@"}]}""".Replace("@MACHINE@", Machine),
+                "ConnectionFailureLogs" => """{"value":[{"FailureDate":"2026-11-04T08:00:00Z","ConnectionFailureEnumValue":7,"ConnectionFailureText":"Session limit reached","UserId":42,"MachineId":"@MACHINE@"},{"FailureDate":"2026-11-04T08:05:00Z","ConnectionFailureEnumValue":9,"ConnectionFailureText":"","UserId":43,"MachineId":"@MACHINE@"}]}""".Replace("@MACHINE@", Machine),
                 "ApplicationsUsageSummaryData" => """{"value":[{"AppId":"a1","UniqueUserCount":5,"TotalMachinesCount":3,"PeakConcurrentLaunches":4,"TotalLaunches":10},{"AppId":"a1","UniqueUserCount":7,"TotalMachinesCount":2,"PeakConcurrentLaunches":6,"TotalLaunches":15},{"AppId":"a2","UniqueUserCount":1,"TotalMachinesCount":1,"PeakConcurrentLaunches":1,"TotalLaunches":3}]}""",
                 "ApplicationNameIds" => """{"value":[{"AppId":"a1","AppName":"Microsoft Edge"}]}""",
                 _ => """{"value":[]}""",
@@ -249,7 +249,8 @@ public class DirectorDataMonitorTests
         Assert.Contains(h.Queries, q => q.StartsWith("ApplicationFaults?") && q.Contains("FaultReportedDate ge 2026-11-03T00:00:00Z"));
 
         var failures = await c.GetFailuresAsync(since, default);
-        Assert.Equal(["7", "7"], failures.Select(f => f.Name));                                  // the reason code as the site reports it
+        Assert.Equal(["Session limit reached", "Code 9"], failures.Select(f => f.Name));            // the text, or the code when there is none
+        Assert.Equal(42, failures[0].UserId);
         Assert.Equal(Machine, failures[0].MachineId);
         Assert.Contains(h.Queries, q => q.StartsWith("ConnectionFailureLogs?") && q.Contains("FailureDate ge"));
     }
