@@ -736,7 +736,31 @@ async function loadInsights() {
   renderInsights(await r.json());
 }
 
+// The average logon time of the last days as a small curve (gaps for days without sessions).
+function sparkline(values, bad) {
+  const v = (values ?? []).map((x) => (x == null ? null : x)), known = v.filter((x) => x != null);
+  const W = 90, H = 24, svg = svgEl('svg', { viewBox: `0 0 ${W} ${H}`, width: String(W), height: String(H), role: 'img', 'aria-label': t('insTrend') });
+  if (known.length < 2) return svg;
+  const max = Math.max(...known), min = Math.min(...known), span = Math.max(1, max - min);
+  const pts = v.map((x, i) => (x == null ? null : [(i / (v.length - 1)) * (W - 6) + 3, H - 4 - ((x - min) / span) * (H - 8)]));
+  svg.append(svgEl('polyline', { class: `spark${bad ? ' bad' : ''}`, fill: 'none', points: pts.filter(Boolean).map((p) => p.join(',')).join(' ') }));
+  const last = [...pts].reverse().find(Boolean);
+  svg.append(svgEl('circle', { class: `sparkdot${bad ? ' bad' : ''}`, cx: last[0], cy: last[1], r: 2.5 }));
+  const tip = svgEl('title'); tip.textContent = v.map((x) => (x == null ? '–' : `${x} s`)).join(' → '); svg.append(tip);
+  return svg;
+}
+
+function countTable(table, rows) {
+  table.tHead.replaceChildren(el('tr', {}, ...['insName', 'insCount', 'insMachinesCount', 'insTopMachine'].map((k) => el('th', { scope: 'col', text: t(k) }))));
+  const max = Math.max(1, ...rows.map((r) => r.count));
+  table.tBodies[0].replaceChildren(...rows.map((r) => el('tr', {}, cell(t('insName'), r.name),
+    cell(t('insCount'), el('span', {}, `${r.count} `, shareBar(r.count, max))), cell(t('insMachinesCount'), String(r.machines)), cell(t('insTopMachine'), r.topMachine ?? ''))));
+  table.hidden = rows.length === 0;
+}
+
 function renderInsights(d) {
+  countTable($('ins-faults'), d.faults ?? []);
+  countTable($('ins-failures'), d.failures ?? []);
   $('ins-findings').replaceChildren(...d.findings.map((f) => {
     const [sym, cls] = SEV[f.severity] ?? SEV.info;
     return el('li', { class: `finding ${cls}` }, el('span', { class: 'sym', 'aria-hidden': 'true', text: sym }),
@@ -745,20 +769,23 @@ function renderInsights(d) {
   $('ins-none').hidden = d.findings.length > 0;
 
   const maxG = Math.max(1, ...d.groups.map((g) => g.avgSeconds));
-  $('ins-groups').tHead.replaceChildren(el('tr', {}, ...['colGroup', 'colSessions', 'insAvg', 'insMedian', 'insP90', 'colShare'].map((k) => el('th', { scope: 'col', text: t(k) }))));
-  $('ins-groups').tBodies[0].replaceChildren(...d.groups.map((g) => el('tr', {},
-    cell(t('colGroup'), g.group), cell(t('colSessions'), String(g.sessions)), cell(t('insAvg'), `${g.avgSeconds} s`), cell(t('insMedian'), `${g.medianSeconds} s`),
-    cell(t('insP90'), `${g.p90Seconds} s`), cell(t('colShare'), shareBar(g.avgSeconds, maxG, g.avgSeconds >= (state.quality?.logonWarnSeconds ?? 45))))));
+  $('ins-groups').tHead.replaceChildren(el('tr', {}, ...['colGroup', 'colSessions', 'insAvg', 'insMedian', 'insP90', 'insTrend', 'colShare'].map((k) => el('th', { scope: 'col', text: t(k) }))));
+  // a group with only a few sessions is shown, but not rated
+  $('ins-groups').tBodies[0].replaceChildren(...d.groups.map((g) => el('tr', { class: g.sessions < 5 ? 'few' : '' },
+    cell(t('colGroup'), g.sessions < 5 ? `${g.group} (${t('insFew')})` : g.group), cell(t('colSessions'), String(g.sessions)), cell(t('insAvg'), `${g.avgSeconds} s`), cell(t('insMedian'), `${g.medianSeconds} s`),
+    cell(t('insP90'), `${g.p90Seconds} s`), cell(t('insTrend'), sparkline(g.daily, g.sessions >= 5 && g.avgSeconds >= (state.quality?.logonWarnSeconds ?? 45))),
+    cell(t('colShare'), shareBar(g.avgSeconds, maxG, g.sessions >= 5 && g.avgSeconds >= (state.quality?.logonWarnSeconds ?? 45))))));
   $('ins-groups').hidden = d.groups.length === 0;
 
   const HEALTH = { crit: ['✖', 'state-disconnected', 'insHealthCrit'], warn: ['▲', 'state-disconnected', 'insHealthWarn'], good: ['✔', 'state-active', 'insHealthGood'], info: ['ℹ', '', 'insHealthMaint'], off: ['○', '', 'insHealthOff'] };
-  $('ins-machines').tHead.replaceChildren(el('tr', {}, ...['colMachine', 'colGroup', 'colState', 'insLoad', 'colSessions'].map((k) => el('th', { scope: 'col', text: t(k) }))));
+  $('ins-machines').tHead.replaceChildren(el('tr', {}, ...['colMachine', 'colGroup', 'colState', 'insLoad', 'colSessions', 'insUptime'].map((k) => el('th', { scope: 'col', text: t(k) }))));
   $('ins-machines').tBodies[0].replaceChildren(...d.machines.map((m) => {
     const [sym, cls, key] = HEALTH[m.health] ?? HEALTH.off;
     return el('tr', {}, cell(t('colMachine'), m.name), cell(t('colGroup'), m.group),
       cell(t('colState'), el('span', { class: cls, text: `${sym} ${t(key)}` })),
       cell(t('insLoad'), m.loadIndex == null ? '' : el('span', {}, `${m.loadIndex} `, shareBar(m.loadIndex, 10000, m.health === 'crit' || m.health === 'warn'))),
-      cell(t('colSessions'), m.sessions == null ? '' : String(m.sessions)));
+      cell(t('colSessions'), m.sessions == null ? '' : String(m.sessions)),
+      cell(t('insUptime'), m.uptimeDays == null ? '' : t('insDays', { n: m.uptimeDays })));
   }));
   $('ins-machines').hidden = d.machines.length === 0;
 }

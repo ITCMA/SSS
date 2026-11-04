@@ -121,7 +121,7 @@ builder.Services.AddSingleton(sp => new AuditForwarder(options.Audit.OpsStream ?
     options.Audit.RetentionDays, options.Audit.PerServerFiles, sp.GetRequiredService<TimeProvider>(), sp.GetRequiredService<ILogger<AuditForwarder>>()));
 builder.Services.AddHostedService(sp => sp.GetRequiredService<AuditForwarder>());
 builder.Services.AddSingleton(sp => new EnvironmentService(options, sp.GetService<IMonitorClient>(), sp.GetRequiredService<TimeProvider>(), mockProvider));
-builder.Services.AddSingleton(sp => new InsightsService(options, sp.GetService<IMonitorClient>(), sp.GetRequiredService<TimeProvider>(), mockProvider));
+builder.Services.AddSingleton(sp => new InsightsService(options, sp.GetService<IMonitorClient>(), sp.GetService<IHelpdeskProvider>(), sp.GetRequiredService<TimeProvider>(), mockProvider));
 builder.Services.AddSingleton<SessionService>();
 builder.Services.AddSingleton<DetailsService>();
 builder.Services.AddSingleton<ProcessService>();

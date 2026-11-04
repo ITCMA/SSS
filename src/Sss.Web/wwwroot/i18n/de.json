@@ -456,5 +456,17 @@
   "sumTileFailures": "Verbindungsfehler",
   "sumTileReconnects": "Automatische Wiederverbindungen",
   "sumYou": "Benutzer",
-  "sumGroupShort": "Gruppe"
+  "sumGroupShort": "Gruppe",
+  "insFaults": "Anwendungsabstürze (letzte 24 Stunden)",
+  "insFailures": "Verbindungsfehler (letzte 24 Stunden)",
+  "insName": "Name",
+  "insCount": "Anzahl",
+  "insMachinesCount": "Maschinen",
+  "insTopMachine": "Meist auf",
+  "insTrend": "7 Tage",
+  "insFew": "wenige Sitzungen",
+  "insUptime": "Läuft seit",
+  "insDays": "{n} Tagen",
+  "insKind_disconnected": "{subject} ist seit {n} Stunden getrennt ({detail}); die Sitzung belegt weiter Lizenz und Speicher",
+  "insKind_uptime": "{machine} läuft seit {n} Tagen ohne Neustart ({group})"
 }

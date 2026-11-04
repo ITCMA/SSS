@@ -37,7 +37,10 @@ public sealed record MachineGroup(string AgentVersion, string Os, int Machines, 
 
 /// <summary>One VDA machine as the Monitor sees it. The registration and power states are Citrix' own codes (registration 1 = registered).</summary>
 public sealed record MachineInfo(string Name, string Group, string AgentVersion, string Os, int? Registration, int? Power, bool Maintenance, int? Sessions,
-    DateTimeOffset? RegistrationChanged, string? Fault, string? Id = null);
+    DateTimeOffset? RegistrationChanged, string? Fault, string? Id = null, DateTimeOffset? PoweredOn = null);
+
+/// <summary>One application crash (process name and machine id) or one connection failure (reason as the Monitor reports it and machine id).</summary>
+public sealed record FaultRecord(string Name, string? MachineId);
 
 public sealed record MonitorUser(string Name, string Sid);
 
@@ -67,6 +70,12 @@ public interface IMonitorClient
 
     /// <summary>Users by the numeric id Monitor uses (name and SID).</summary>
     Task<IReadOnlyDictionary<long, MonitorUser>> GetUsersByIdAsync(IEnumerable<long> ids, CancellationToken ct) => Task.FromResult<IReadOnlyDictionary<long, MonitorUser>>(new Dictionary<long, MonitorUser>());
+
+    /// <summary>Application crashes reported since <paramref name="since"/> (empty when the site does not deliver them).</summary>
+    Task<IReadOnlyList<FaultRecord>> GetFaultsAsync(DateTimeOffset since, CancellationToken ct) => Task.FromResult<IReadOnlyList<FaultRecord>>([]);
+
+    /// <summary>Connection failures since <paramref name="since"/> with the reason as the site reports it (empty when the site does not deliver them).</summary>
+    Task<IReadOnlyList<FaultRecord>> GetFailuresAsync(DateTimeOffset since, CancellationToken ct) => Task.FromResult<IReadOnlyList<FaultRecord>>([]);
 
     /// <summary>The newest load index (0-10000) of each machine id.</summary>
     Task<IReadOnlyDictionary<string, int>> GetLoadIndexesAsync(IEnumerable<string> machineIds, CancellationToken ct) => Task.FromResult<IReadOnlyDictionary<string, int>>(new Dictionary<string, int>());
@@ -201,6 +210,35 @@ public sealed partial class ODataMonitorClient(HttpClient http, CitrixOptions op
         return latest;
     }
 
+    public async Task<IReadOnlyList<FaultRecord>> GetFaultsAsync(DateTimeOffset since, CancellationToken ct)
+    {
+        var iso = since.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
+        try
+        {
+            if ((await MetaAsync(ct)).FirstOrDefault(e => e.Key.StartsWith("ApplicationFault", StringComparison.OrdinalIgnoreCase)).Value is not { } props || !props.ContainsKey("FaultReportedDate")) return [];
+            return (await PagedJsonAsync($"ApplicationFaults?$filter={Esc($"FaultReportedDate ge {iso}")}&$orderby=FaultReportedDate%20desc&$top=500", ct))
+                .Select(r => new FaultRecord(Short(Str(r, "ProcessName") ?? Str(r, "FaultingApplicationPath")?.Split('\\', '/').Last()) ?? "?", Str(r, "MachineId"))).ToList();
+        }
+        catch (ProviderUnavailableException) { return []; }
+    }
+
+    // The failure records differ between Citrix versions: the date, reason and machine are taken from whichever of the usual properties the site lists.
+    public async Task<IReadOnlyList<FaultRecord>> GetFailuresAsync(DateTimeOffset since, CancellationToken ct)
+    {
+        var iso = since.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
+        try
+        {
+            if ((await MetaAsync(ct)).FirstOrDefault(e => e.Key.StartsWith("ConnectionFailureLog", StringComparison.OrdinalIgnoreCase)).Value is not { } props) return [];
+            var date = new[] { "FailureDate", "CreatedDate" }.FirstOrDefault(props.ContainsKey);
+            if (date is null) return [];
+            var reasonProp = new[] { "FailureReason", "ConnectionFailureEnumValue", "FailureId", "FailureCategory" }.FirstOrDefault(props.ContainsKey);
+            return (await PagedJsonAsync($"ConnectionFailureLogs?$filter={Esc($"{date} ge {iso}")}&$orderby={date}%20desc&$top=500", ct))
+                .Select(r => new FaultRecord(reasonProp is null || !TryGet(r, reasonProp, out var v) ? "?" : v.ValueKind == JsonValueKind.String ? Short(v.GetString())! : v.GetRawText(),
+                    props.ContainsKey("MachineId") ? Str(r, "MachineId") : null)).ToList();
+        }
+        catch (ProviderUnavailableException) { return []; }
+    }
+
     public async Task<IReadOnlyList<MonitorSession>> GetFarmLiveAsync(CancellationToken ct)
     {
         var dateField = options.Monitor.MetricsDateField;
@@ -269,7 +307,7 @@ public sealed partial class ODataMonitorClient(HttpClient http, CitrixOptions op
                 Short(Str(r, "DnsName") ?? Str(r, "HostedMachineName") ?? Str(r, "Name")) ?? (Str(r, "Id") is { Length: >= 8 } mid ? $"({mid[..8]})" : "?"), Str(r, "DesktopGroupId") is { } dg ? groups.GetValueOrDefault(dg) ?? dg : "",
                 Short(Str(r, "AgentVersion")) ?? "?", Short(Str(r, "OSType")) ?? "?", Int(r, "CurrentRegistrationState"), Int(r, "CurrentPowerState"),
                 TryGet(r, "IsInMaintenanceMode", out var m) && m.ValueKind == JsonValueKind.True, Int(r, "CurrentSessionCount"),
-                Date(r, "RegistrationStateChangeDate"), TryGet(r, "FaultState", out var f) && f.ValueKind == JsonValueKind.Number ? f.GetRawText() : null, Str(r, "Id"))).ToList();
+                Date(r, "RegistrationStateChangeDate"), TryGet(r, "FaultState", out var f) && f.ValueKind == JsonValueKind.Number ? f.GetRawText() : null, Str(r, "Id"), Date(r, "PoweredOnDate"))).ToList();
         }
         catch (ProviderUnavailableException) { return []; }
     }

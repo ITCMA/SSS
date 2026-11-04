@@ -206,7 +206,7 @@ try {
     }
     if ($hits.Count -gt 0) { Info ('Properties that may carry client, location, policy or score data: ' + ($hits -join ', ')) } else { Info 'No properties with client, location, policy or score names besides the ones above.' }
     # Property names (not values) of record types that may carry logon details, scores or load data: the basis for further views.
-    foreach ($typeName in 'SessionLogonMetrics', 'LogOnMetrics', 'LogOnSummaries', 'SessionMetricsLatest', 'GatewayPopInfo', 'LoadIndexes', 'ProcessUtilization', 'Processes', 'MachineMetric', 'SessionActivitySummaries', 'Machine', 'LhcReport') {
+    foreach ($typeName in 'SessionLogonMetrics', 'LogOnMetrics', 'LogOnSummaries', 'SessionMetricsLatest', 'GatewayPopInfo', 'LoadIndexes', 'ProcessUtilization', 'Processes', 'MachineMetric', 'SessionActivitySummaries', 'Machine', 'LhcReport', 'ConnectionFailureLog', 'ConnectionFailureCategory', 'ApplicationFault') {
         $node = $null
         foreach ($candidate in @($typeName, $typeName.TrimEnd('s'), ($typeName -replace 'ies$', 'y'), ($typeName -replace 'es$', ''))) {
             $node = $xml.SelectSingleNode("//edm:EntityType[@Name='$candidate']", $ns)

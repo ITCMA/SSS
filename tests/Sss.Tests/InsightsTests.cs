@@ -1,12 +1,13 @@
 using Sss.Web;
 using Sss.Web.Citrix;
+using Sss.Web.Models;
 using Sss.Web.Services;
 
 namespace Sss.Tests;
 
 public class InsightsTests
 {
-    private static InsightsService Make(bool demo = false) => new(new SssOptions(), null, TimeProvider.System, demo);
+    private static InsightsService Make(bool demo = false) => new(new SssOptions(), null, null, TimeProvider.System, demo);
 
     private static MonitorSession S(string key, string? group = "DG1", int? logon = null, int? rtt = null, int? kbps = null, long? user = 1, string machine = "m1.corp.local") =>
         new(key, machine, group, true, null, null, logon, "PC", "10.0.0.1", rtt, kbps, UserId: user);
@@ -73,6 +74,39 @@ public class InsightsTests
         var s = Make().Summary(30, sessions, [logon, logon], "DG1", groupAvg, failures, reconnects);
         Assert.Equal(verdict, s.Verdict);
         Assert.Equal(logon, s.AvgLogonSeconds);
+    }
+
+    [Fact]
+    public void Group_statistics_carry_the_average_of_each_of_the_last_seven_days()
+    {
+        var now = DateTimeOffset.Parse("2026-11-07T12:00:00Z");
+        MonitorSession At(string key, int days, int logon) => S(key, logon: logon) with { Start = now.AddDays(-days) };
+        var g = InsightsService.Groups([At("a", 0, 40), At("b", 0, 60), At("c", 2, 30), At("old", 9, 99)], now).Single();
+        Assert.Equal(7, g.Daily!.Count);
+        Assert.Equal([null, null, null, null, 30, null, 50], g.Daily);                              // oldest day first, the last entry is today
+    }
+
+    [Fact]
+    public void Long_disconnected_sessions_and_long_running_machines_are_listed()
+    {
+        HelpdeskSession H(string user, SessionState state, int? idle) => new(new SessionInfo("1", "SAP", "Application", "DG1", "m1", DateTimeOffset.UtcNow, null, state, idle, null, null,
+            new Sss.Web.Models.SessionQuality(null, null, null, null, Health.Unknown, Health.Unknown)), user, "S-1-5-21-1-1-1-1");
+        var f = InsightsService.DisconnectedFindings([H("a", SessionState.Disconnected, 9 * 3600), H("b", SessionState.Disconnected, 600), H("c", SessionState.Active, 99999)]);
+        Assert.Equal("a", f.Single().Subject);
+        Assert.Equal(9, f.Single().Value);
+
+        MachineHealthRow M(string n, int days, int reg = 1) => new(n, "DG1", reg, 3, false, 0, 100, "good", days);
+        var u = InsightsService.UptimeFindings([M("old", 30), M("fresh", 2), M("unreg", 40, 0)]);
+        Assert.Equal("old", u.Single().Machine);
+    }
+
+    [Fact]
+    public void Records_are_counted_by_name_with_the_machine_that_has_most()
+    {
+        var names = new Dictionary<string, string> { ["m1"] = "vda1", ["m2"] = "vda2" };
+        var rows = InsightsService.Count([new("outlook", "m1"), new("outlook", "m1"), new("outlook", "m2"), new("excel", null)], names);
+        Assert.Equal(("outlook", 3, 2, "vda1"), (rows[0].Name, rows[0].Count, rows[0].Machines, rows[0].TopMachine));
+        Assert.Equal(("excel", 1, 0, null), (rows[1].Name, rows[1].Count, rows[1].Machines, rows[1].TopMachine));
     }
 
     [Fact]

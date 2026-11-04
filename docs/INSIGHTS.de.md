@@ -17,13 +17,19 @@ Der Reiter **Insights** beantwortet „Was ist gerade auffällig?“, ohne eine 
 | Langsame Bereitstellungsgruppe | die durchschnittliche Anmeldezeit der Gruppe der letzten 7 Tage liegt jenseits der Grenze | Sitzungen zeigen |
 | Maschine nicht registriert | eine Maschine ist eingeschaltet, aber nicht am Delivery Controller registriert (nicht im Wartungsmodus) | Sitzungen zeigen |
 | Maschine ausgelastet | der Lastindex einer registrierten Maschine liegt über `LoadWarn` oder `LoadCrit` | Sitzungen zeigen |
+| Lange getrennt | eine Sitzung ist seit 4 Stunden oder länger getrennt (sie belegt weiter Lizenz und Speicher), nach der Leerlaufzeit des Brokers | Benutzer öffnen |
+| Läuft sehr lange | eine registrierte Maschine läuft seit 14 Tagen oder länger ohne Neustart | Sitzungen zeigen |
 | Wartung | Anzahl der Maschinen im Wartungsmodus (Information) | |
 
 *Benutzer öffnen* zeigt die Sitzungen des Benutzers, dort gibt es Abmelden, Nachricht und die Expertenansicht. *Sitzungen zeigen* öffnet die Helpdesk-Liste, gefiltert auf die Maschine oder Bereitstellungsgruppe.
 
 **Anmeldezeit je Bereitstellungsgruppe** zeigt Anzahl, Durchschnitt, Median und die Zeit, unter der 90 % der Anmeldungen bleiben (Sitzungen der letzten 7 Tage mit Anmeldedauer). Sie wird aus den Sitzungsdatensätzen des Monitors berechnet und funktioniert deshalb auch dort, wo die Zusammenfassungstabellen des Monitors leer sind.
 
-**Maschinen** listet jeden VDA mit Zustand (Problem, ausgelastet, in Ordnung, Wartung, aus), Lastindex und Zahl der Sitzungen.
+Die Tabelle zeigt außerdem den **Durchschnitt jedes der letzten 7 Tage** als kleine Kurve, damit eine schleichende Verschlechterung auffällt und nicht nur der Durchschnitt. Eine Gruppe mit weniger als 5 Sitzungen erscheint grau und wird nicht bewertet.
+
+**Anwendungsabstürze** und **Verbindungsfehler** der letzten 24 Stunden werden nach Anwendung oder Grund gezählt, mit der Zahl der betroffenen Maschinen und der Maschine mit den meisten. Der Fehlergrund steht so, wie der Monitor ihn meldet (oft ein Code); liefert die Site diese Datensätze nicht, entfällt die Tabelle.
+
+**Maschinen** listet jeden VDA mit Zustand (Problem, ausgelastet, in Ordnung, Wartung, aus), Lastindex, Zahl der Sitzungen und Laufzeit.
 
 ## Anmeldezeit gegen die Bereitstellungsgruppe
 

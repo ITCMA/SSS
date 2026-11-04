@@ -456,5 +456,17 @@
   "sumTileFailures": "Connection failures",
   "sumTileReconnects": "Automatic reconnects",
   "sumYou": "User",
-  "sumGroupShort": "Group"
+  "sumGroupShort": "Group",
+  "insFaults": "Application crashes (last 24 hours)",
+  "insFailures": "Connection failures (last 24 hours)",
+  "insName": "Name",
+  "insCount": "Count",
+  "insMachinesCount": "Machines",
+  "insTopMachine": "Most on",
+  "insTrend": "7 days",
+  "insFew": "few sessions",
+  "insUptime": "Running since",
+  "insDays": "{n} days",
+  "insKind_disconnected": "{subject} has been disconnected for {n} hours ({detail}); it still holds a licence and memory",
+  "insKind_uptime": "{machine} has run for {n} days without a restart ({group})"
 }

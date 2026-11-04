@@ -37,6 +37,9 @@ h2 { font-size: 1.1rem; margin: 0; }
 .usersummary.ok .sumsym { color: var(--good); } .usersummary.attention .sumsym { color: var(--warn); } .usersummary.poor .sumsym { color: var(--crit); }
 .sumtiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
 .sumtile { border: 1px solid var(--border); border-left-width: 5px; border-radius: 8px; padding: 8px 12px; display: grid; gap: 2px; }
+.spark { stroke: var(--cat0); stroke-width: 2; stroke-linejoin: round; } .spark.bad { stroke: var(--cat4); }
+.sparkdot { fill: var(--cat0); } .sparkdot.bad { fill: var(--cat4); }
+tr.few td { color: var(--muted); }
 .sumtile small { color: var(--muted); } .sumtile strong { font-size: 1.6rem; line-height: 1.1; }
 .sumtile.good { border-left-color: var(--good); } .sumtile.warn { border-left-color: var(--warn); } .sumtile.bad { border-left-color: var(--crit); }
 .sumtile.bad strong { color: var(--crit); } .sumtile.warn strong { color: var(--warn); }

@@ -10,12 +10,15 @@ public sealed record InsightFinding(string Severity, string Kind, string Subject
     string? Machine = null, string? Group = null, int? Value = null);
 
 /// <summary>Logon durations of the sessions started in a delivery group over the last days.</summary>
-public sealed record GroupLogon(string Group, int Sessions, int AvgSeconds, int MedianSeconds, int P90Seconds);
+public sealed record GroupLogon(string Group, int Sessions, int AvgSeconds, int MedianSeconds, int P90Seconds, IReadOnlyList<int?>? Daily = null);
 
-public sealed record MachineHealthRow(string Name, string Group, int? Registration, int? Power, bool Maintenance, int? Sessions, int? LoadIndex, string Health);
+/// <summary>Crashes of one application or failures with one reason, counted over the last 24 hours.</summary>
+public sealed record CountRow(string Name, int Count, int Machines, string? TopMachine);
+
+public sealed record MachineHealthRow(string Name, string Group, int? Registration, int? Power, bool Maintenance, int? Sessions, int? LoadIndex, string Health, int? UptimeDays = null);
 
 public sealed record InsightsView(DateTimeOffset At, int LiveSessions, IReadOnlyList<InsightFinding> Findings, IReadOnlyList<GroupLogon> Groups,
-    IReadOnlyList<MachineHealthRow> Machines, bool Demo);
+    IReadOnlyList<MachineHealthRow> Machines, bool Demo, IReadOnlyList<CountRow>? Faults = null, IReadOnlyList<CountRow>? Failures = null);
 
 /// <summary>How one user's last days looked: number of sessions, logon time (against the delivery group), failures and automatic reconnects.
 /// Verdict is "ok", "attention" or "poor".</summary>
@@ -23,10 +26,14 @@ public sealed record UserSummary(int Days, int Sessions, int? AvgLogonSeconds, i
 
 /// <summary>The helpdesk's "what is conspicuous right now": slow connections and logons, machines that are not registered or busy, the logon time of each
 /// delivery group, and a short history of one user. Everything comes from the Citrix Monitor; the farm-wide result is cached for a minute.</summary>
-public sealed class InsightsService(SssOptions options, IMonitorClient? monitor, TimeProvider clock, bool demo = false)
+public sealed class InsightsService(SssOptions options, IMonitorClient? monitor, IHelpdeskProvider? helpdesk, TimeProvider clock, bool demo = false)
 {
     private static readonly TimeSpan CacheFor = TimeSpan.FromSeconds(60), GroupCacheFor = TimeSpan.FromMinutes(10);
     private const int MaxPerKind = 8;
+    /// <summary>A disconnected session that has been so for this long is listed (it still holds a licence and memory).</summary>
+    private const int DisconnectedHours = 4;
+    /// <summary>A registered machine that has run this long without a restart is listed.</summary>
+    private const int UptimeDaysLimit = 14;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private (DateTimeOffset At, InsightsView View)? _cache;
     private (DateTimeOffset At, IReadOnlyList<GroupLogon> Groups)? _groups;
@@ -40,7 +47,7 @@ public sealed class InsightsService(SssOptions options, IMonitorClient? monitor,
         try
         {
             if (_cache is { } c2 && clock.GetUtcNow() - c2.At < CacheFor) return c2.View;
-            var view = demo ? Demo() : monitor is null ? new InsightsView(clock.GetUtcNow(), 0, [], [], [], false) : await BuildAsync(monitor, ct);
+            var view = demo ? Demo() : monitor is null ? new InsightsView(clock.GetUtcNow(), 0, [], [], [], false, [], []) : await BuildAsync(monitor, ct);
             _cache = (clock.GetUtcNow(), view);
             return view;
         }
@@ -57,13 +64,46 @@ public sealed class InsightsService(SssOptions options, IMonitorClient? monitor,
         var loads = await m.GetLoadIndexesAsync(machines.Where(x => x.Registration == 1).Select(x => x.Id).OfType<string>(), ct);
         var rows = MachineRows(machines, loads);
         var findings = Findings(live, recent, groups, rows, out var userIds);
+        findings.AddRange(UptimeFindings(rows));
+        if (helpdesk is not null)
+        {
+            try { findings.AddRange(DisconnectedFindings((await helpdesk.ListLiveAsync(null, 2000, ct)).Sessions)); }
+            catch (ProviderUnavailableException) { /* the Broker is optional here */ }
+        }
+        findings = findings.OrderBy(f => f.Severity switch { "crit" => 0, "warn" => 1, _ => 2 }).ToList();
+        var names = machines.Where(x => x.Id is not null).ToDictionary(x => x.Id!, x => x.Name, StringComparer.OrdinalIgnoreCase);
+        var faults = Count(await m.GetFaultsAsync(now.AddHours(-24), ct), names);
+        var failures = Count(await m.GetFailuresAsync(now.AddHours(-24), ct), names);
 
         // names for the sessions in the findings (the Monitor knows users by a number)
         var users = await m.GetUsersByIdAsync(userIds.Values, ct);
         findings = findings.Select(f => f.Kind is "connection" or "logon" && userIds.TryGetValue(f.Subject, out var uid) && users.TryGetValue(uid, out var u)
             ? f with { Subject = u.Name, UserName = u.Name, UserSid = u.Sid } : f).ToList();
-        return new InsightsView(now, live.Count, findings, groups, rows, false);
+        return new InsightsView(now, live.Count, findings, groups, rows, false, faults, failures);
     }
+
+    /// <summary>Sessions that have been disconnected for hours: they hold a licence and memory without being used.</summary>
+    public static List<InsightFinding> DisconnectedFindings(IReadOnlyList<HelpdeskSession> sessions) => sessions
+        .Where(h => h.Session.State == SessionState.Disconnected && h.Session.IdleSeconds is { } s && s >= DisconnectedHours * 3600)
+        .OrderByDescending(h => h.Session.IdleSeconds).Take(MaxPerKind)
+        .Select(h => new InsightFinding("info", "disconnected", h.UserName, h.Session.ResourceName, h.UserName, h.UserSid, h.Session.Machine, h.Session.DeliveryGroup, h.Session.IdleSeconds / 3600))
+        .ToList();
+
+    /// <summary>Registered machines that have not been restarted for a long time.</summary>
+    public static List<InsightFinding> UptimeFindings(IReadOnlyList<MachineHealthRow> machines) => machines
+        .Where(x => x.Registration == 1 && x.Power == 3 && x.UptimeDays >= UptimeDaysLimit)
+        .OrderByDescending(x => x.UptimeDays).Take(MaxPerKind)
+        .Select(x => new InsightFinding("info", "uptime", x.Name, $"{x.UptimeDays}", Machine: x.Name, Group: x.Group, Value: x.UptimeDays)).ToList();
+
+    /// <summary>Counts the records by name, with the number of machines and the machine that has most of them.</summary>
+    public static IReadOnlyList<CountRow> Count(IReadOnlyList<FaultRecord> records, IReadOnlyDictionary<string, string> machineNames) => records
+        .GroupBy(r => r.Name, StringComparer.OrdinalIgnoreCase)
+        .Select(g =>
+        {
+            var byMachine = g.Where(r => r.MachineId is not null).GroupBy(r => r.MachineId!, StringComparer.OrdinalIgnoreCase).OrderByDescending(x => x.Count()).ToList();
+            return new CountRow(g.Key, g.Count(), byMachine.Count, byMachine.Count == 0 ? null : machineNames.GetValueOrDefault(byMachine[0].Key) ?? byMachine[0].Key);
+        })
+        .OrderByDescending(r => r.Count).Take(10).ToList();
 
     /// <summary>The findings, most severe first. Pure function of its inputs, so it can be tested.</summary>
     public List<InsightFinding> Findings(IReadOnlyList<MonitorSession> live, IReadOnlyList<MonitorSession> recent, IReadOnlyList<GroupLogon> groups, IReadOnlyList<MachineHealthRow> machines, out Dictionary<string, long> userIds)
@@ -119,7 +159,8 @@ public sealed class InsightsService(SssOptions options, IMonitorClient? monitor,
             var registered = x.Registration == 1;
             var health = x.Maintenance ? "info" : !registered ? (x.Power == 3 ? "crit" : "off")
                 : load >= Q.LoadCrit ? "crit" : load >= Q.LoadWarn ? "warn" : "good";
-            return new MachineHealthRow(x.Name, x.Group, x.Registration, x.Power, x.Maintenance, x.Sessions, load, health);
+            int? uptime = x.PoweredOn is { } on && x.Power == 3 ? (int)(clock.GetUtcNow() - on).TotalDays : null;
+            return new MachineHealthRow(x.Name, x.Group, x.Registration, x.Power, x.Maintenance, x.Sessions, load, health, uptime);
         })
         .OrderBy(r => r.Health switch { "crit" => 0, "warn" => 1, "good" => 2, "info" => 3, _ => 4 }).ThenBy(r => r.Group, StringComparer.OrdinalIgnoreCase).ThenBy(r => r.Name, StringComparer.OrdinalIgnoreCase)
         .Take(300).ToList();
@@ -128,19 +169,25 @@ public sealed class InsightsService(SssOptions options, IMonitorClient? monitor,
     {
         if (_groups is { } g && clock.GetUtcNow() - g.At < GroupCacheFor) return g.Groups;
         var sessions = await m.GetRecentAsync(clock.GetUtcNow().AddDays(-7), ct);
-        var result = Groups(sessions);
+        var result = Groups(sessions, clock.GetUtcNow());
         _groups = (clock.GetUtcNow(), result);
         return result;
     }
 
     /// <summary>Average, median and 90th percentile of the logon durations per delivery group (sessions without a logon duration are left out).</summary>
-    public static IReadOnlyList<GroupLogon> Groups(IReadOnlyList<MonitorSession> sessions) => sessions
+    public static IReadOnlyList<GroupLogon> Groups(IReadOnlyList<MonitorSession> sessions, DateTimeOffset? now = null) => sessions
         .Where(s => s.LogonSeconds is > 0 && !string.IsNullOrWhiteSpace(s.DesktopGroup))
         .GroupBy(s => s.DesktopGroup!, StringComparer.OrdinalIgnoreCase)
         .Select(g =>
         {
             var v = g.Select(s => s.LogonSeconds!.Value).Order().ToArray();
-            return new GroupLogon(g.Key, v.Length, (int)Math.Round(v.Average()), Percentile(v, 0.5), Percentile(v, 0.9));
+            var today = DateOnly.FromDateTime((now ?? DateTimeOffset.UtcNow).UtcDateTime);
+            var daily = Enumerable.Range(0, 7).Select(i => today.AddDays(i - 6)).Select(day =>
+            {
+                var d = g.Where(s => s.Start is { } st && DateOnly.FromDateTime(st.UtcDateTime) == day).Select(s => s.LogonSeconds!.Value).ToList();
+                return d.Count == 0 ? (int?)null : (int)Math.Round(d.Average());
+            }).ToList();
+            return new GroupLogon(g.Key, v.Length, (int)Math.Round(v.Average()), Percentile(v, 0.5), Percentile(v, 0.9), daily);
         })
         .OrderByDescending(g => g.AvgSeconds).ToList();
 
@@ -183,7 +230,8 @@ public sealed class InsightsService(SssOptions options, IMonitorClient? monitor,
 
     // ---- demo ----------------------------------------------------------------------------------
 
-    private static IReadOnlyList<GroupLogon> DemoGroups() => [new("DG-Apps", 120, 52, 48, 81), new("DG-Desktops", 210, 31, 28, 49), new("DG-Kiosk", 35, 19, 17, 28)];
+    private static IReadOnlyList<GroupLogon> DemoGroups() =>
+    [new("DG-Apps", 120, 52, 48, 81, [38, 41, 44, 47, 55, 61, 66]), new("DG-Desktops", 210, 31, 28, 49, [30, 33, 29, 31, null, 28, 32]), new("DG-Kiosk", 35, 19, 17, 28, [20, 19, 18, null, 19, 21, 19])];
 
     private InsightsView Demo() => new(clock.GetUtcNow(), 72,
     [
@@ -192,11 +240,15 @@ public sealed class InsightsService(SssOptions options, IMonitorClient? monitor,
         new("warn", "load", "rds-01.demo.local", "7600", Machine: "rds-01.demo.local", Group: "DG-Apps", Value: 7600),
         new("warn", "logon", "demo.ben", "74 s · Ø 31 s", "demo.ben", "S-1-5-21-1-1-1-1102", "vdi-02.demo.local", "DG-Desktops", 74),
         new("warn", "group", "DG-Apps", "Ø 52 s (120)", Group: "DG-Apps", Value: 52),
+        new("info", "disconnected", "demo.carla", "SAP GUI", "demo.carla", "S-1-5-21-1-1-1-1103", "rds-01.demo.local", "DG-Apps", 9),
+        new("info", "uptime", "rds-01.demo.local", "21", Machine: "rds-01.demo.local", Group: "DG-Apps", Value: 21),
         new("info", "maintenance", "1", "", Value: 1),
     ], DemoGroups(),
     [
-        new("rds-02.demo.local", "DG-Apps", 0, 3, false, 0, null, "crit"), new("rds-01.demo.local", "DG-Apps", 1, 3, false, 12, 7600, "warn"),
+        new("rds-02.demo.local", "DG-Apps", 0, 3, false, 0, null, "crit"), new("rds-01.demo.local", "DG-Apps", 1, 3, false, 12, 7600, "warn", 21),
         new("vdi-01.demo.local", "DG-Desktops", 1, 3, false, 6, 2400, "good"), new("vdi-02.demo.local", "DG-Desktops", 1, 3, false, 4, 1900, "good"),
         new("vdi-03.demo.local", "DG-Desktops", 1, 3, true, 0, 300, "info"),
-    ], true);
+    ], true,
+    [new("outlook.exe", 14, 4, "rds-01.demo.local"), new("sapgui.exe", 6, 2, "rds-01.demo.local"), new("excel.exe", 3, 3, "vdi-01.demo.local")],
+    [new("Session limit reached", 9, 2, "rds-01.demo.local"), new("No available capacity", 4, 1, "rds-02.demo.local")]);
 }

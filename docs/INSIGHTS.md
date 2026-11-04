@@ -17,13 +17,19 @@ The **Insights** tab answers "what is conspicuous right now?" without opening a 
 | Slow delivery group | the group's average logon time of the last 7 days is beyond the limit | Show sessions |
 | Machine not registered | a machine is switched on but not registered with the Delivery Controller (not in maintenance) | Show sessions |
 | Machine busy | the load index of a registered machine is beyond `LoadWarn` or `LoadCrit` | Show sessions |
+| Long disconnected | a session has been disconnected for 4 hours or more (it still holds a licence and memory), from the Broker's idle time | Open user |
+| Long running | a registered machine has run 14 days or more without a restart | Show sessions |
 | Maintenance | number of machines in maintenance mode (information) | |
 
 *Open user* opens the user's sessions, where log off, message and the expert view are. *Show sessions* opens the helpdesk list filtered to that machine or delivery group.
 
 **Logon time per delivery group** shows count, average, median and the time 90 % of the logons stay under (sessions of the last 7 days that have a logon duration). It is computed from the Monitor's session records, so it works even where the Monitor's own summary tables are empty.
 
-**Machines** lists every VDA with a state (problem, busy, OK, maintenance, off), its load index and the number of sessions.
+The table also shows the **average of each of the last 7 days** as a small curve, so a slow deterioration is visible and not only the average. A group with fewer than 5 sessions is shown in grey and is not rated.
+
+**Application crashes** and **connection failures** of the last 24 hours are counted by application or reason, with the number of machines affected and the machine with most of them. The failure reason is shown as the Monitor reports it (often a code); a site that does not deliver these records leaves the table out.
+
+**Machines** lists every VDA with a state (problem, busy, OK, maintenance, off), its load index, the number of sessions and how long it has been running.
 
 ## Logon time against the delivery group
 

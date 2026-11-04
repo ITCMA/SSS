@@ -5,9 +5,10 @@ All notable changes to SSS. The project follows [Semantic Versioning](docs/COMPA
 ## Unreleased
 
 ### Added
+- **Insights, more depth**: application crashes and connection failures of the last 24 hours (by application or reason, machines affected, machine with most), sessions disconnected for hours, machines running 14 days or more, a 7-day curve of the logon time per delivery group (groups with fewer than 5 sessions are not rated), the machine's running time.
 - **Insights tab** ([docs/INSIGHTS.md](docs/INSIGHTS.md)) for every helpdesk level: conspicuous slow connections and logons, machines not registered or busy, each with a button to open the user or the filtered session list; logon time per delivery group (average, median, 90 %); machine overview with load index.
 - **Delivery group comparison**: the expert view shows the logon time of a session against its group's last 7 days.
-- **History of a user**: sessions, logon time against the group, connection failures and automatic reconnects of the last 30 days above the user's sessions.
+- **History of a user** (a card with coloured tiles and a bar comparison with the group): sessions, logon time against the group, connection failures and automatic reconnects of the last 30 days above the user's sessions.
 - **Cards for users**: the own sessions as cards (one sentence on whether all is fine, quality lights, log off, technical data under "Details"); the helpdesk and the expert view keep the table. History period and export moved to the history section.
 
 ### Changed
