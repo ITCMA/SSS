@@ -265,6 +265,20 @@ public class InsightsApiTests : IClassFixture<HelpdeskOnFactory>, IClassFixture<
     }
 
     [Fact]
+    public void The_heat_map_counts_the_logons_of_each_of_the_last_168_hours()
+    {
+        var now = new DateTimeOffset(2026, 11, 5, 10, 30, 0, TimeSpan.Zero);
+        MonitorSession S(DateTimeOffset start, int? logon) => new("k" + start.Ticks, "vdi", "DG", true, start, null, logon, "PC", "10.0.0.1", null);
+        var heat = InsightsService.Heat([S(now.AddMinutes(-5), 20), S(now.AddMinutes(-10), 40), S(now.AddHours(-2), null), S(now.AddDays(-8), 10)], now);
+        Assert.Equal(168, heat.Logons.Count);
+        Assert.Equal(2, heat.Logons[167]);          // the current hour
+        Assert.Equal(30, heat.AvgSeconds[167]);
+        Assert.Equal(1, heat.Logons[165]);          // two hours back, no logon time
+        Assert.Null(heat.AvgSeconds[165]);
+        Assert.Equal(3, heat.Logons.Sum());         // the session from 8 days ago is outside
+    }
+
+    [Fact]
     public void Load_strips_average_the_samples_per_hour_and_leave_gaps()
     {
         var now = new DateTimeOffset(2026, 11, 4, 12, 30, 0, TimeSpan.Zero);

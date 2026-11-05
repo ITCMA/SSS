@@ -857,6 +857,8 @@ function renderInsights(d) {
   }));
   $('ins-none').hidden = d.findings.length > 0;
 
+  renderGroupBars(d.groups);
+  renderHealth(d);
   const maxG = Math.max(1, ...d.groups.map((g) => g.avgSeconds));
   $('ins-groups').tHead.replaceChildren(el('tr', {}, ...['colGroup', 'colSessions', 'insAvg', 'insMedian', 'insP90', 'insTrend', 'colShare'].map((k) => el('th', { scope: 'col', text: t(k) }))));
   // a group with only a few sessions is shown, but not rated
@@ -1187,17 +1189,29 @@ function renderKpis(more, faults, failures) {
   const gs = (state.groups ?? []).filter((g) => g.sessions >= 5), gAvg = gs.length ? Math.round(gs.reduce((a, g) => a + g.avgSeconds * g.sessions, 0) / gs.reduce((a, g) => a + g.sessions, 0)) : null;
   const ms = state.machines ?? [], bad = ms.filter((m) => ['crit', 'warn'].includes(m.health)).length, down = ms.filter((m) => m.health === 'crit').length;
   const tf = new Intl.DateTimeFormat(state.lang, { hour: '2-digit', minute: '2-digit' });
-  const card = (label, value, sub, cls, target) => {
-    const b = el('button', { type: 'button', class: `kpi ${cls}` }, el('span', { class: 'kl', text: label }), el('span', { class: 'kv', text: value }), el('span', { class: 'ks', text: sub }));
+  // the course of the last 24 hours as a small line, and for the logons the change against the 24 hours before (from the 7-day figures)
+  const heat = more.heat, sum = (a) => a.reduce((x, y) => x + y, 0);
+  const prev = heat?.logons?.length === 168 ? sum(heat.logons.slice(120, 144)) : null, curr = heat?.logons?.length === 168 ? sum(heat.logons.slice(144)) : null;
+  const wavg = (arr, w) => { const n = w.reduce((x, y, i) => x + (arr[i] != null ? y : 0), 0); return n ? arr.reduce((x, v, i) => x + (v != null ? v * w[i] : 0), 0) / n : null; };
+  const pAvg = heat?.logons?.length === 168 ? wavg(heat.avgSeconds.slice(120, 144), heat.logons.slice(120, 144)) : null, cAvg = heat?.logons?.length === 168 ? wavg(heat.avgSeconds.slice(144), heat.logons.slice(144)) : null;
+  const perHour = (list) => hours.map((h) => list.filter((r) => { const x = new Date(r.at).getTime(), a = new Date(h.at).getTime(); return x >= a && x < a + 3600000; }).length);
+  const delta = (now, before, worseUp, unit = '') => {
+    if (now == null || before == null || before === 0) return '';
+    const pct = Math.round(((now - before) / before) * 100);
+    if (pct === 0) return el('span', { class: 'kd', text: `= ${t('chVsPrev')}` });
+    return el('span', { class: `kd ${worseUp ? (pct > 0 ? 'bad' : 'ok') : ''}`, text: `${pct > 0 ? '▲' : '▼'} ${Math.abs(pct)} % ${t('chVsPrev')}${unit}` });
+  };
+  const card = (label, value, sub, cls, target, spark, extra) => {
+    const b = el('button', { type: 'button', class: `kpi ${cls}` }, el('span', { class: 'kl', text: label }), el('span', { class: 'kv', text: value }), el('span', { class: 'ks', text: sub }), extra || '', spark ? sparkSvg(spark, spark.cls) : '');
     b.addEventListener('click', () => $(target)?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
     return b;
   };
   const users = (list) => new Set(list.map((r) => r.user).filter(Boolean)).size, machines = (list) => new Set(list.map((r) => r.machine).filter(Boolean)).size;
   $('ins-kpi').replaceChildren(
-    card(t('insKpiLogons'), String(logons), peak?.logons ? t('insKpiPeak', { time: tf.format(new Date(peak.at)), n: peak.logons }) : '', '', 'ins-day'),
-    card(t('insKpiAvg'), avg == null ? '–' : `${avg} s`, gAvg == null ? '' : t('insKpiGroup', { s: gAvg }), avg != null && avg >= (state.quality?.logonWarnSeconds ?? 45) ? 'warn' : '', 'ins-groups'),
-    card(t('insKpiCrashes'), String(faults.length), faults.length ? t('insKpiOnMachines', { n: machines(faults) }) : '', faults.length ? 'crit' : '', 'ins-faults'),
-    card(t('insKpiFailures'), String(failures.length), failures.length ? t('insKpiUsers', { n: users(failures) }) : '', failures.length ? 'warn' : '', 'ins-failures'),
+    card(t('insKpiLogons'), String(logons), peak?.logons ? t('insKpiPeak', { time: tf.format(new Date(peak.at)), n: peak.logons }) : '', '', 'ins-day', Object.assign(hours.map((h) => h.logons), { cls: 'cat0' }), delta(curr, prev, false)),
+    card(t('insKpiAvg'), avg == null ? '–' : `${avg} s`, gAvg == null ? '' : t('insKpiGroup', { s: gAvg }), avg != null && avg >= (state.quality?.logonWarnSeconds ?? 45) ? 'warn' : '', 'ins-groups', Object.assign(hours.map((h) => h.avgSeconds), { cls: 'cat2' }), delta(cAvg, pAvg, true)),
+    card(t('insKpiCrashes'), String(faults.length), faults.length ? t('insKpiOnMachines', { n: machines(faults) }) : '', faults.length ? 'crit' : '', 'ins-faults', Object.assign(perHour(faults), { cls: 'cat3' })),
+    card(t('insKpiFailures'), String(failures.length), failures.length ? t('insKpiUsers', { n: users(failures) }) : '', failures.length ? 'warn' : '', 'ins-failures', Object.assign(perHour(failures), { cls: 'cat4' })),
     card(t('insKpiMachines'), `${bad} / ${ms.length}`, down ? t('insKpiUnreg', { n: down }) : '', bad ? 'crit' : '', 'ins-machines-wrap'));
 }
 
@@ -1216,6 +1230,10 @@ async function loadMore() {
   const rec = async (kind) => { const x = await fetch(`api/helpdesk/insights/records?kind=${kind}&hours=24`, { credentials: 'same-origin' }); return x.ok ? (await x.json()).rows ?? [] : []; };
   const [faults, failures] = await Promise.all([rec('faults'), rec('failures')]);
   renderKpis(d, faults, failures);
+  renderHeat(d);
+  renderUsageChart(d.usage);
+  renderStartsChart(d.appStarts);
+  renderCostsChart(d.costs);
   renderGroupCards(faults, failures);
   renderStrips(d);
   $('ins-day').replaceChildren(d.hourly?.length ? incidentDayChart(d.hourly, faults, failures) : el('p', { class: 'muted', text: t('insHourlyNone') }));
@@ -1847,7 +1865,7 @@ function buildPolicySection(ctx) {
       if (state.detailsCtx !== ctx) return;
       if (!r.ok) { out.replaceChildren(el('p', { class: 'muted', text: t(r.status === 503 ? 'profileUnavailable' : r.status === 403 ? 'noRight' : 'error') })); return; }
       const rows = (await r.json()).entries;
-      const filter = el('input', { type: 'search', autocomplete: 'off', placeholder: t('filterPlaceholder'), 'aria-label': t('filter') });
+      const filter = el('input', { type: 'search', autocomplete: 'off', placeholder: t('policiesFilterPh'), 'aria-label': t('filter') });
       const body = el('tbody');
       const draw = () => {
         const f = filter.value.trim().toLowerCase();
@@ -2264,7 +2282,7 @@ async function init() {
     else { await openDetails(state.data.live[0], shot === 'profile' ? 'profile' : shot === 'charts' ? 'charts' : 'summary'); if (shot === 'profile') document.querySelector('.profile button')?.click(); }
   }
   if (!$('demo').hidden && shot === 'env' && state.caps.admin) { showView('env'); await loadEnv(); }
-  if (!$('demo').hidden && shot === 'insights' && state.helpdesk) { showView('insights'); await loadInsights(); }
+  if (!$('demo').hidden && shot === 'insights' && state.helpdesk) { showView('insights'); await loadInsights(); const f = new URLSearchParams(location.search).get('focus'); if (f) setTimeout(() => { const n = $(f); n?.parentElement.prepend(n); window.scrollTo(0, 0); }, 1500); }
   if (!$('demo').hidden && shot === 'machine' && state.helpdesk) { showView('insights'); await loadInsights(); await openMachine('rds-02.demo.local'); }
   if (!$('demo').hidden && shot === 'map' && state.helpdesk) { showView('map'); await loadMap(); }
   state.timer = setInterval(() => { if (!document.hidden && !$('confirm').open && state.view !== 'audit' && state.view !== 'env') load(); }, refreshSeconds * 1000);

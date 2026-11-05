@@ -19,11 +19,14 @@ public sealed record AppStartRow(string Name, int Launches, int AvgMs, int P90Ms
 public sealed record CostRow(string Group, string Currency, double Compute, double Storage, double Savings);
 /// <summary>One thing that changed: a machine registered or lost its registration, was switched on, or an administrative action (audit).</summary>
 public sealed record TimelineEvent(DateTimeOffset At, string Kind, string Subject, string? Detail = null, string? Actor = null);
-public sealed record MoreView(DateTimeOffset At, IReadOnlyList<UsageRow> Usage, IReadOnlyList<AppStartRow> AppStarts, IReadOnlyList<CostRow> Costs, IReadOnlyList<TimelineEvent> Timeline, bool Demo, int AppLaunchesRead = 0, int UsageSamples = 0, IReadOnlyList<HourCount>? Hourly = null, IReadOnlyList<LoadStrip>? Strips = null);
+public sealed record MoreView(DateTimeOffset At, IReadOnlyList<UsageRow> Usage, IReadOnlyList<AppStartRow> AppStarts, IReadOnlyList<CostRow> Costs, IReadOnlyList<TimelineEvent> Timeline, bool Demo, int AppLaunchesRead = 0, int UsageSamples = 0, IReadOnlyList<HourCount>? Hourly = null, IReadOnlyList<LoadStrip>? Strips = null, HeatView? Heat = null);
 /// <summary>The load of a machine hour by hour over the last 24 hours (average CPU in percent; null = no sample).</summary>
 public sealed record LoadStrip(string Machine, string Group, IReadOnlyList<double?> Cpu);
 /// <summary>Everything about one machine on one page: state, load, the last 24 hours, crashes and failures there, and what changed.</summary>
 public sealed record MachineDetail(MachineHealthRow? Row, MachineInfo? Info, UsageRow? Usage, LoadStrip? Strip, IReadOnlyList<RecordRow> Faults, IReadOnlyList<RecordRow> Failures, IReadOnlyList<TimelineEvent> Events, IReadOnlyList<MachineOutage>? Outages = null);
+
+/// <summary>Logons per hour over the last 7 days: 168 values, the first one for the hour starting at Start (UTC). The browser sorts them into weekday and hour of its own time zone.</summary>
+public sealed record HeatView(DateTimeOffset Start, IReadOnlyList<int> Logons, IReadOnlyList<int?> AvgSeconds);
 
 /// <summary>Logons that started in one hour, and their average logon time.</summary>
 public sealed record HourCount(DateTimeOffset At, int Logons, int? AvgSeconds);
@@ -52,7 +55,7 @@ public sealed record DisconnectedRow(string User, string UserSid, string Applica
 public sealed record MachineHealthRow(string Name, string Group, int? Registration, int? Power, bool Maintenance, int? Sessions, int? LoadIndex, string Health, int? UptimeDays = null, int? Score = null);
 
 public sealed record InsightsView(DateTimeOffset At, int LiveSessions, IReadOnlyList<InsightFinding> Findings, IReadOnlyList<GroupLogon> Groups,
-    IReadOnlyList<MachineHealthRow> Machines, bool Demo, IReadOnlyList<DisconnectedRow>? Disconnected = null);
+    IReadOnlyList<MachineHealthRow> Machines, bool Demo, IReadOnlyList<DisconnectedRow>? Disconnected = null, int ActiveSessions = 0, int DisconnectedSessions = 0);
 
 /// <summary>How one user's last days looked: number of sessions, logon time (against the delivery group), failures and automatic reconnects.
 /// Verdict is "ok", "attention" or "poor".</summary>
@@ -175,8 +178,9 @@ public sealed class InsightsService(SssOptions options, IMonitorClient? monitor,
                 var byId = machines.Where(x => x.Id is not null).ToDictionary(x => x.Id!, StringComparer.OrdinalIgnoreCase);
                 var usage = await monitor.GetUsageAsync(now.AddDays(-7), ct);
                 var launches = await monitor.GetAppLaunchesAsync(now.AddDays(-7), ct);
-                view = new MoreView(now, Usage(usage, byId), AppStarts(launches, byId), Costs(await monitor.GetCostsAsync(now.AddDays(-30), ct), byId), MachineEvents(machines, now), false, launches.Count, usage.Count, Hourly(await RecentAsync(monitor, ct), now),
-                    Strips(await monitor.GetHourlyUsageAsync(now.AddHours(-24), ct), byId, now));
+                var recent = await RecentAsync(monitor, ct);
+                view = new MoreView(now, Usage(usage, byId), AppStarts(launches, byId), Costs(await monitor.GetCostsAsync(now.AddDays(-30), ct), byId), MachineEvents(machines, now), false, launches.Count, usage.Count, Hourly(recent, now),
+                    Strips(await monitor.GetHourlyUsageAsync(now.AddHours(-24), ct), byId, now), Heat(recent, now));
             }
             _more = (now, view);
             return view;
@@ -239,6 +243,23 @@ public sealed class InsightsService(SssOptions options, IMonitorClient? monitor,
         }).ToList();
     }
 
+    /// <summary>The logons of the last 7 days hour by hour (168 values) with the average logon time of each hour.</summary>
+    public static HeatView Heat(IReadOnlyList<MonitorSession> sessions, DateTimeOffset now)
+    {
+        var top = new DateTimeOffset(now.UtcDateTime.Year, now.UtcDateTime.Month, now.UtcDateTime.Day, now.UtcDateTime.Hour, 0, 0, TimeSpan.Zero);
+        var start = top.AddHours(-167);
+        var counts = new int[168]; var sums = new long[168]; var n = new int[168];
+        foreach (var s in sessions)
+        {
+            if (s.Start is not { } st) continue;
+            var i = (int)Math.Floor((st - start).TotalHours);
+            if (i is < 0 or >= 168) continue;
+            counts[i]++;
+            if (s.LogonSeconds is > 0) { sums[i] += s.LogonSeconds.Value; n[i]++; }
+        }
+        return new HeatView(start, counts, Enumerable.Range(0, 168).Select(i => n[i] == 0 ? (int?)null : (int)Math.Round((double)sums[i] / n[i])).ToList());
+    }
+
     /// <summary>The granularity that has most rows is used, so rows of several granularities are not counted twice.</summary>
     private static IEnumerable<T> Dominant<T>(IReadOnlyList<T> rows, Func<T, int?> granularity) =>
         rows.GroupBy(granularity).OrderByDescending(g => g.Count()).FirstOrDefault() is { } g ? g : [];
@@ -293,7 +314,24 @@ public sealed class InsightsService(SssOptions options, IMonitorClient? monitor,
         [new(now.AddMinutes(-35), "unregistered", "rds-02.demo.local", "DG-Apps"), new(now.AddHours(-3), "registered", "vdi-02.demo.local", "DG-Desktops"),
          new(now.AddHours(-3.2), "poweredOn", "vdi-02.demo.local", "DG-Desktops"), new(now.AddDays(-1), "registered", "rds-01.demo.local", "DG-Apps")], true, 0, 0,
         Enumerable.Range(0, 24).Select(i => new HourCount(now.AddHours(i - 23), new[] { 1, 0, 0, 0, 1, 2, 4, 9, 22, 31, 18, 12, 14, 19, 11, 8, 6, 4, 3, 2, 1, 1, 1, 0 }[(i + now.Hour + 1) % 24], 25 + (i * 7 % 30))).ToList(),
-        [DemoStrip("rds-01.demo.local", "DG-Apps", 70, 3), DemoStrip("rds-02.demo.local", "DG-Apps", 45, 5), DemoStrip("vdi-01.demo.local", "DG-Desktops", 30, 2), DemoStrip("vdi-02.demo.local", "DG-Desktops", 25, 7)]);
+        [DemoStrip("rds-01.demo.local", "DG-Apps", 70, 3), DemoStrip("rds-02.demo.local", "DG-Apps", 45, 5), DemoStrip("vdi-01.demo.local", "DG-Desktops", 30, 2), DemoStrip("vdi-02.demo.local", "DG-Desktops", 25, 7)],
+        DemoHeat(now));
+
+    /// <summary>A working week: busy at 7 to 9 and a little after lunch, quiet at the weekend.</summary>
+    private static HeatView DemoHeat(DateTimeOffset now)
+    {
+        var top = new DateTimeOffset(now.UtcDateTime.Year, now.UtcDateTime.Month, now.UtcDateTime.Day, now.UtcDateTime.Hour, 0, 0, TimeSpan.Zero);
+        var start = top.AddHours(-167);
+        var logons = new int[168]; var avg = new int?[168];
+        for (var i = 0; i < 168; i++)
+        {
+            var t = start.AddHours(i).ToLocalTime();
+            var h = t.Hour; var weekend = t.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
+            var v = weekend ? 2.5 * Math.Exp(-Math.Pow((h - 11) / 3.0, 2)) : 28 * Math.Exp(-Math.Pow((h - 8.3) / 1.4, 2)) + 13 * Math.Exp(-Math.Pow((h - 13) / 1.3, 2)) + 4 * Math.Exp(-Math.Pow((h - 17) / 2.0, 2));
+            logons[i] = (int)Math.Round(v + (i * 7 % 3)); avg[i] = logons[i] == 0 ? null : 24 + (h == 8 ? 12 : 0) + (i * 5 % 9);
+        }
+        return new HeatView(start, logons, avg);
+    }
 
     private static LoadStrip DemoStrip(string name, string group, int peak, int shift) => new(name, group,
         Enumerable.Range(0, 24).Select(i => name.StartsWith("rds-02") && i is > 18 and < 22 ? (double?)null : Math.Round(Math.Max(2, peak * Math.Exp(-Math.Pow((i - 10 - shift % 3) / 4.5, 2))), 1)).ToList());
@@ -436,7 +474,7 @@ public sealed class InsightsService(SssOptions options, IMonitorClient? monitor,
         var users = await m.GetUsersByIdAsync(userIds.Values, ct);
         findings = findings.Select(f => f.Kind is "connection" or "logon" && userIds.TryGetValue(f.Subject, out var uid) && users.TryGetValue(uid, out var u)
             ? f with { Subject = u.Name, UserName = u.Name, UserSid = u.Sid } : f).ToList();
-        return new InsightsView(now, live.Count, findings, groups, rows, false, disconnected);
+        return new InsightsView(now, live.Count, findings, groups, rows, false, disconnected, live.Count(x => x.ConnectionState != 2), live.Count(x => x.ConnectionState == 2));
     }
 
     private static DateTimeOffset? Since(SessionInfo s, DateTimeOffset now) => s.StateChangedAt ?? (s.IdleSeconds is { } idle ? now.AddSeconds(-idle) : null);
@@ -631,7 +669,9 @@ public sealed class InsightsService(SssOptions options, IMonitorClient? monitor,
     private static IReadOnlyList<GroupLogon> DemoGroups() =>
     [new("DG-Apps", 120, 52, 48, 81, [38, 41, 44, 47, 55, 61, 66]), new("DG-Desktops", 210, 31, 28, 49, [30, 33, 29, 31, null, 28, 32]), new("DG-Kiosk", 35, 19, 17, 28, [20, 19, 18, null, 19, 21, 19])];
 
-    private InsightsView Demo() => new(clock.GetUtcNow(), 72,
+    private InsightsView Demo() => DemoCore() with { ActiveSessions = 56, DisconnectedSessions = 16 };
+
+    private InsightsView DemoCore() => new(clock.GetUtcNow(), 72,
     [
         new("crit", "unregistered", "rds-02.demo.local", "", Machine: "rds-02.demo.local", Group: "DG-Apps"),
         new("crit", "connection", "demo.anna", "ICA RTT 182 ms · 1.1 Mbit/s", "demo.anna", "S-1-5-21-1-1-1-1101", "rds-01.demo.local", "DG-Apps", 182),

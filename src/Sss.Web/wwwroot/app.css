@@ -381,3 +381,32 @@ figure.daycard { margin: 0 0 12px; } svg.dayc .slice { stroke: var(--surface); s
 .map-label.place { font-weight: 700; }
 .rowbtns { white-space: nowrap; } .rowbtns button + button { margin-left: 6px; }
 .mapplace { position: relative; } .mapclose { position: absolute; top: 8px; right: 10px; min-width: 36px; font-size: 1.2rem; line-height: 1; }
+
+/* Insights charts */
+.kpi .kd { font-size: .78rem; color: var(--muted); } .kpi .kd.bad { color: var(--crit); } .kpi .kd.ok { color: var(--good); }
+svg.tspark { width: 100%; height: 30px; margin-top: 4px; } svg.tspark .sparea { opacity: .14; } svg.tspark .spline { fill: none; stroke-width: 2; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+svg.tspark.cat0 .sparea, svg.tspark.cat0 .spdot { fill: var(--cat0); } svg.tspark.cat0 .spline { stroke: var(--cat0); }
+svg.tspark.cat2 .sparea, svg.tspark.cat2 .spdot { fill: var(--cat2); } svg.tspark.cat2 .spline { stroke: var(--cat2); }
+svg.tspark.cat3 .sparea, svg.tspark.cat3 .spdot { fill: var(--cat3); } svg.tspark.cat3 .spline { stroke: var(--cat3); }
+svg.tspark.cat4 .sparea, svg.tspark.cat4 .spdot { fill: var(--cat4); } svg.tspark.cat4 .spline { stroke: var(--cat4); }
+.chrow { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 12px; margin: 0 0 12px; }
+.chcard { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); padding: 10px 14px; margin: 0 0 12px; } .chrow .chcard { margin: 0; }
+.chcard h3 { margin: 0 0 2px; font-size: 1rem; } .chhint { margin: 0 0 8px; font-size: .85rem; }
+svg.chart2 { width: 100%; height: auto; display: block; } svg.chart2 text { font-size: 13px; fill: var(--muted); } svg.chart2 text.v { fill: var(--text); font-weight: 600; } svg.chart2 text.hot { fill: var(--crit); }
+svg.chart2 text.gnum { font-size: 42px; font-weight: 700; fill: var(--text); } svg.chart2 text.saved { fill: var(--good); }
+svg.chart2 .trk { fill: color-mix(in srgb, var(--muted) 14%, var(--surface)); } svg.chart2 .hitrow { cursor: default; } svg.chart2 .hitrow:hover rect:first-child { fill: var(--accent); fill-opacity: .06; }
+svg.chart2 .avg.good { fill: var(--good); } svg.chart2 .avg.warn { fill: var(--warn); } svg.chart2 .avg.crit { fill: var(--crit); } svg.chart2 .avg.few { fill: var(--unk); }
+svg.chart2 .p90.good { fill: color-mix(in srgb, var(--good) 22%, var(--surface)); } svg.chart2 .p90.warn { fill: color-mix(in srgb, var(--warn) 24%, var(--surface)); } svg.chart2 .p90.crit { fill: color-mix(in srgb, var(--crit) 24%, var(--surface)); } svg.chart2 .p90.few { fill: color-mix(in srgb, var(--unk) 20%, var(--surface)); }
+svg.chart2 .limit { stroke: var(--text); stroke-dasharray: 4 3; opacity: .7; }
+svg.chart2 .garc { fill: none; } svg.chart2 .garc.z.crit { stroke: color-mix(in srgb, var(--crit) 30%, var(--surface)); } svg.chart2 .garc.z.warn { stroke: color-mix(in srgb, var(--warn) 32%, var(--surface)); } svg.chart2 .garc.z.good { stroke: color-mix(in srgb, var(--good) 30%, var(--surface)); }
+svg.chart2 .garc.crit:not(.z) { stroke: var(--crit); } svg.chart2 .garc.warn:not(.z) { stroke: var(--warn); } svg.chart2 .garc.good:not(.z) { stroke: var(--good); }
+svg.chart2 .gknob { stroke: var(--surface); stroke-width: 3; } svg.chart2 .gknob.crit { fill: var(--crit); } svg.chart2 .gknob.warn { fill: var(--warn); } svg.chart2 .gknob.good { fill: var(--good); }
+svg.chart2 .ring { cursor: default; } svg.chart2 .ring.cat1 { stroke: var(--cat1); } svg.chart2 .ring.cat3 { stroke: var(--cat3); }
+svg.chart2 .hcell { fill: var(--cat0); } svg.chart2 .hcell.now { stroke: var(--text); stroke-width: 2; }
+svg.chart2 .ptick { stroke: var(--text); stroke-width: 3; stroke-linecap: round; } svg.chart2 .ptick.hot { stroke: var(--crit); }
+svg.chart2 .gridl { stroke: var(--border); stroke-dasharray: 2 3; } svg.chart2 .spread { stroke: var(--cat3); stroke-width: 3; opacity: .45; stroke-linecap: round; }
+.chlegend { display: flex; gap: 14px; flex-wrap: wrap; font-size: .8rem; color: var(--muted); margin-top: 4px; } .chlegend > span { display: inline-flex; align-items: center; gap: 5px; }
+.chlegend .swatch.lt { background: color-mix(in srgb, var(--cat0) 25%, var(--surface)); }
+.chcard .daywrap { position: relative; }
+/* on a narrow screen the charts keep a readable size and scroll sideways */
+.chcard .daywrap { overflow-x: auto; } svg.chart2 { min-width: 620px; } .chrow svg.chart2 { min-width: 0; }

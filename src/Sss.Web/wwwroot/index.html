@@ -7,6 +7,7 @@
   <title>SSS – Session Self Service</title>
   <link rel="stylesheet" href="app.css">
   <script src="worldmap.js" defer></script>
+  <script src="insightcharts.js" defer></script>
   <script src="app.js" defer></script>
 </head>
 <body>
@@ -142,12 +143,15 @@
       <p class="muted" data-i18n="insIntro">What is conspicuous right now, read from the Citrix Monitor.</p>
       <div id="ins-kpi" class="kpis"></div>
       <div id="ins-day" class="daybox"></div>
+      <div id="ins-health" class="chrow"></div>
+      <div id="ins-heat"></div>
       <h3 data-i18n="insGroupCards">Delivery groups at a glance</h3>
       <div id="ins-groupcards" class="gcards"></div>
       <h3 data-i18n="insFindings">Conspicuous now</h3>
       <ul id="ins-findings" class="hints"></ul>
       <p id="ins-none" class="muted" hidden data-i18n="insNone">Nothing conspicuous: all measured values are within the limits.</p>
       <h3 data-i18n="insGroups">Logon time per delivery group (last 7 days)</h3>
+      <div id="ins-groupbars"></div>
       <div id="ins-grouptrend" class="trendbox"></div>
       <div class="table-wrap"><table id="ins-groups"><caption class="sr" data-i18n="insGroups"></caption><thead></thead><tbody></tbody></table></div>
       <h3 data-i18n="insDisconnected">Disconnected sessions</h3>
@@ -182,14 +186,17 @@
       <div id="ins-strips" class="strips"></div>
       <h3 data-i18n="insUsage">Machine load, last 7 days</h3>
       <p class="muted" data-i18n="insUsageHelp"></p>
+      <div id="ins-usage-chart"></div>
       <p id="ins-usage-none" class="muted" hidden data-i18n="insUsageNone">The site delivers no utilisation data.</p>
       <div class="table-wrap"><table id="ins-usage"><caption class="sr" data-i18n="insUsage"></caption><thead></thead><tbody></tbody></table></div>
       <h3 data-i18n="insAppStarts">Application start times, last 7 days</h3>
       <p class="muted" data-i18n="insStartsHelp"></p>
+      <div id="ins-starts-chart"></div>
       <p id="ins-starts-none" class="muted" hidden data-i18n="insStartsNone">The site delivers no application start times.</p>
       <div class="table-wrap"><table id="ins-starts"><caption class="sr" data-i18n="insAppStarts"></caption><thead></thead><tbody></tbody></table></div>
       <h3 data-i18n="insCosts">Costs, last 30 days</h3>
       <p class="muted" data-i18n="insCostsHelp"></p>
+      <div id="ins-costs-chart"></div>
       <p id="ins-costs-none" class="muted" hidden data-i18n="insCostsNone">The site delivers no cost data.</p>
       <div class="table-wrap"><table id="ins-costs"><caption class="sr" data-i18n="insCosts"></caption><thead></thead><tbody></tbody></table></div>
       <h3 data-i18n="insTimeline">What changed, last 7 days</h3>

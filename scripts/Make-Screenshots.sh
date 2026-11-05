@@ -22,6 +22,6 @@ shot overtime "&shot=charts" 1300
 shot profile "&shot=profile" 1100
 shot processes "&shot=processes" 1000
 shot environment "&shot=env" 1900
-shot insights "&shot=insights" 3300
+shot insights "&shot=insights" 6800
 shot map "&shot=map" 1000
 shot machine "&shot=machine" 1100

@@ -2,6 +2,14 @@
 
 All notable changes to SSS. The project follows [Semantic Versioning](docs/COMPATIBILITY.md); versions below 1.0.0 may still change configuration keys between minor versions, and every such change is listed here.
 
+## 0.4.6 - 2026-11-05 (beta)
+
+### Added
+- **Insights: new charts in the style of Director**, each with an info box on hover and in light and dark mode: key figures with a trend line and the change against the 24 hours before; logon time per delivery group as bars (average, 90th percentile, limit); a health gauge of the site with a bar per group; sessions by state as a ring; a heat map of the logons of the last 7 days (weekday against hour); utilisation with peaks; application start times (average to 90th percentile); costs stacked (compute, storage, saving). The tables with the exact numbers stay below.
+
+### Fixed
+- Policies tab: the search field named the wrong columns; it now says it searches path, name and value.
+
 ## 0.4.5 - 2026-11-05 (beta)
 
 ### Added
