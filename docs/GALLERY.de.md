@@ -16,6 +16,10 @@ Alle Bilder zeigen den eingebauten Demo-Modus mit erfundenen Daten; keines stamm
 
 ![Insights: was gerade auffällt, Anmeldezeit je Gruppe, Abstürze und Verbindungsfehler](img/insights-light.png)
 
+## Maschinenseite: Verfügbarkeit der letzten 7 Tage, Last, Abstürze
+
+![Maschinenseite: Verfügbarkeit der letzten 7 Tage, Last, Abstürze](img/machine-light.png)
+
 ## Umgebung: Plattformen, Standorte, VDA-Maschinen, am häufigsten gestartete Anwendungen
 
 ![Umgebung: Plattformen, Standorte, VDA-Maschinen, am häufigsten gestartete Anwendungen](img/environment-light.png)

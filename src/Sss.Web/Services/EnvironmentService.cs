@@ -49,10 +49,12 @@ public sealed record LocationRow(string Name, int Sessions, int Devices, int Use
 public sealed record CitrixLocationRow(string Country, string City, int Sessions, int Devices, int Users);
 /// <summary>How the sessions reach the VDA: through a gateway (named), directly, or unknown (Citrix reports no "connected via" host).</summary>
 public sealed record PathRow(string Name, int Sessions, string Kind);
+/// <summary>The connections of one day by path: through a gateway, direct, or unknown.</summary>
+public sealed record PathDay(DateTimeOffset Day, int Gateway, int Direct, int Unknown);
 public sealed record EnvironmentView(DateTimeOffset At, int Sessions, int Devices, int Users, int Outdated, int WithoutVersion,
     bool VersionAvailable, bool LocationsConfigured, IReadOnlyList<VersionRow> Versions, IReadOnlyList<LocationRow> Locations, bool Demo,
     IReadOnlyList<CitrixLocationRow>? CitrixLocations = null, IReadOnlyList<AppUsage>? Apps = null, IReadOnlyList<MachineGroup>? Machines = null,
-    IReadOnlyList<MachineInfo>? MachineList = null, IReadOnlyList<IReadOnlyList<DetailItem>>? Lhc = null, IReadOnlyList<PathRow>? Paths = null);
+    IReadOnlyList<MachineInfo>? MachineList = null, IReadOnlyList<IReadOnlyList<DetailItem>>? Lhc = null, IReadOnlyList<PathRow>? Paths = null, IReadOnlyList<PathDay>? Trend = null);
 
 /// <summary>Aggregates the live sessions of the whole site by Workspace app version and platform and by location (networks you assigned to a
 /// name). Only counts are produced, nothing per person. The result is cached for a minute because it reads every live session.</summary>
@@ -76,7 +78,8 @@ public sealed class EnvironmentService(SssOptions options, IMonitorClient? monit
             IReadOnlyList<AppUsage> apps = demo ? DemoApps() : monitor is null ? [] : await monitor.GetAppUsageAsync(7, 15, ct);
             IReadOnlyList<MachineInfo> machines = demo ? DemoMachines() : monitor is null ? [] : await monitor.GetMachinesAsync(ct);
             IReadOnlyList<IReadOnlyList<DetailItem>> lhc = demo ? [] : monitor is null ? [] : await monitor.GetLhcAsync(ct);
-            view = view with { Apps = apps, Machines = GroupMachines(machines), MachineList = machines, Lhc = lhc };
+            var trend = demo ? DemoTrend() : monitor is null ? [] : PathTrend(await monitor.GetPathSamplesAsync(clock.GetUtcNow().AddDays(-7), ct), clock.GetUtcNow());
+            view = view with { Apps = apps, Machines = GroupMachines(machines), MachineList = machines, Lhc = lhc, Trend = trend };
             _cache = (clock.GetUtcNow(), view);
             return view;
         }
@@ -136,6 +139,27 @@ public sealed class EnvironmentService(SssOptions options, IMonitorClient? monit
             : (s.ConnectedVia!.Trim(), "gateway");
         return sessions.Select(Of).GroupBy(x => x).Select(g => new PathRow(g.Key.Name, g.Count(), g.Key.Kind))
             .OrderBy(r => r.Kind switch { "gateway" => 0, "direct" => 1, _ => 2 }).ThenByDescending(r => r.Sessions).Take(12).ToList();
+    }
+
+    /// <summary>The connections of the last 7 days (UTC days, today last) by path, with the same rules as <see cref="Paths"/>. Empty when no day has a connection.</summary>
+    public static IReadOnlyList<PathDay> PathTrend(IReadOnlyList<PathSample> samples, DateTimeOffset now)
+    {
+        static string Short(string? h) => (h ?? "").Trim().ToLowerInvariant().Split('.')[0];
+        string Kind(PathSample s) => string.IsNullOrWhiteSpace(s.Via) ? "unknown" : IsLoopback(s.Via) || Short(s.Via) == Short(s.Client) ? "direct" : "gateway";
+        var today = now.UtcDateTime.Date;
+        var days = Enumerable.Range(0, 7).Select(i => today.AddDays(i - 6)).Select(d =>
+        {
+            var k = samples.Where(s => s.At.UtcDateTime.Date == d).Select(Kind).ToList();
+            return new PathDay(new DateTimeOffset(d, TimeSpan.Zero), k.Count(x => x == "gateway"), k.Count(x => x == "direct"), k.Count(x => x == "unknown"));
+        }).ToList();
+        return days.Any(d => d.Gateway + d.Direct + d.Unknown > 0) ? days : [];
+    }
+
+    private IReadOnlyList<PathDay> DemoTrend()
+    {
+        var today = clock.GetUtcNow().UtcDateTime.Date;
+        int[] total = [88, 76, 140, 168, 181, 176, 92], gw = [24, 21, 41, 52, 60, 63, 35];
+        return Enumerable.Range(0, 7).Select(i => new PathDay(new DateTimeOffset(today.AddDays(i - 6), TimeSpan.Zero), gw[i], total[i] - gw[i] - total[i] / 12, total[i] / 12)).ToList();
     }
 
     private static bool IsLoopback(string host) => host.Trim() is var h && (h.Equals("localhost", StringComparison.OrdinalIgnoreCase) || (IPAddress.TryParse(h, out var ip) && IPAddress.IsLoopback(ip)));

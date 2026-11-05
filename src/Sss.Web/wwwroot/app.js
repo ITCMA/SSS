@@ -650,6 +650,7 @@ function renderEnvCharts(d) {
     barChart(t('envChartPeak'), [...(d.apps ?? [])].sort((a, b) => b.peakConcurrent - a.peakConcurrent).slice(0, 8).map((a) => ({ label: a.name, value: a.peakConcurrent })).filter((a) => a.value > 0)),
   ].filter(Boolean);
   charts.find((c) => c.querySelector('h3')?.textContent === t('envChartPath'))?.classList.add('fullrow');
+  if ((d.trend ?? []).length) charts.splice(charts.findIndex((c) => c.querySelector('h3')?.textContent === t('envChartPath')) + 1, 0, pathTrendChart(d.trend));
   $('env-charts').replaceChildren(...charts);
 }
 
@@ -1023,6 +1024,7 @@ async function openMachine(name) {
     el('td', { text: fmt(x.at) }), el('td', { text: x.name }), el('td', { text: x.user ?? '' })))))) : el('p', { class: 'muted', text: t('machNone') });
   body.replaceChildren(
     el('dl', { class: 'facts' }, ...facts.flatMap(([k, v]) => [el('dt', { text: k }), el('dd', { text: String(v) })])),
+    sect(t('machAvail'), availabilityBand(d.outages ?? [])),
     d.strip ? sect(t('insStrips'), (() => { const w = el('div', { class: 'stripgrid one' }); renderStripsInto(w, d.strip); return w; })()) : '',
     sect(t('insFaults'), recTable(d.faults)), sect(t('insFailures'), recTable(d.failures)),
     sect(t('insTimeline'), d.events.length ? el('ul', { class: 'hints' }, ...d.events.map((e) => el('li', { text: `${fmt(e.at)} · ${t(`tl_${e.kind}`)}` }))) : el('p', { class: 'muted', text: t('machNone') })),
@@ -1036,6 +1038,72 @@ async function openMachine(name) {
   })))) : el('p', { class: 'muted', text: t('machNone') }));
 }
 function renderStripsInto(box, strip) { renderStripRows(box, [strip]); }
+
+// The last 7 days of one machine as a band: green while it was registered, red where the failure log of the Monitor shows it had lost the registration.
+function availabilityBand(outages) {
+  const now = Date.now(), from = now - 7 * 86400000, W = 1100, L = 6, R = 6, H = 58, x = (ms) => L + ((Math.min(now, Math.max(from, ms)) - from) / (now - from)) * (W - L - R);
+  const df = new Intl.DateTimeFormat(state.lang, { weekday: 'short' }), tf = new Intl.DateTimeFormat(state.lang, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  const svg = svgEl('svg', { viewBox: `0 0 ${W} ${H}`, class: 'availband', role: 'img', 'aria-label': t('machAvail') });
+  svg.append(svgEl('rect', { class: 'avok', x: L, y: 6, width: W - L - R, height: 26, rx: 5 }));
+  const mid = new Date(); mid.setHours(0, 0, 0, 0);
+  for (let k = 0; k < 7; k++) {
+    const at = mid.getTime() - k * 86400000, px = x(at);
+    if (px > L + 2 && px < W - R - 2) { svg.append(svgEl('line', { class: 'avtick', x1: px, y1: 6, x2: px, y2: 32 })); const tx = svgEl('text', { x: px + 4, y: 50 }); tx.textContent = df.format(new Date(at)); svg.append(tx); }
+  }
+  let down = 0;
+  for (const o of outages) {
+    const a = new Date(o.start).getTime(), b = o.end ? new Date(o.end).getTime() : now;
+    down += Math.max(0, Math.min(b, now) - Math.max(a, from));
+    const r = svgEl('rect', { class: 'avbad', x: x(a), y: 6, width: Math.max(3, x(b) - x(a)), height: 26, rx: 3 });
+    const tip = svgEl('title'); tip.textContent = `${tf.format(new Date(a))} – ${o.end ? tf.format(new Date(b)) : t('machAvailOngoing')} (${fmtDuration(b - a)})`; r.append(tip); svg.append(r);
+  }
+  const pct = Math.max(0, 100 - (down / (now - from)) * 100);
+  const sum = outages.length ? t('machAvailSummary', { pct: pct.toFixed(pct >= 99.95 ? 0 : 1), n: outages.length }) : t('machAvailNone');
+  return el('div', { class: 'daycard' }, el('div', { class: 'dayhead' }, el('strong', { text: sum }),
+    el('div', { class: 'daykey' }, el('span', {}, el('span', { class: 'kok' }), t('regRegistered')), el('span', {}, el('span', { class: 'kbad' }), t('machAvailLost')))), svg);
+}
+function fmtDuration(ms) { const m = Math.round(ms / 60000); return m < 60 ? `${m} min` : m < 2880 ? `${(m / 60).toFixed(1)} h` : `${(m / 1440).toFixed(1)} d`; }
+
+// The connections of the last days by path as bars (gateway, direct, unknown) with the gateway share above each bar; hovering a day shows the numbers.
+function pathTrendChart(days) {
+  const W = 1100, H = 190, L = 54, R = 14, base = 150, top = 22, slot = (W - L - R) / days.length, bw = Math.min(110, slot * 0.6);
+  const tot = (d) => d.gateway + d.direct + d.unknown, maxN = niceStep(Math.max(1, ...days.map(tot))), y = (n) => base - (n / maxN) * (base - top);
+  const svg = svgEl('svg', { viewBox: `0 0 ${W} ${H}`, class: 'dayc', role: 'img', 'aria-label': t('envPathTrend') });
+  const hl = svgEl('rect', { class: 'dhl', x: 0, y: top - 6, width: slot, height: 0 });
+  svg.append(hl);
+  const tx = (px, py, txt, anchor = 'start', cls = '') => { const e = svgEl('text', { x: px, y: py, 'text-anchor': anchor, class: cls }); e.textContent = txt; return e; };
+  const df = new Intl.DateTimeFormat(state.lang, { weekday: 'short', day: '2-digit', month: '2-digit', timeZone: 'UTC' });
+  for (let i = 0; i <= 3; i++) { const n = (maxN / 3) * i; svg.append(svgEl('line', { class: i === 0 ? 'axis' : 'grid', x1: L, y1: y(n), x2: W - R, y2: y(n) }), tx(L - 5, y(n) + 4, String(Math.round(n)), 'end')); }
+  const tipBox = el('div', { class: 'daytip', role: 'status', hidden: '' });
+  days.forEach((d, i) => {
+    const cx = L + i * slot + slot / 2, x0 = cx - bw / 2, total = tot(d);
+    let acc = 0;
+    for (const [n, cls] of [[d.direct, 'cat1'], [d.unknown, 'cat5'], [d.gateway, 'cat0']]) {
+      if (n === 0) continue;
+      svg.append(svgEl('rect', { class: `slice ${cls}`, x: x0, y: y(acc + n), width: bw, height: Math.max(1, y(acc) - y(acc + n)) })); acc += n;
+    }
+    svg.append(tx(cx, H - 6, df.format(new Date(d.day)), 'middle'));
+    if (total > 0) svg.append(tx(cx, y(total) - 5, `${Math.round((d.gateway / total) * 100)} %`, 'middle', 'peak'));
+    const col = svgEl('rect', { class: 'dhit', x: L + i * slot, y: top - 6, width: slot, height: base - top + 6, fill: 'transparent' });
+    const show = () => {
+      const pc = (n) => (total ? ` (${Math.round((n / total) * 100)} %)` : '');
+      tipBox.replaceChildren(el('strong', { text: df.format(new Date(d.day)) }), el('div', { text: `${t('envPathGateway')}: ${d.gateway}${pc(d.gateway)}` }),
+        el('div', { text: `${t('envPathDirect')}: ${d.direct}${pc(d.direct)}` }), el('div', { text: `${t('envUnknown')}: ${d.unknown}${pc(d.unknown)}` }));
+      tipBox.hidden = false;
+      const host = tipBox.parentElement.getBoundingClientRect(), r = col.getBoundingClientRect();
+      tipBox.style.left = `${Math.min(host.width - tipBox.offsetWidth - 4, Math.max(4, r.left - host.left + r.width / 2 - tipBox.offsetWidth / 2))}px`;
+      tipBox.style.top = `${Math.max(0, r.top - host.top - tipBox.offsetHeight - 4)}px`;
+      hl.setAttribute('x', L + i * slot); hl.setAttribute('height', base - top + 6);
+    };
+    col.addEventListener('mouseenter', show); col.addEventListener('click', show);
+    svg.addEventListener('mouseleave', () => { tipBox.hidden = true; hl.setAttribute('height', 0); });
+    svg.append(col);
+  });
+  const key = (cls, txt) => el('span', {}, el('span', { class: `swatch ${cls}` }), txt);
+  return el('figure', { class: 'envchart fullrow daycard' }, el('div', { class: 'dayhead' }, el('strong', { text: t('envPathTrend') }),
+    el('div', { class: 'daykey' }, key('cat0', t('envPathGateway')), key('cat1', t('envPathDirect')), key('cat5', t('envUnknown')))),
+    el('div', { class: 'daywrap' }, svg, tipBox), el('p', { class: 'muted', text: t('envPathTrendHint') }));
+}
 
 // The day at a glance: logons per hour as bars, the average logon time as a line (its own scale on the right) and crashes and connection failures
 // as marks on the same time axis, so "what happened when" reads off one picture.
@@ -2197,6 +2265,7 @@ async function init() {
   }
   if (!$('demo').hidden && shot === 'env' && state.caps.admin) { showView('env'); await loadEnv(); }
   if (!$('demo').hidden && shot === 'insights' && state.helpdesk) { showView('insights'); await loadInsights(); }
+  if (!$('demo').hidden && shot === 'machine' && state.helpdesk) { showView('insights'); await loadInsights(); await openMachine('rds-02.demo.local'); }
   if (!$('demo').hidden && shot === 'map' && state.helpdesk) { showView('map'); await loadMap(); }
   state.timer = setInterval(() => { if (!document.hidden && !$('confirm').open && state.view !== 'audit' && state.view !== 'env') load(); }, refreshSeconds * 1000);
 }

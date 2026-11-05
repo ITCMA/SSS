@@ -48,7 +48,7 @@ Members of the AD groups of the [roles](docs/ROLES.md) get a **Helpdesk** tab an
 - **End applications and processes** of a session through a restricted endpoint on the VDAs (off by default).
 - **"Copy support info"** puts the key facts of a session into the clipboard for a ticket.
 - **Insights tab**: what is conspicuous right now (slow connections and logons, machines not registered or busy), logon time per delivery group, a machine overview, and the last 30 days of a user at a glance ([docs/INSIGHTS.md](docs/INSIGHTS.md)). Users see their own sessions as clear cards.
-- **Map tab**: all live sessions on a world map with zoom down to the single session and a search for users, devices and cities; the map data is bundled, nothing goes to a map service ([docs/MAP.md](docs/MAP.md)).
+- **Map tab**: all live sessions on a world map with zoom down to the single session and a live search for users, devices and cities, place names, a flight into clouds of devices and an info box on hover; the map data is bundled, nothing goes to a map service ([docs/MAP.md](docs/MAP.md)).
 - **Environment tab** for admins, with charts and tables: Workspace app versions and platforms of all live sessions, sessions per location, VDA machines by state and agent version, the most started applications, plus a hint for users with an outdated client.
 - **Citrix Cloud (DaaS)**: a read-only mode that reads the cloud Monitor service instead of a Delivery Controller ([docs/CLOUD.md](docs/CLOUD.md)), not yet tested against a real tenant.
 - **Status page** with live health checks instead of digging through event logs; **audit trail** of every search, view, log-off, message and process action: who did what to whom, with a hash chain, an **Audit tab** for the auditor and copies to a **central place** (UNC folder, Syslog/CEF, HTTP/SIEM, SNMP).
@@ -134,6 +134,7 @@ Open <http://localhost:5080> and add `?shot=profile` or `?shot=processes` to the
 - [x] Citrix Cloud (DaaS) backend, read-only ([description](docs/CLOUD.md)), not yet tested against a real tenant
 - [ ] Citrix Cloud: log-off and messages through the DaaS REST API
 - [x] Insights: timeline "what changed", health score per user and machine, machine load, application start times, cost view
+- [x] Machine availability (7 days) from the Monitor failure log and connection path by day, without a database of our own
 - [ ] Long-term history (weeks and months) with an optional small database (SQL) in addition to the file-only setup
 - [ ] 1.0 after a public beta period
 

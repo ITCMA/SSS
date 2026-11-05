@@ -2,6 +2,20 @@
 
 All notable changes to SSS. The project follows [Semantic Versioning](docs/COMPATIBILITY.md); versions below 1.0.0 may still change configuration keys between minor versions, and every such change is listed here.
 
+## 0.4.5 - 2026-11-05 (beta)
+
+### Added
+- **Machine page: availability of the last 7 days** as a band (green = registered, red = lost registration, with the times as tooltip) and the share registered, read from the failure log of the Monitor. No database of our own is needed; the history reaches as far back as the Monitor keeps it.
+- **Map: new look** (soft land colours with a grid, glowing place markers with a pulse, light and dark).
+- **Map: place names, zoom flight and info box**: the city is shown once per place (also for many devices behind one provider address), in the table and at the dot; a city missing from the bundled list gets its own dot named after the city instead of being lumped into the country; a click on a dot or a result flies there in about a second (zooming out a little on long trips); a live filter over both lists (known and unusable location, closed by default, opened while searching); hovering a dot shows an info box with the place and the users there.
+- **Map: more exact places**: the bundled list now holds about 40,000 cities from 15,000 inhabitants (GeoNames, CC BY 4.0, credited on the map and in docs/MAP.md), so smaller towns are placed exactly.
+- **Map: user names** come from the Monitor user table and, where that has none, from the Broker session list (matched by session key); a line under the map says how many sessions still have no name and why. The user lookup now works in chunks and no longer drops names when one chunk fails.
+- **Environment: connection path by day** for the last 7 days: bars of the connections through a gateway, direct and unknown, with the gateway share above each bar and the numbers on hover.
+
+### Fixed
+- The user lookup of the Monitor resolved at most 60 users; it now works in chunks (up to 600 users), keeps the names when one chunk fails and shows users without a usable SID by name.
+- When the description of the Monitor ($metadata) could not be read, the optional fields (client version, location, gateway) were missing for 5 minutes; it is now asked again after 15 seconds.
+
 ## 0.4.4 - 2026-11-05 (beta)
 
 ### Added

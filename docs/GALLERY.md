@@ -16,6 +16,10 @@ All pictures show the built-in demo mode with invented data; none comes from a r
 
 ![Insights: what is conspicuous right now, logon time per group, crashes and failures](img/insights-light.png)
 
+## Machine page: availability of the last 7 days, load, crashes
+
+![Machine page: availability of the last 7 days, load, crashes](img/machine-light.png)
+
 ## Environment: platforms, locations, VDA machines, most started applications
 
 ![Environment: platforms, locations, VDA machines, most started applications](img/environment-light.png)

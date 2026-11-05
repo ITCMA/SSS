@@ -48,7 +48,7 @@ Mitglieder der AD-Gruppen der [Rollen](docs/ROLES.de.md) bekommen einen **Helpde
 - **Anwendungen und Prozesse beenden** einer Sitzung über einen eingeschränkten Endpunkt auf den VDAs (standardmäßig aus).
 - **„Support-Info kopieren“** legt die wichtigsten Fakten einer Sitzung für ein Ticket in die Zwischenablage.
 - **Insights-Reiter**: was gerade auffällig ist (langsame Verbindungen und Anmeldungen, nicht registrierte oder ausgelastete Maschinen), Anmeldezeit je Bereitstellungsgruppe, Maschinenübersicht und die letzten 30 Tage eines Benutzers auf einen Blick ([docs/INSIGHTS.de.md](docs/INSIGHTS.de.md)). Benutzer sehen ihre Sitzungen als übersichtliche Karten.
-- **Karte**: alle Live-Sitzungen auf einer Weltkarte mit Zoom bis zur einzelnen Sitzung und Suche nach Benutzern, Geräten und Orten; die Kartendaten sind enthalten, nichts geht an einen Kartendienst ([docs/MAP.de.md](docs/MAP.de.md)).
+- **Karte**: alle Live-Sitzungen auf einer Weltkarte mit Zoom bis zur einzelnen Sitzung und Live-Suche nach Benutzern, Geräten und Orten, Ortsnamen, Flug in Geräte-Wolken und Info-Box beim Überfahren; die Kartendaten sind enthalten, nichts geht an einen Kartendienst ([docs/MAP.de.md](docs/MAP.de.md)).
 - **Umgebungs-Reiter** für Admins, mit Diagrammen und Tabellen: Workspace-App-Versionen und Plattformen aller Live-Sitzungen, Sitzungen je Standort, VDA-Maschinen nach Zustand und Agent-Version, die am häufigsten gestarteten Anwendungen, dazu ein Hinweis für Benutzer mit veraltetem Client.
 - **Citrix Cloud (DaaS)**: ein Nur-Lese-Modus, der statt eines Delivery Controllers den Monitor-Dienst der Cloud liest ([docs/CLOUD.de.md](docs/CLOUD.de.md)), noch nicht gegen einen echten Mandanten getestet.
 - **Statusseite** mit Live-Prüfungen statt Suche in der Ereignisanzeige; **Audit-Protokoll** für jede Suche, Ansicht, Abmeldung, Nachricht und Prozessaktion: wer was an wem getan hat, mit Hash-Kette, einem **Audit-Reiter** für den Auditor und Kopien an einen **zentralen Ort** (UNC-Ordner, Syslog/CEF, HTTP/SIEM, SNMP).
@@ -134,6 +134,7 @@ ASPNETCORE_ENVIRONMENT=Development ASPNETCORE_URLS=http://localhost:5080 dotnet 
 - [x] Citrix-Cloud-Backend (DaaS), nur lesend ([Beschreibung](docs/CLOUD.de.md)), noch nicht gegen einen echten Mandanten getestet
 - [ ] Citrix Cloud: Abmelden und Nachrichten über die DaaS-REST-API
 - [x] Insights: Zeitleiste „Was hat sich geändert“, Gesundheitswert je Benutzer und Maschine, Auslastung der Maschinen, Anwendungsstartzeiten, Kostenansicht
+- [x] Verfügbarkeit der Maschinen (7 Tage) aus dem Ausfallprotokoll des Monitors und Verbindungsweg je Tag, ohne eigene Datenbank
 - [ ] Langzeitverlauf (Wochen und Monate) mit einer optionalen kleinen Datenbank (SQL) zusätzlich zur Variante nur mit Dateien
 - [ ] 1.0 nach einer öffentlichen Beta-Phase
 

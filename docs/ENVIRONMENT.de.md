@@ -67,3 +67,7 @@ Standorte und Gerätelisten sind personenbezogene Daten im Sinne des Datenschutz
 ## Verbindungsweg
 
 Ein Balken zeigt, wie die Live-Sitzungen ihre Maschine erreichen: über ein Gateway (ein Abschnitt je Gateway-Host), direkt oder unbekannt. Grundlage ist der Host „verbunden über“, den der Monitor zur Verbindung aufzeichnet: ein Host, der weder der Client noch die Maschine ist, ist ein Gateway; fehlt der Host ganz, zählt die Sitzung als unbekannt.
+
+### Verbindungsweg je Tag
+
+Unter dem Balken zeigt ein Diagramm die neuen Verbindungen der letzten 7 Tage (UTC-Tage, heute zuletzt) als gestapelte Balken: Gateway, direkt und unbekannt, mit dem Anteil über ein Gateway über jedem Balken. Der Mauszeiger auf einem Tag zeigt die Zahlen. Grundlage ist der Host „verbunden über“ der Verbindungen, die der Monitor aufgezeichnet hat; der Verlauf reicht also so weit zurück, wie der Monitor ihn aufbewahrt. SSS speichert nichts.

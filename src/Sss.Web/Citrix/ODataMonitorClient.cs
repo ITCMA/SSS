@@ -42,6 +42,12 @@ public sealed record MachineGroup(string AgentVersion, string Os, int Machines, 
 public sealed record MachineInfo(string Name, string Group, string AgentVersion, string Os, int? Registration, int? Power, bool Maintenance, int? Sessions,
     DateTimeOffset? RegistrationChanged, string? Fault, string? Id = null, DateTimeOffset? PoweredOn = null);
 
+/// <summary>A time in which a machine had lost its registration or had another fault (end null = still going on). Comes from the failure log of the Monitor, so no history of our own is kept.</summary>
+public sealed record MachineOutage(string MachineId, DateTimeOffset Start, DateTimeOffset? End, int? FaultState);
+
+/// <summary>How one connection reached the VDA: the "connected via" host (gateway) and the client name, at the time the connection was made.</summary>
+public sealed record PathSample(DateTimeOffset At, string? Via, string? Client);
+
 /// <summary>One application crash (process name and machine id) or one connection failure (reason as the Monitor reports it and machine id).</summary>
 public sealed record FaultRecord(string Name, string? MachineId, DateTimeOffset? At = null, string? SessionKey = null, long? UserId = null, IReadOnlyList<DetailItem>? Items = null);
 
@@ -107,6 +113,12 @@ public interface IMonitorClient
     /// <summary>Application starts with their start-up time since the given time (empty when the site does not deliver them).</summary>
     Task<IReadOnlyList<AppLaunch>> GetAppLaunchesAsync(DateTimeOffset since, CancellationToken ct) => Task.FromResult<IReadOnlyList<AppLaunch>>([]);
 
+    /// <summary>Times in which machines had lost their registration (or another fault) since the given time, from the failure log of the Monitor (empty when the site does not deliver it).</summary>
+    Task<IReadOnlyList<MachineOutage>> GetMachineOutagesAsync(DateTimeOffset since, CancellationToken ct) => Task.FromResult<IReadOnlyList<MachineOutage>>([]);
+
+    /// <summary>The path of the connections made since the given time (empty when the site does not deliver the "connected via" host).</summary>
+    Task<IReadOnlyList<PathSample>> GetPathSamplesAsync(DateTimeOffset since, CancellationToken ct) => Task.FromResult<IReadOnlyList<PathSample>>([]);
+
     /// <summary>Cost and savings samples of the machines since the given time (empty when the site does not deliver them).</summary>
     Task<IReadOnlyList<CostSample>> GetCostsAsync(DateTimeOffset since, CancellationToken ct) => Task.FromResult<IReadOnlyList<CostSample>>([]);
 
@@ -151,11 +163,13 @@ public sealed partial class ODataMonitorClient(HttpClient http, CitrixOptions op
 
     // $metadata is read once (and again after a few hours): which optional properties and record sets this site has, and their types.
     private Dictionary<string, Dictionary<string, string>>? _meta;
+    private DateTimeOffset _metaFailedUntil;
     private DateTimeOffset _metaUntil;
 
     private async Task<Dictionary<string, Dictionary<string, string>>> MetaAsync(CancellationToken ct)
     {
         if (_meta is not null && DateTimeOffset.UtcNow < _metaUntil) return _meta;
+        if (_metaFailedUntil > DateTimeOffset.UtcNow) return _meta ?? new(StringComparer.OrdinalIgnoreCase);   // failed a moment ago: not asked again at once
         try
         {
             var xml = await http.GetStringAsync(new Uri(Candidates()[0].Uri, "$metadata"), ct);
@@ -168,8 +182,9 @@ public sealed partial class ODataMonitorClient(HttpClient http, CitrixOptions op
         }
         catch (Exception ex) when (ex is HttpRequestException or System.Xml.XmlException or TaskCanceledException or ProviderUnavailableException)
         {
-            _metaUntil = DateTimeOffset.UtcNow.AddMinutes(5);   // without it the rest keeps working; asked again soon
-            return _meta ??= new(StringComparer.OrdinalIgnoreCase);
+            // without it the rest keeps working but the optional fields (client version, location, gateway) are missing from the answers, so it is asked again soon
+            _metaFailedUntil = DateTimeOffset.UtcNow.AddSeconds(15);
+            return _meta ?? new(StringComparer.OrdinalIgnoreCase);
         }
     }
 
@@ -314,17 +329,25 @@ public sealed partial class ODataMonitorClient(HttpClient http, CitrixOptions op
     public async Task<IReadOnlyDictionary<long, MonitorUser>> GetUsersByIdAsync(IEnumerable<long> ids, CancellationToken ct)
     {
         var result = new Dictionary<long, MonitorUser>();
-        var list = ids.Distinct().Take(60).ToList();
+        // in chunks: one request holds at most 40 ids, and up to 600 users are resolved (the map and the lists show every live session)
+        var list = ids.Distinct().Take(600).ToList();
         if (list.Count == 0) return result;
         try
         {
-            foreach (var r in await PagedJsonAsync($"Users?$filter={Esc(string.Join(" or ", list.Select(i => $"Id eq {i.ToString(CultureInfo.InvariantCulture)}")))}&$select=Id,Sid,UserName,Upn,Domain&$top=60", ct))
+            foreach (var chunk in list.Chunk(40))
             {
-                if (!TryGet(r, "Id", out var idEl) || !idEl.TryGetInt64(out var id)) continue;
-                var sid = Str(r, "Sid"); var sam = Str(r, "UserName") ?? Str(r, "Upn");
-                if (sid is null || sam is null || !SidRegex().IsMatch(sid)) continue;
-                var domain = Str(r, "Domain");
-                result[id] = new MonitorUser(string.IsNullOrEmpty(domain) ? sam : $"{domain}\\{sam}", sid);
+                IReadOnlyList<JsonElement> rows;
+                try { rows = await PagedJsonAsync($"Users?$filter={Esc(string.Join(" or ", chunk.Select(i => $"Id eq {i.ToString(CultureInfo.InvariantCulture)}")))}&$select=Id,Sid,UserName,Upn,Domain&$top=60", ct); }
+                catch (ProviderUnavailableException) { continue; }   // one failing chunk must not hide the names of the others
+                foreach (var r in rows)
+                {
+                    if (!TryGet(r, "Id", out var idEl) || !idEl.TryGetInt64(out var id)) continue;
+                    var sid = Str(r, "Sid"); var sam = Str(r, "UserName") ?? Str(r, "Upn");
+                    if (sam is null) continue;
+                    // a name without a usable SID is still shown (map, lists); it just cannot be opened as a user
+                    var domain = Str(r, "Domain");
+                    result[id] = new MonitorUser(string.IsNullOrEmpty(domain) ? sam : $"{domain}\\{sam}", sid is not null && SidRegex().IsMatch(sid) ? sid : "");
+                }
             }
         }
         catch (ProviderUnavailableException) { /* names are optional */ }
@@ -452,6 +475,31 @@ public sealed partial class ODataMonitorClient(HttpClient http, CitrixOptions op
             catch (ProviderUnavailableException) { /* the next try */ }
         }
         return result;
+    }
+
+    public async Task<IReadOnlyList<MachineOutage>> GetMachineOutagesAsync(DateTimeOffset since, CancellationToken ct)
+    {
+        try
+        {
+            if (!await HasAsync("MachineFailureLog", "FailureStartDate", ct)) return [];
+            var filter = $"FailureStartDate ge {Iso(since)} or FailureEndDate eq null";
+            return (await PagedJsonAsync($"MachineFailureLogs?$filter={Esc(filter)}&$orderby=FailureStartDate%20desc&$top=2000", ct))
+                .Select(r => (R: r, Id: Str(r, "MachineId"), Start: Date(r, "FailureStartDate"))).Where(x => x.Id is not null && x.Start is not null)
+                .Select(x => new MachineOutage(x.Id!, x.Start!.Value, Date(x.R, "FailureEndDate"), Int32(x.R, "FaultState"))).ToList();
+        }
+        catch (ProviderUnavailableException) { return []; }
+    }
+
+    public async Task<IReadOnlyList<PathSample>> GetPathSamplesAsync(DateTimeOffset since, CancellationToken ct)
+    {
+        try
+        {
+            if (!await HasAsync("Connection", "ConnectedViaHostName", ct) || !await HasAsync("Connection", "EstablishmentDate", ct)) return [];
+            return (await PagedJsonAsync($"Connections?$filter={Esc($"EstablishmentDate ge {Iso(since)}")}&$select=EstablishmentDate,ConnectedViaHostName,ClientName&$top=5000", ct))
+                .Select(r => (At: Date(r, "EstablishmentDate"), Via: Short(Str(r, "ConnectedViaHostName")), Client: Short(Str(r, "ClientName"))))
+                .Where(x => x.At is not null).Select(x => new PathSample(x.At!.Value, x.Via, x.Client)).ToList();
+        }
+        catch (ProviderUnavailableException) { return []; }
     }
 
     public async Task<IReadOnlyList<CostSample>> GetCostsAsync(DateTimeOffset since, CancellationToken ct)

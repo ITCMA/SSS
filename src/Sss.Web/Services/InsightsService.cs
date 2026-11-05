@@ -8,7 +8,8 @@ namespace Sss.Web.Services;
 /// <summary>One thing the helpdesk should look at. Severity is "crit", "warn" or "info"; the user (when there is one) lets the interface open the user's sessions.</summary>
 /// <summary>One live session on the world map: who, from which device, where Citrix locates the client and where the session runs.</summary>
 public sealed record MapPoint(string User, string? Sid, string? Device, string Country, string City, string? Machine, string? Group, string? Platform, bool Desktop);
-public sealed record MapView(DateTimeOffset At, IReadOnlyList<MapPoint> Points, bool Demo);
+/// <summary>The live sessions for the map. NoUserId = sessions for which the Monitor names no user; Unresolved = sessions whose user id the user table did not return.</summary>
+public sealed record MapView(DateTimeOffset At, IReadOnlyList<MapPoint> Points, bool Demo, int NoUserId = 0, int Unresolved = 0);
 
 /// <summary>Average and peak load of a machine over the last 7 days, and how it rates against the load limits.</summary>
 public sealed record UsageRow(string Machine, string Group, double Cpu, double PeakCpu, double Memory, double PeakMemory, string Health);
@@ -22,7 +23,7 @@ public sealed record MoreView(DateTimeOffset At, IReadOnlyList<UsageRow> Usage, 
 /// <summary>The load of a machine hour by hour over the last 24 hours (average CPU in percent; null = no sample).</summary>
 public sealed record LoadStrip(string Machine, string Group, IReadOnlyList<double?> Cpu);
 /// <summary>Everything about one machine on one page: state, load, the last 24 hours, crashes and failures there, and what changed.</summary>
-public sealed record MachineDetail(MachineHealthRow? Row, MachineInfo? Info, UsageRow? Usage, LoadStrip? Strip, IReadOnlyList<RecordRow> Faults, IReadOnlyList<RecordRow> Failures, IReadOnlyList<TimelineEvent> Events);
+public sealed record MachineDetail(MachineHealthRow? Row, MachineInfo? Info, UsageRow? Usage, LoadStrip? Strip, IReadOnlyList<RecordRow> Faults, IReadOnlyList<RecordRow> Failures, IReadOnlyList<TimelineEvent> Events, IReadOnlyList<MachineOutage>? Outages = null);
 
 /// <summary>Logons that started in one hour, and their average logon time.</summary>
 public sealed record HourCount(DateTimeOffset At, int Logons, int? AvgSeconds);
@@ -106,7 +107,19 @@ public sealed class InsightsService(SssOptions options, IMonitorClient? monitor,
             {
                 var live = await monitor.GetFarmLiveAsync(ct);
                 var users = await monitor.GetUsersByIdAsync(live.Select(x => x.UserId).OfType<long>().Distinct(), ct);
-                view = new MapView(now, MapPoints(live, users), false);
+                // the Broker names the user of every session it knows (also when the Monitor's user table does not): matched by the session key
+                Dictionary<string, (string Name, string Sid)> byKey = new(StringComparer.OrdinalIgnoreCase);
+                if (helpdesk is not null)
+                {
+                    try
+                    {
+                        foreach (var h in (await helpdesk.ListLiveAsync(null, 3000, ct)).Sessions)
+                            if (h.Session.SessionKey is { Length: > 0 } key && !string.IsNullOrWhiteSpace(h.UserName)) byKey[key] = (h.UserName, h.UserSid);
+                    }
+                    catch (ProviderUnavailableException) { /* the Broker is optional here */ }
+                }
+                var points = MapPoints(live, users, byKey);
+                view = new MapView(now, points, false, live.Count(x => x.UserId is null), live.Count(x => x.UserId is { } id && !users.ContainsKey(id)));
             }
             _map = (now, view);
             return view;
@@ -115,9 +128,10 @@ public sealed class InsightsService(SssOptions options, IMonitorClient? monitor,
     }
 
     /// <summary>One point per live session (at most 3000), the sessions of one user next to each other.</summary>
-    public static IReadOnlyList<MapPoint> MapPoints(IReadOnlyList<MonitorSession> live, IReadOnlyDictionary<long, MonitorUser> users) => live
-        .Select(s => new MapPoint(s.UserId is { } id && users.TryGetValue(id, out var u) ? u.Name : "", s.UserId is { } id2 && users.TryGetValue(id2, out var u2) ? u2.Sid : null,
-            s.ClientName, (s.ClientCountry ?? "").Trim(), (s.ClientCity ?? "").Trim(), s.Machine, s.DesktopGroup, s.ClientPlatform, s.IsDesktop))
+    public static IReadOnlyList<MapPoint> MapPoints(IReadOnlyList<MonitorSession> live, IReadOnlyDictionary<long, MonitorUser> users, IReadOnlyDictionary<string, (string Name, string Sid)>? byKey = null) => live
+        .Select(s => (S: s, U: s.UserId is { } id && users.TryGetValue(id, out var u) ? (Name: u.Name, Sid: (string?)u.Sid) : byKey is not null && byKey.TryGetValue(s.SessionKey, out var b) ? (Name: b.Name, Sid: (string?)b.Sid) : (Name: "", Sid: (string?)null)))
+        .Select(x => new MapPoint(x.U.Name, x.U.Sid,
+            x.S.ClientName, (x.S.ClientCountry ?? "").Trim(), (x.S.ClientCity ?? "").Trim(), x.S.Machine, x.S.DesktopGroup, x.S.ClientPlatform, x.S.IsDesktop))
         .OrderBy(p => p.User, StringComparer.OrdinalIgnoreCase).Take(3000).ToList();
 
     private static IReadOnlyList<MapPoint> DemoMapPoints()
@@ -128,6 +142,7 @@ public sealed class InsightsService(SssOptions options, IMonitorClient? monitor,
             ("Poland", "Warsaw", 3), ("Spain", "Madrid", 2), ("United States", "New York", 4), ("United States", "Chicago", 2), ("United States", "San Francisco", 2),
             ("Brazil", "Sao Paulo", 2), ("India", "Mumbai", 3), ("India", "Bangalore", 2), ("China", "Shanghai", 2), ("Japan", "Tokyo", 2), ("Singapore", "Singapore", 2),
             ("Australia", "Sydney", 2), ("South Africa", "Johannesburg", 1), ("United Arab Emirates", "Dubai", 1), ("Canada", "Toronto", 1), ("Mexico", "", 1),
+            ("Switzerland", "Zurich", 4), ("Switzerland", "Basel", 2), ("Netherlands", "Amsterdam", 4), ("United Kingdom", "Manchester", 2), ("France", "Lyon", 2), ("Austria", "Vienna", 2),
         ];
         string[] first = ["Alex", "Sam", "Robin", "Kim", "Jo", "Max", "Lee", "Chris", "Pat", "Mika", "Dana", "Eli"], last = ["Example", "Sample", "Demo", "Test", "Muster", "Probe"];
         var list = new List<MapPoint>();
@@ -196,9 +211,21 @@ public sealed class InsightsService(SssOptions options, IMonitorClient? monitor,
         var faults = (await RecordsAsync("faults", 24, ct)).Rows.Where(r => r.Machine is not null && Same(r.Machine, row.Name)).ToList();
         var failures = (await RecordsAsync("failures", 24, ct)).Rows.Where(r => r.Machine is not null && Same(r.Machine, row.Name)).ToList();
         MachineInfo? info = demo ? null : monitor is null ? null : (await monitor.GetMachinesAsync(ct)).FirstOrDefault(m => Same(m.Name, row.Name));
+        var now = clock.GetUtcNow();
+        // the failure log of the Monitor holds the history: when the machine had lost its registration in the last 7 days (nothing of our own is stored)
+        IReadOnlyList<MachineOutage> outages = demo ? DemoOutages(row.Name, now)
+            : monitor is null || info?.Id is null ? []
+            : (await monitor.GetMachineOutagesAsync(now.AddDays(-7), ct)).Where(o => o.MachineId.Equals(info.Id, StringComparison.OrdinalIgnoreCase)).OrderBy(o => o.Start).ToList();
         return new MachineDetail(row, info, more.Usage.FirstOrDefault(u => Same(u.Machine, row.Name)), more.Strips?.FirstOrDefault(u => Same(u.Machine, row.Name)),
-            faults, failures, more.Timeline.Where(e => Same(e.Subject, row.Name)).ToList());
+            faults, failures, more.Timeline.Where(e => Same(e.Subject, row.Name)).ToList(), outages);
     }
+
+    private static IReadOnlyList<MachineOutage> DemoOutages(string name, DateTimeOffset now) => name.Split('.')[0] switch
+    {
+        "rds-02" => [new("demo", now.AddDays(-2.4), now.AddDays(-2.4).AddMinutes(25), 1), new("demo", now.AddMinutes(-35), null, 1)],
+        "vdi-02" => [new("demo", now.AddHours(-3.5), now.AddHours(-3), 1), new("demo", now.AddDays(-5), now.AddDays(-5).AddHours(2), 1)],
+        _ => [],
+    };
 
     /// <summary>Logons per hour over the last 24 hours (the current hour included), with the average logon time of that hour.</summary>
     public static IReadOnlyList<HourCount> Hourly(IReadOnlyList<MonitorSession> sessions, DateTimeOffset now)

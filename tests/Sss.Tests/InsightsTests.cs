@@ -203,6 +203,15 @@ public class InsightsApiTests : IClassFixture<HelpdeskOnFactory>, IClassFixture<
         Assert.Equal(("Alex Demo", "Germany", "Munich", "PC1"), (p.User, p.Country, p.City, p.Device));
     }
 
+    [Fact]
+    public void Map_points_take_the_user_from_the_broker_when_the_monitor_names_none()
+    {
+        var live = new[] { new Sss.Web.Citrix.MonitorSession("K1", "vdi", "DG", true, null, null, null, "PC1", null, null, UserId: 99), new Sss.Web.Citrix.MonitorSession("k2", "vdi", "DG", true, null, null, null, "PC2", null, null) };
+        var byKey = new Dictionary<string, (string Name, string Sid)>(StringComparer.OrdinalIgnoreCase) { ["k1"] = ("DEMO\\anna", "S-1-5-21-1-1-1-5") };
+        var points = InsightsService.MapPoints(live, new Dictionary<long, Sss.Web.Citrix.MonitorUser>(), byKey);
+        Assert.Equal(["DEMO\\anna", ""], points.OrderByDescending(p => p.User).Select(p => p.User).ToArray());
+    }
+
     private static Sss.Web.Citrix.MachineInfo Machine(string id, string name, string group = "DG") => new(name, group, "1", "Windows", 1, 3, false, 1, null, null, id, null);
 
     [Fact]
@@ -243,6 +252,19 @@ public class InsightsApiTests : IClassFixture<HelpdeskOnFactory>, IClassFixture<
     }
 
     [Fact]
+    public void The_path_trend_counts_the_last_seven_days_by_path()
+    {
+        var now = new DateTimeOffset(2026, 11, 5, 10, 0, 0, TimeSpan.Zero);
+        PathSample P(int daysAgo, string? via, string client = "PC1") => new(now.AddDays(-daysAgo), via, client);
+        var days = EnvironmentService.PathTrend([P(0, "gw.demo.local"), P(0, "PC1"), P(0, null), P(0, "127.0.0.1"), P(2, "gw.demo.local"), P(9, "gw.demo.local")], now);
+        Assert.Equal(7, days.Count);
+        Assert.Equal((1, 2, 1), (days[6].Gateway, days[6].Direct, days[6].Unknown));
+        Assert.Equal(1, days[4].Gateway);
+        Assert.Equal(2, days.Sum(d => d.Gateway));   // the sample from 9 days ago is outside
+        Assert.Empty(EnvironmentService.PathTrend([], now));
+    }
+
+    [Fact]
     public void Load_strips_average_the_samples_per_hour_and_leave_gaps()
     {
         var now = new DateTimeOffset(2026, 11, 4, 12, 30, 0, TimeSpan.Zero);
@@ -260,6 +282,8 @@ public class InsightsApiTests : IClassFixture<HelpdeskOnFactory>, IClassFixture<
     {
         var ok = await (await _helpdesk.GetAsync("/api/helpdesk/insights/machine?name=rds-01")).Json();
         Assert.Equal("rds-01.demo.local", ok.GetProperty("row").GetProperty("name").GetString());
+        var rds2 = await (await _helpdesk.GetAsync("/api/helpdesk/insights/machine?name=rds-02")).Json();
+        Assert.Contains(rds2.GetProperty("outages").EnumerateArray(), o => o.GetProperty("end").ValueKind == System.Text.Json.JsonValueKind.Null);   // still unregistered
         Assert.Equal(System.Net.HttpStatusCode.NotFound, (await _helpdesk.GetAsync("/api/helpdesk/insights/machine?name=nope")).StatusCode);
         Assert.Equal(System.Net.HttpStatusCode.BadRequest, (await _helpdesk.GetAsync("/api/helpdesk/insights/machine?name=a%27b")).StatusCode);
         Assert.Equal(System.Net.HttpStatusCode.Forbidden, (await _auditor.GetAsync("/api/helpdesk/insights/machine?name=rds-01")).StatusCode);

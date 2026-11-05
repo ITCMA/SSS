@@ -69,3 +69,7 @@ Locations and device lists are personal data in the sense of data protection law
 ## Connection path
 
 A bar shows how the live sessions reach their machine: through a gateway (one segment per gateway host), directly, or unknown. It uses the "connected via" host the Monitor records for the connection: a host that is neither the client nor the machine is a gateway; no host at all is counted as unknown.
+
+### Connection path by day
+
+Below the bar, a chart shows the new connections of the last 7 days (UTC days, today last) as stacked bars: gateway, direct and unknown, with the share through a gateway above each bar. Hovering a day shows the numbers. The data is the "connected via" host of the connections the Monitor recorded, so it reaches as far back as the Monitor keeps it; nothing is stored by SSS.
