@@ -2282,7 +2282,7 @@ async function init() {
     else { await openDetails(state.data.live[0], shot === 'profile' ? 'profile' : shot === 'charts' ? 'charts' : 'summary'); if (shot === 'profile') document.querySelector('.profile button')?.click(); }
   }
   if (!$('demo').hidden && shot === 'env' && state.caps.admin) { showView('env'); await loadEnv(); }
-  if (!$('demo').hidden && shot === 'insights' && state.helpdesk) { showView('insights'); await loadInsights(); const f = new URLSearchParams(location.search).get('focus'); if (f) setTimeout(() => { const n = $(f); n?.parentElement.prepend(n); window.scrollTo(0, 0); }, 1500); }
+  if (!$('demo').hidden && shot === 'insights' && state.helpdesk) { showView('insights'); await loadInsights(); }
   if (!$('demo').hidden && shot === 'machine' && state.helpdesk) { showView('insights'); await loadInsights(); await openMachine('rds-02.demo.local'); }
   if (!$('demo').hidden && shot === 'map' && state.helpdesk) { showView('map'); await loadMap(); }
   state.timer = setInterval(() => { if (!document.hidden && !$('confirm').open && state.view !== 'audit' && state.view !== 'env') load(); }, refreshSeconds * 1000);
