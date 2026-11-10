@@ -2,7 +2,7 @@
 
 [English](SETUP.md)
 
-Diese Anleitung führt dich von null zu einem laufenden SSS in deiner Citrix-Umgebung. Die Kurzfassung:
+**Eilig? Siehe den [Schnellstart](QUICKSTART.de.md).** Diese Anleitung führt dich von null zu einem laufenden SSS in deiner Citrix-Umgebung. Die Kurzfassung:
 
 1. **Demo ausprobieren** auf irgendeinem Rechner (ohne Citrix): [Lokal ausprobieren](#lokal-ausprobieren-macos-linux-windows).
 2. **Dienstkonto vorbereiten** (eine gMSA) mit einer Citrix-Rolle: [Dienstkonto vorbereiten](#dienstkonto-vorbereiten-gmsa).

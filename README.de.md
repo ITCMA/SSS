@@ -80,7 +80,7 @@ ASPNETCORE_ENVIRONMENT=Development ASPNETCORE_URLS=http://localhost:5080 dotnet 
 
 <http://localhost:5080> öffnen und an die Adresse `?shot=profile` oder `?shot=processes` hängen, um die Experten-Dialoge zu sehen. Braucht das [.NET 10 SDK](https://dotnet.microsoft.com/download).
 
-**In deiner Citrix-Umgebung installieren:** das Zip von den [Releases](https://github.com/ITCMA/SSS/releases) laden und der **[Einrichtungsanleitung](docs/SETUP.de.md)** folgen: Dienstkonto vorbereiten, `install.ps1` ausführen, mit `Test-SssSetup.ps1` und `Test-SssCitrix.ps1` prüfen. Was der Server braucht, steht in den [Voraussetzungen](docs/REQUIREMENTS.de.md).
+**In deiner Citrix-Umgebung installieren:** das Zip von den [Releases](https://github.com/ITCMA/SSS/releases) laden, mit dem **[Schnellstart](docs/QUICKSTART.de.md)** beginnen (was wohin; die Fernunterstützung braucht `Register-SssShadow.ps1 -AllowedHostSuffix` auf jedem Helpdesk-PC) und dann der **[Einrichtungsanleitung](docs/SETUP.de.md)** folgen: Dienstkonto vorbereiten, `install.ps1` ausführen, mit `Test-SssSetup.ps1` und `Test-SssCitrix.ps1` prüfen. Was der Server braucht, steht in den [Voraussetzungen](docs/REQUIREMENTS.de.md).
 
 ## Sicherheit in Kürze
 
@@ -88,18 +88,22 @@ ASPNETCORE_ENVIRONMENT=Development ASPNETCORE_URLS=http://localhost:5080 dotnet 
 - Jede Abmeldung, Nachricht und Prozessaktion wird serverseitig noch einmal gegen die eigenen Live-Sitzungen des Aufrufers geprüft, bevor etwas an Citrix geht; fremde oder unbekannte IDs werden abgelehnt und protokolliert.
 - Anti-Forgery-Token, Ratenbegrenzung pro Benutzer, strenge CSP und Sicherheits-Header, keine Inline-Skripte, kein `innerHTML`.
 - Der Helpdesk sind getrennte Endpunkte hinter einer AD-Gruppe; alles, was er tut, wird protokolliert.
-- Die Prozesssteuerung nutzt einen eingeschränkten JEA-Endpunkt mit vier Befehlen und zeigt genau, was er kann und was nicht ([Doku](docs/PROCESSES.de.md#was-das-freigibt-und-was-nicht)).
+- Der **HDX-Reiter** zeigt, was die Richtlinien in einer Sitzung erlauben (Laufwerke, Zwischenablage, Drucken, Audio, USB, Grafik) und was sie live nutzt ([Doku](docs/HDX.de.md)); der Helpdesk kann eine Sitzung direkt aus SSS spiegeln ([docs/SHADOW.de.md](docs/SHADOW.de.md)).
+- Die Prozesssteuerung nutzt einen eingeschränkten JEA-Endpunkt mit fünf Befehlen und zeigt genau, was er kann und was nicht ([Doku](docs/PROCESSES.de.md#was-das-freigibt-und-was-nicht)).
 - Details und Meldeweg: [SECURITY.md](SECURITY.md), [Bedrohungsanalyse](docs/THREAT-MODEL.de.md).
 
 ## Dokumentation
 
 | | |
 |---|---|
+| [Schnellstart](docs/QUICKSTART.de.md) | was wohin, Parameter, solide Grundkonfiguration |
 | [Einrichtungsanleitung](docs/SETUP.de.md) | von null zu einem laufenden SSS: Dienstkonto, Installation, Anbindung, Helpdesk |
 | [Voraussetzungen](docs/REQUIREMENTS.de.md) | Software, Konten, Citrix, Ports |
 | [Konfigurationsreferenz](docs/CONFIGURATION.de.md) | jede Option mit Standardwert und Bedeutung |
 | [Berechtigungen auf einen Blick](docs/PERMISSIONS.de.md) | wer braucht welches Recht, wo und warum |
 | [Betrieb](docs/OPERATIONS.de.md) | Update, Health-Probe, Statusseite, Audit-Protokoll, Fehlersuche |
+| [Fernunterstützung](docs/SHADOW.de.md) | Sitzung spiegeln aus SSS, Starter auf dem Helpdesk-PC |
+| [HDX-Reiter](docs/HDX.de.md) | Kanäle aus den Richtlinien, Live-Werte des VDA, Director-Link |
 | [Anwendungen, Prozesse und Profile](docs/PROCESSES.de.md) | der JEA-Endpunkt auf den VDAs, Einrichtung, Sicherheit |
 | [Rollen](docs/ROLES.de.md) | Helpdesk-Stufen, Auditor, Admin, optionale Ticketnummer |
 | [Audit-Protokoll und zentrales Logging](docs/AUDIT.de.md) | wer hat was getan, Ziele (UNC, Syslog/CEF, HTTP, SNMP), Integrität |

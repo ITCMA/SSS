@@ -7,7 +7,7 @@
   It registers the session configuration "SSS.Processes". The endpoint
     - can be used only by the SSS service account (-Principal),
     - runs as a temporary local administrator (virtual account) that exists only for the duration of one call,
-    - offers exactly four commands, Get-SssProcess, Get-SssProfile and Get-SssPolicy (read only) and Stop-SssProcess, and nothing else,
+    - offers exactly five commands, Get-SssProcess, Get-SssProfile, Get-SssPolicy and Get-SssHdx (read only) and Stop-SssProcess, and nothing else,
     - touches only processes whose owner is the user SID that SSS passes in, never system or other users' processes,
     - never ends the Citrix session processes wfshell.exe, ctxgfx.exe and cmstart.exe,
     - writes a transcript of every call to the folder given by -TranscriptDirectory.
@@ -163,6 +163,110 @@ if ($PSCmdlet.ShouldProcess($work, 'Write role capability and session configurat
                     }
                 }
               }
+            }
+        } },
+        @{ Name = 'Get-SssHdx'; ScriptBlock = {
+            [CmdletBinding()]
+            param([Parameter(Mandatory = $true)][ValidatePattern('^S-1-\d+(-\d+)+$')][string]$UserSid, [switch]$IdsOnly)
+            # Read only: live HDX values of the sessions of the user. The performance counters of the set "ICA Session" (bandwidth per virtual channel,
+            # latency, line speed), the printers the client created in the session, the drives mapped in it and the devices of the VDA. Every part is
+            # tried on its own and fails quietly into Notes (with the reason), because counter names differ between VDA versions.
+            # Only what belongs to the session is returned. Printers carry the session number in their name ("... in session 5", in any language);
+            # printers of other sessions are dropped. Audio, USB and Citrix devices of a VDA cannot be told apart per session, so they are only
+            # returned when the user has the only session on the VDA. Graphics adapters are hardware of the VDA and always returned.
+            # Note: inside the restricted session Select-Object has no -First and Get-CimInstance is not available; Get-WmiObject (Management snap-in) is.
+            $account = (New-Object System.Security.Principal.SecurityIdentifier($UserSid)).Translate([System.Security.Principal.NTAccount]).Value
+            $take = { param($items, [int]$n) $a = @($items); if ($a.Count -le $n) { $a } else { $a[0..($n - 1)] } }
+            $why = { param($e) $m = [string]$e.Exception.Message; if ($m.Length -gt 110) { $m = $m.Substring(0, 110) }; $m }
+            $sessOf = { param($name) if ($name -match '\)\s+(?:\p{L}+\s+)+(\d+)$') { [int]$Matches[1] } elseif ($name -match '\(\p{L}+\s+(\d+)\)$') { [int]$Matches[1] } else { -1 } }
+            $ids = @{}; $userSessions = @{}
+            # the session ids of the user, each with the start of its oldest process (the caller picks the session that started with the Broker session)
+            foreach ($p in @(Get-Process -IncludeUserName)) {
+                if (-not $p.UserName) { continue }
+                $k = [int]$p.SessionId
+                if ($k -gt 0 -and $p.UserName -notmatch '^(NT[ -]|Window Manager|Font Driver|DWM-|UMFD-)') { $userSessions[$k] = $true }
+                if ($p.UserName -eq $account) {
+                    $st = $null; try { $st = $p.StartTime } catch { }
+                    if (-not $ids.ContainsKey($k) -or ($st -and (-not $ids[$k] -or $st -lt $ids[$k]))) { $ids[$k] = $st }
+                }
+            }
+            $multi = ($userSessions.Count -gt 1)
+            $devices = @(); $deviceNotes = @(); $printerPool = @(); $logons = @()
+            if (-not $IdsOnly) {
+                try { foreach ($g in @(& $take (Get-WmiObject -Class Win32_VideoController -ErrorAction Stop) 8)) {
+                    $ram = if ($g.AdapterRAM) { ([math]::Round([double]$g.AdapterRAM / 1MB)).ToString() + ' MB' } else { '' }
+                    $devices += [pscustomobject]@{ Kind = 'gpu'; Name = [string]$g.Name; Detail = (@($ram, [string]$g.DriverVersion, [string]$g.Status) | Where-Object { $_ }) -join ' / ' } } } catch { $deviceNotes += ('Graphics adapters: ' + (& $why $_)) }
+                if ($multi) { $devices += [pscustomobject]@{ Kind = 'withheld'; Name = 'several sessions'; Detail = '' } }
+                else {
+                    try { foreach ($a in @(& $take (Get-WmiObject -Class Win32_PnPEntity -Filter "PNPClass='AudioEndpoint'" -ErrorAction Stop) 12)) {
+                        $devices += [pscustomobject]@{ Kind = 'audio'; Name = [string]$a.Name; Detail = [string]$a.Status } } } catch { $deviceNotes += ('Audio devices: ' + (& $why $_)) }
+                    try { foreach ($u in @(& $take @(Get-WmiObject -Class Win32_PnPEntity -Filter "PNPClass='USB'" -ErrorAction Stop | Where-Object { $_.Name -and $_.Name -notmatch 'Root Hub|Host Controller|Generic USB Hub' }) 20)) {
+                        $devices += [pscustomobject]@{ Kind = 'usb'; Name = [string]$u.Name; Detail = [string]$u.Status } } } catch { $deviceNotes += ('USB devices: ' + (& $why $_)) }
+                    try { foreach ($c in @(& $take @(Get-WmiObject -Class Win32_PnPEntity -Filter "Manufacturer LIKE '%Citrix%'" -ErrorAction Stop | Where-Object { (& $sessOf ([string]$_.Name)) -lt 0 }) 20)) {
+                        $devices += [pscustomobject]@{ Kind = 'citrix'; Name = [string]$c.Name; Detail = [string]$c.Status } } } catch { }
+                }
+                # printers: the print queues of the VDA (WMI and the device list), told apart by the session number in their name
+                try { foreach ($p in @(Get-WmiObject -Class Win32_Printer -ErrorAction Stop)) { $printerPool += [pscustomobject]@{ Name = [string]$p.Name; Driver = [string]$p.DriverName; Default = [bool]$p.Default } } } catch { $deviceNotes += ('Printers: ' + (& $why $_)) }
+                try { foreach ($p in @(Get-WmiObject -Class Win32_PnPEntity -Filter "PNPClass='Printer' OR PNPClass='PrintQueue'" -ErrorAction Stop)) { $printerPool += [pscustomobject]@{ Name = [string]$p.Name; Driver = ''; Default = $false } } } catch { }
+                try { foreach ($p in @(Get-WmiObject -Class Win32_PnPEntity -Filter "Manufacturer LIKE '%Citrix%'" -ErrorAction Stop)) { if ((& $sessOf ([string]$p.Name)) -ge 0) { $printerPool += [pscustomobject]@{ Name = [string]$p.Name; Driver = ''; Default = $false } } } } catch { }
+                try {
+                    $parts = $account.Split('\'); $uName = $parts[-1]; $uDomain = if ($parts.Count -gt 1) { $parts[0] } else { '' }
+                    foreach ($l in @(Get-WmiObject -Class Win32_LoggedOnUser -ErrorAction Stop)) {
+                        $a = [string]$l.Antecedent; $d = [string]$l.Dependent
+                        if ($a -match 'Domain="([^"]*)",Name="([^"]*)"' -and $Matches[2] -eq $uName -and ((-not $uDomain) -or $Matches[1] -eq $uDomain) -and $d -match 'LogonId="(\d+)"') { $logons += $Matches[1] }
+                    }
+                    $logons = @($logons | Sort-Object -Unique)
+                } catch { $deviceNotes += ('Logon sessions: ' + (& $why $_)) }
+            }
+            foreach ($id in @($ids.Keys | Sort-Object)) {
+                $started = if ($ids[$id]) { ([datetime]$ids[$id]).ToUniversalTime().ToString('o') } else { $null }
+                if ($IdsOnly) { [pscustomobject]@{ SessionId = $id; Started = $started; Instance = $null; Counters = @(); Printers = @(); Drives = @(); Devices = @(); Notes = @() }; continue }
+                $counters = @(); $printers = @(); $drives = @(); $notes = @($deviceNotes); $instance = $null
+                try {
+                    $set = $null
+                    foreach ($n in 'ICA Session', 'Citrix ICA Session') { if (-not $set) { $set = Get-Counter -ListSet $n -ErrorAction SilentlyContinue } }
+                    if (-not $set) { $notes += 'No performance counter set "ICA Session" on this VDA.' }
+                    else {
+                        $names = @($set.PathsWithInstances | ForEach-Object { if ($_ -match '\(([^)]*)\)') { $Matches[1] } } | Sort-Object -Unique)
+                        $instance = @($names | Where-Object { $_ -match "(^|\D)$id(\D|$)" })[0]
+                        if (-not $instance) { $notes += ('No counter instance for session ' + $id + ' (' + $names.Count + ' instances on the VDA).') }
+                        else {
+                            $paths = @(& $take @($set.PathsWithInstances | Where-Object { $_ -like "*($instance)*" }) 90)
+                            foreach ($s in @((Get-Counter -Counter $paths -ErrorAction SilentlyContinue).CounterSamples)) {
+                                $counters += [pscustomobject]@{ Name = $s.Path.Substring($s.Path.LastIndexOf('\') + 1); Value = [math]::Round([double]$s.CookedValue, 1) }
+                            }
+                        }
+                    }
+                } catch { $notes += ('Counters: ' + (& $why $_)) }
+                $seen = @{}
+                foreach ($p in $printerPool) {
+                    if ((& $sessOf $p.Name) -eq $id -and -not $seen.ContainsKey($p.Name)) { $seen[$p.Name] = $true; $printers += $p }
+                }
+                $printers = @(& $take $printers 30)
+                # the drives mapped in this session (client drives are \\Client\C$ ...): the logon sessions of the user whose processes run in it
+                $inSession = 0
+                try {
+                    foreach ($logonId in $logons) {
+                        $procs = @(Get-WmiObject -Query "ASSOCIATORS OF {Win32_LogonSession.LogonId='$logonId'} WHERE AssocClass=Win32_SessionProcess" -ErrorAction SilentlyContinue)
+                        if ($procs.Count -eq 0 -or [int]$procs[0].SessionId -ne $id) { continue }
+                        $inSession++
+                        foreach ($d in @(Get-WmiObject -Query "ASSOCIATORS OF {Win32_LogonSession.LogonId='$logonId'} WHERE AssocClass=Win32_LogonSessionMappedDisk" -ErrorAction SilentlyContinue)) {
+                            if ($drives.Count -lt 40) { $drives += ([string]$d.Name + ' -> ' + [string]$d.ProviderName) }
+                        }
+                    }
+                } catch { $notes += ('Mapped drives: ' + (& $why $_)) }
+                # what the user profile knows about network drives (client drives are \\client\C$): connections of the user and drives the user mounted.
+                # This belongs to the user, not to one session, so it is shown with a hint.
+                try {
+                    $hive = "Registry::HKEY_USERS\$UserSid"
+                    if (Test-Path $hive) {
+                        if (Test-Path "$hive\Network") { foreach ($k in @(Get-ChildItem "$hive\Network")) { if ($drives.Count -lt 40) { $drives += ([string]$k.PSChildName + ': -> ' + [string](Get-ItemProperty -Path $k.PSPath).RemotePath + ' (profile)') } } }
+                        $mp = "$hive\Software\Microsoft\Windows\CurrentVersion\Explorer\MountPoints2"
+                        if (Test-Path $mp) { foreach ($k in @(Get-ChildItem $mp)) { if ($k.PSChildName -like '##client#*' -and $drives.Count -lt 40) { $drives += (([string]$k.PSChildName -replace '#', '\') + ' (profile)') } } }
+                    }
+                } catch { $notes += ('Profile drives: ' + (& $why $_)) }
+                if ($drives.Count -eq 0) { $notes += ('Mapped drives: ' + $logons.Count + ' logon session(s) of the user, ' + $inSession + ' in session ' + $id + ', no mapped disk visible from outside the session.') }
+                [pscustomobject]@{ SessionId = $id; Started = $started; Devices = $devices; Instance = $instance; Counters = $counters; Printers = $printers; Drives = $drives; Notes = $notes }
             }
         } },
         @{ Name = 'Get-SssProfile'; ScriptBlock = {
@@ -363,7 +467,7 @@ if ($PSCmdlet.ShouldProcess($work, 'Write role capability and session configurat
     # restricted session breaks the implicit remoting on the SSS side ("alias gcls is read-only"). Get-WmiObject is part of the
     # already loaded Management snap-in, so Get-SssProfile uses it instead of Get-CimInstance.
     $psrc = Join-Path $capDir 'SssProcesses.psrc'
-    New-PSRoleCapabilityFile -Path $psrc -VisibleFunctions 'Get-SssProcess', 'Get-SssProfile', 'Get-SssPolicy', 'Stop-SssProcess' -FunctionDefinitions $functions
+    New-PSRoleCapabilityFile -Path $psrc -VisibleFunctions 'Get-SssProcess', 'Get-SssProfile', 'Get-SssPolicy', 'Get-SssHdx', 'Stop-SssProcess' -FunctionDefinitions $functions
     # a module manifest next to the role capability folder makes the capability discoverable by name
     New-ModuleManifest -Path (Join-Path $moduleDir 'SssProcesses.psd1') -RootModule '' -ModuleVersion '1.0.0' -Description 'SSS process endpoint role capability'
 

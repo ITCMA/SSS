@@ -753,6 +753,23 @@ public class ControllerWorkerTests
     }
 
     [Fact]
+    public async Task Hdx_values_are_read_through_the_endpoint_of_the_vda_and_only_for_the_owner()
+    {
+        if (!PwshAvailable()) return;
+        using var d = new TempDir();
+        var o = new CitrixOptions { Controllers = ["ddc1.demo.local"], Processes = new ProcessOptions { Enabled = true } };
+        using var pool = Pool(o, new ControllerDirectory(o, d.Sub("data"), TimeProvider.System));
+
+        var hdx = await pool.HdxAsync("S-1-5-21-1-1-1-1001", "101", default);
+        var s = Assert.Single(hdx.Sessions);
+        Assert.Equal(2, s.SessionId);
+        Assert.Contains(s.Counters, c => c.Name == "Output Session Bandwidth" && c.Value == 1840.5);
+        Assert.Contains(s.Printers, p => p.Default);
+        Assert.Single(s.Drives);
+        await Assert.ThrowsAnyAsync<Exception>(() => pool.HdxAsync("S-1-5-21-1-1-1-2002", "101", default));
+    }
+
+    [Fact]
     public async Task Policies_and_program_descriptions_are_read_through_the_endpoint_of_the_vda()
     {
         if (!PwshAvailable()) return;

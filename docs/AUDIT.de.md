@@ -43,7 +43,7 @@ Ein JSON-Objekt pro Zeile:
 | `server`, `requestId` | der SSS-Server und die Anfrage, um einen Klick durch alle Logs zu verfolgen |
 | `chain` | Hash-Kette, siehe Integrität |
 
-Aktionen: `logoff:*`, `helpdesk-logoff:*`, `helpdesk-message`, `helpdesk:search`, `helpdesk:list-all`, `helpdesk:view`, `helpdesk:details`, `list-processes`, `end-process`, `profile-info`, `audit:view`, `audit:export` und der Alarm `alert:bulk-logoff`. Nachschlagen wird pro Helpdesk-Mitarbeiter und Benutzer nur alle fünf Minuten einmal protokolliert, damit die automatische Aktualisierung das Protokoll nicht überflutet.
+Aktionen: `logoff:*`, `helpdesk-logoff:*`, `helpdesk-message`, `helpdesk:search`, `helpdesk:list-all`, `helpdesk:view`, `helpdesk:details`, `shadow`, `hdx-info`, `list-processes`, `end-process`, `profile-info`, `audit:view`, `audit:export` und der Alarm `alert:bulk-logoff`. Nachschlagen wird pro Helpdesk-Mitarbeiter und Benutzer nur alle fünf Minuten einmal protokolliert, damit die automatische Aktualisierung das Protokoll nicht überflutet.
 
 ## Integrität
 

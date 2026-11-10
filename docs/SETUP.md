@@ -2,7 +2,7 @@
 
 [Deutsch](SETUP.de.md)
 
-This guide takes you from nothing to a working SSS on your Citrix site. The short version:
+**In a hurry? See the [quick start](QUICKSTART.md).** This guide takes you from nothing to a working SSS on your Citrix site. The short version:
 
 1. **Try the demo** on any computer (no Citrix needed): [Try it locally](#try-it-locally-macos-linux-windows).
 2. **Prepare a service account** (a gMSA) with a Citrix role: [Prepare the service account](#prepare-the-service-account-gmsa).

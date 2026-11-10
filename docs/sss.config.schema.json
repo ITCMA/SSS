@@ -772,6 +772,38 @@
           },
           "additionalProperties": false
         },
+        "Shadow": {
+          "description": "Shadowing a session from the helpdesk (the \"Remote support\" button; needs the starter on the helpdesk PCs and the JEA endpoint).",
+          "type": "object",
+          "properties": {
+            "Enabled": {
+              "description": "The \"Remote support\" button; on by default. It appears only when Sss:Citrix:Processes:Enabled is on as well, because the session id is read on the VDA.",
+              "type": "boolean",
+              "default": true
+            },
+            "AllowLevel1": {
+              "description": "Helpdesk level 1 may use it.",
+              "type": "boolean",
+              "default": true
+            },
+            "AllowLevel2": {
+              "description": "Helpdesk level 2 may use it.",
+              "type": "boolean",
+              "default": true
+            },
+            "AllowLevel3": {
+              "description": "Helpdesk level 3 may use it.",
+              "type": "boolean",
+              "default": true
+            },
+            "Control": {
+              "description": "true = the helpdesk may take over mouse and keyboard (the user is asked first); false = view only.",
+              "type": "boolean",
+              "default": true
+            }
+          },
+          "additionalProperties": false
+        },
         "Helpdesk": {
           "description": "Helpdesk behaviour: group, ticket requirement, limits.",
           "type": "object",

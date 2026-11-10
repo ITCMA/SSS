@@ -54,6 +54,9 @@ public interface IBrokerClient
     /// <summary>The Citrix policy values in force in the sessions of the user on the machine of the given session (JEA command Get-SssPolicy).</summary>
     Task<BrokerPolicies> PoliciesAsync(string userSid, string uid, CancellationToken ct) => throw new NotSupportedException();
 
+    /// <summary>Live HDX values of the user's sessions on the machine of the given session (JEA command Get-SssHdx).</summary>
+    Task<BrokerHdx> HdxAsync(string userSid, string uid, CancellationToken ct, bool idsOnly = false) => throw new NotSupportedException();
+
     /// <summary>Profile type and size of the user on the machine of the given session (JEA command Get-SssProfile).</summary>
     Task<ProfileInfo> ProfileAsync(string userSid, string uid, int scanSeconds, CancellationToken ct);
 

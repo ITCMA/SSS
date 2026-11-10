@@ -13,7 +13,7 @@ Browser --> SSS (IIS) --> PowerShell-Worker --WinRM--> JEA-Endpunkt "SSS.Process
                           (Dienstkonto)                 Get-SssProcess / Stop-SssProcess
 ```
 
-- Der JEA-Endpunkt bietet genau **vier Befehle**: `Get-SssProcess` und `Stop-SssProcess` für diese Funktion sowie den nur lesenden `Get-SssProfile` für [Profiltyp und Größe](DATA-SOURCES.de.md#profiltyp-und-größe) und `Get-SssPolicy` für die **wirksamen Citrix-Richtlinienwerte** in der Expertenansicht (Helpdesk Stufe 3). `Get-SssProcess` liest zusätzlich den Produktnamen aus den Dateieigenschaften jedes Programms („Google Chrome“ statt `chrome`); `Get-SssPolicy` liest nur die Registrywerte unter `HKLM\SOFTWARE\Policies\Citrix\<Sitzungs-ID>` der Sitzungen, in denen der Benutzer Prozesse hat (höchstens 400 Werte, Text auf 200 Zeichen gekürzt). Das Dienstkonto kann darüber nichts anderes auf dem VDA ausführen.
+- Der JEA-Endpunkt bietet genau **fünf Befehle**: `Get-SssProcess` und `Stop-SssProcess` für diese Funktion, den nur lesenden `Get-SssHdx` für den [HDX-Reiter](HDX.de.md) (Leistungszähler der Sitzung, umgeleitete Drucker, Client-Laufwerkseinträge der VDA-Registry) sowie den nur lesenden `Get-SssProfile` für [Profiltyp und Größe](DATA-SOURCES.de.md#profiltyp-und-größe) und `Get-SssPolicy` für die **wirksamen Citrix-Richtlinienwerte** in der Expertenansicht (Helpdesk Stufe 3). `Get-SssProcess` liest zusätzlich den Produktnamen aus den Dateieigenschaften jedes Programms („Google Chrome“ statt `chrome`); `Get-SssPolicy` liest nur die Registrywerte unter `HKLM\SOFTWARE\Policies\Citrix\<Sitzungs-ID>` der Sitzungen, in denen der Benutzer Prozesse hat (höchstens 400 Werte, Text auf 200 Zeichen gekürzt). Das Dienstkonto kann darüber nichts anderes auf dem VDA ausführen.
 - Er läuft als vorübergehender lokaler Administrator (ein *virtuelles Konto*, das nur für diesen Aufruf existiert); das Dienstkonto selbst braucht auf den VDAs keine Administratorrechte.
 - **Nur die eigenen Prozesse des Benutzers werden angefasst.** Beide Befehle erhalten die SID des Benutzers und vergleichen sie mit dem Besitzer jedes Prozesses; Systemprozesse, Prozesse anderer Benutzer und unbekannte IDs werden abgelehnt (`not-owned`, `not-found`). Die Citrix-Sitzungsprozesse `wfshell.exe`, `ctxgfx.exe` und `cmstart.exe` sind geschützt (`protected`).
 - **SSS prüft die Sitzung doppelt.** Die Webanwendung akzeptiert eine Sitzung nur, wenn sie eine Live-Sitzung des Ziels ist; der PowerShell-Worker sucht sie noch einmal im Broker und lehnt sie ab, wenn sie nicht diesem Benutzer gehört. Nur der Rechner dieser Sitzung wird kontaktiert.
@@ -90,7 +90,7 @@ Der Endpunkt ist die einzige neue Tür auf dem VDA. Was jemand, der das SSS-Dien
 | Prozesse, Fenstertitel und Programmpfade der Sitzung eines Benutzers auflisten | nur lesend; eine Benutzer-SID muss übergeben werden; nur dessen Prozesse werden geliefert |
 | einen Prozess beenden | nur Prozesse, die der übergebenen SID gehören; nie Systemprozesse; nie `wfshell`, `ctxgfx`, `cmstart`; es lassen sich keine Befehle oder Skripte senden |
 | Profiltyp, Größen, Ordnernamen, FSLogix- und UPM-Einstellungen lesen | nur lesend; der **Inhalt** von Dateien wird nie gelesen, nur Namen und Größen |
-| alles andere auf dem VDA | nicht möglich: Die Sitzung ist auf diese vier Befehle beschränkt und läuft als vorübergehendes Konto, das nur für den Aufruf existiert |
+| alles andere auf dem VDA | nicht möglich: Die Sitzung ist auf diese fünf Befehle beschränkt und läuft als vorübergehendes Konto, das nur für den Aufruf existiert |
 
 Das verbleibende Risiko ehrlich benannt: Wer das SSS-Dienstkonto besitzt, kann auf den VDAs mit dem Endpunkt die Prozesse **jedes** Benutzers beenden (ein Denial of Service) sowie Prozess- und Ordnernamen lesen. Code ausführen, Dateien lesen oder das System verändern kann er darüber nicht. Die Angriffsfläche verkleinerst du mit:
 
@@ -102,7 +102,7 @@ Das verbleibende Risiko ehrlich benannt: Wer das SSS-Dienstkonto besitzt, kann a
 
 ## Sicherheitshinweise
 
-- Diese Funktion gibt dem SSS-Dienstkonto einen Weg zu den VDAs. Beschränke ihn auf die vier gelieferten Befehle; erweitere die Rollenfähigkeit nicht.
+- Diese Funktion gibt dem SSS-Dienstkonto einen Weg zu den VDAs. Beschränke ihn auf die fünf gelieferten Befehle; erweitere die Rollenfähigkeit nicht.
 - Die JEA-Transkripte zeigen jeden Aufruf. Sammle sie mit euren üblichen Werkzeugen ein, wenn du neben der Audit-Datei von SSS einen zweiten Nachweis brauchst.
 - Die Zielgruppe `Helpdesk` nimmt die Funktion normalen Benutzern weg und lässt sie dem Support.
 - Prozessnamen und Fenstertitel eines Benutzers können Privates enthalten. Sie werden nur diesem Benutzer und dem Helpdesk gezeigt und nicht im Audit-Protokoll gespeichert (dort steht nur die Prozess-ID).

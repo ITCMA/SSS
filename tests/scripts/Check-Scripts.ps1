@@ -68,6 +68,18 @@ Check 'Sync-SssConfig compares configurations independent of layout and key orde
     } finally { Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue }
 }
 
+Check 'Start-SssShadow accepts only a strict link and builds only the mstsc command' {
+    $script = Join-Path $root 'scripts\Start-SssShadow.ps1'
+    $ok = & $script -DryRun 'sss-shadow://vda01.corp.local/3?control=1'
+    Assert ($ok -match '^.*mstsc.exe /v:vda01.corp.local /shadow:3 /control$') "unexpected command: $ok"
+    $view = & $script -DryRun 'sss-shadow://vda01/7?control=0'
+    Assert ($view -notmatch '/control') 'view-only link must not add /control'
+    foreach ($bad in 'sss-shadow://vda01;calc/3?control=1', 'sss-shadow://vda01/3 4?control=1', 'sss-shadow://vda01/3?control=1&x=2', 'http://vda01/3?control=1') {
+        $failed = $false; try { & $script -DryRun $bad 2>$null | Out-Null } catch { $failed = $true }
+        Assert $failed "accepted a bad link: $bad"
+    }
+}
+
 Check 'Test-SssConfig takes a path and an install folder' {
     $names = (Parse (Join-Path $root 'scripts\Test-SssConfig.ps1')).ParamBlock.Parameters | ForEach-Object { $_.Name.VariablePath.UserPath }
     foreach ($p in 'Path', 'InstallFolder') { Assert ($names -contains $p) "Test-SssConfig.ps1 lacks -$p" }
@@ -88,7 +100,7 @@ Check 'role capability and session configuration files are valid' {
     $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ('sss-jea-' + [guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $tmp | Out-Null
     try {
-        New-PSRoleCapabilityFile -Path (Join-Path $tmp 'SssProcesses.psrc') -VisibleFunctions 'Get-SssProcess', 'Get-SssProfile', 'Get-SssPolicy', 'Stop-SssProcess' -FunctionDefinitions $functions
+        New-PSRoleCapabilityFile -Path (Join-Path $tmp 'SssProcesses.psrc') -VisibleFunctions 'Get-SssProcess', 'Get-SssProfile', 'Get-SssPolicy', 'Get-SssHdx', 'Stop-SssProcess' -FunctionDefinitions $functions
         New-PSSessionConfigurationFile -Path (Join-Path $tmp 'SSS.pssc') -SessionType RestrictedRemoteServer -RunAsVirtualAccount -TranscriptDirectory $tmp `
             -RoleDefinitions @{ 'CORP\svc-sss$' = @{ RoleCapabilities = 'SssProcesses' } }
         [void](Parse (Join-Path $tmp 'SssProcesses.psrc')); [void](Parse (Join-Path $tmp 'SSS.pssc'))

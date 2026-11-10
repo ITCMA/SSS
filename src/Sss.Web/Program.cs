@@ -377,6 +377,8 @@ api.MapGet("/me", (HttpContext http, HelpdeskAccess helpdesk, ProcessService pro
             role = helpdesk.RoleName(http),
             reasonRequired = options.Helpdesk.ReasonRequired,
             storeFrontUrl = options.StoreFrontUrl,
+            shadow = processes.ShadowState(helpdesk.Level(http)) == "ok",
+            shadowState = helpdesk.IsHelpdesk(http) ? processes.ShadowState(helpdesk.Level(http)) : null,
             rttWarnMs = options.Quality.RttWarnMs,
             loadWarn = options.Quality.LoadWarn,
             quality = options.Quality,
@@ -432,6 +434,17 @@ api.MapGet("/sessions/{uid}/profile", async (HttpContext http, string uid, Proce
     if (!svc.ProfileAvailable(false)) return Results.NotFound();
     if (!uidPattern.IsMatch(uid)) return Results.BadRequest("Invalid session id.");
     return await svc.ProfileAsync(user, uid, null, null, RemoteIp(http), ct) is { } info ? Results.Ok(info) : Results.NotFound();
+}).RequireRateLimiting("read");
+
+api.MapGet("/sessions/{uid}/hdx", async (HttpContext http, string uid, ProcessService svc, CancellationToken ct) =>
+{
+    var user = ResolveUser(http, options);
+    if (user is null) return Results.Unauthorized();
+    if (!svc.Available(false)) return Results.NotFound();
+    if (!uidPattern.IsMatch(uid)) return Results.BadRequest("Invalid session id.");
+    if (await svc.HdxAsync(user, uid, null, null, RemoteIp(http), ct) is not { } v) return Results.NotFound();
+    // the raw policy names stay with the helpdesk; a user gets the rated groups and the live values
+    return Results.Ok(v with { Channels = v.Channels.Select(c => c with { Policies = [] }).ToList() });
 }).RequireRateLimiting("read");
 
 api.MapPost("/sessions/{uid}/processes/{pid:int}/end", async (HttpContext http, string uid, int pid, EndProcessRequest? body, ProcessService svc, CancellationToken ct) =>
@@ -528,6 +541,21 @@ hd.MapGet("/sessions/{uid}/processes", async (HttpContext http, string uid, stri
     if (options.Helpdesk.ReasonRequired && why is null) return Results.BadRequest("A reason is required.");
     return await svc.ListAsync(new UserIdentity(sid, directory.NameOf(sid)), uid, actor, why, RemoteIp(http), ct) is { } list ? Results.Ok(list) : Results.NotFound();
 }).RequireCap(Cap.Deep);
+hd.MapPost("/sessions/{uid}/shadow", async (HttpContext http, string uid, string? sid, string? reason, ProcessService svc, HelpdeskAccess helpdesk, IUserDirectory directory, CancellationToken ct) =>
+{
+    var actor = ResolveUser(http, options);
+    if (actor is null) return Results.Unauthorized();
+    var state = svc.ShadowState(helpdesk.Level(http));
+    if (state == "level-off") return Results.StatusCode(StatusCodes.Status403Forbidden);
+    if (state != "ok") return Results.NotFound();
+    if (sid is null || !HelpdeskService.SidRegex().IsMatch(sid) || sid.Length > 184) return Results.BadRequest("Invalid user.");
+    if (!uidPattern.IsMatch(uid)) return Results.BadRequest("Invalid session id.");
+    var why = HelpdeskService.NormalizeReason(reason);
+    if (options.Helpdesk.ReasonRequired && why is null) return Results.BadRequest("A reason is required.");
+    var r = await svc.ShadowAsync(new UserIdentity(sid, directory.NameOf(sid)), uid, actor, why, RemoteIp(http), ct);
+    if (r is null) return Results.NotFound();
+    return r.Problem is null ? Results.Ok(new { url = r.Url, machine = r.Machine, sessionId = r.SessionId }) : Results.Json(new { problem = r.Problem }, statusCode: StatusCodes.Status409Conflict);
+}).RequireCap(Cap.View);
 hd.MapGet("/sessions/{uid}/policies", async (HttpContext http, string uid, string? sid, string? reason, ProcessService svc, IUserDirectory directory, CancellationToken ct) =>
 {
     var actor = ResolveUser(http, options);
@@ -549,6 +577,17 @@ hd.MapGet("/sessions/{uid}/profile", async (HttpContext http, string uid, string
     var why = HelpdeskService.NormalizeReason(reason);
     if (options.Helpdesk.ReasonRequired && why is null) return Results.BadRequest("A reason is required.");
     return await svc.ProfileAsync(new UserIdentity(sid, directory.NameOf(sid)), uid, actor, why, RemoteIp(http), ct) is { } info ? Results.Ok(info) : Results.NotFound();
+}).RequireCap(Cap.Deep);
+hd.MapGet("/sessions/{uid}/hdx", async (HttpContext http, string uid, string? sid, string? reason, ProcessService svc, IUserDirectory directory, CancellationToken ct) =>
+{
+    var actor = ResolveUser(http, options);
+    if (actor is null) return Results.Unauthorized();
+    if (!svc.Available(true)) return Results.NotFound();
+    if (sid is null || !HelpdeskService.SidRegex().IsMatch(sid) || sid.Length > 184) return Results.BadRequest("Invalid user.");
+    if (!uidPattern.IsMatch(uid)) return Results.BadRequest("Invalid session id.");
+    var why = HelpdeskService.NormalizeReason(reason);
+    if (options.Helpdesk.ReasonRequired && why is null) return Results.BadRequest("A reason is required.");
+    return await svc.HdxAsync(new UserIdentity(sid, directory.NameOf(sid)), uid, actor, why, RemoteIp(http), ct) is { } v ? Results.Ok(v) : Results.NotFound();
 }).RequireCap(Cap.Deep);
 hd.MapPost("/sessions/{uid}/processes/{pid:int}/end", async (HttpContext http, string uid, int pid, HelpdeskEndProcessRequest body, ProcessService svc, IUserDirectory directory, CancellationToken ct) =>
 {

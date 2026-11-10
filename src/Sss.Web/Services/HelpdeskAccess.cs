@@ -78,6 +78,13 @@ public sealed class HelpdeskAccess
     /// <summary>True for every role that sees other users (level 1 and up).</summary>
     public bool IsHelpdesk(HttpContext http) => Has(http, Cap.View);
 
+    /// <summary>Helpdesk level of the caller: 3, 2, 1, or 0 for no helpdesk role.</summary>
+    public int Level(HttpContext http)
+    {
+        var c = Caps(http);
+        return c.HasFlag(Cap.Deep) ? 3 : c.HasFlag(Cap.Act) ? 2 : c.HasFlag(Cap.View) ? 1 : 0;
+    }
+
     /// <summary>Highest role name of the caller for the audit log.</summary>
     public string RoleName(HttpContext http)
     {

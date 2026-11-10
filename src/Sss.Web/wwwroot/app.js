@@ -16,7 +16,7 @@ const state = {
   lang: 'en', dict: {}, fallback: {}, range: '24h', filter: '', csrf: null, data: null, timer: null,
   sort: { live: { key: 'started', dir: -1 }, hist: { key: 'ended', dir: -1 }, hd: { key: 'user', dir: 1 } },
   // view: 'mine' = own sessions, 'hdlist' = helpdesk search/overview, 'hduser' = sessions of the chosen user
-  view: 'mine', target: null, helpdesk: false, caps: {}, cfg: null, reasonRequired: false, hdFilter: '', hdLive: null, expert: false, detailsCtx: null, msgTarget: null, limits: { rttWarn: 80, loadWarn: 7000 }, quality: null,
+  view: 'mine', target: null, shadow: false, helpdesk: false, caps: {}, cfg: null, reasonRequired: false, hdFilter: '', hdLive: null, expert: false, detailsCtx: null, msgTarget: null, limits: { rttWarn: 80, loadWarn: 7000 }, quality: null,
 };
 
 const t = (key, vars = {}) => {
@@ -240,6 +240,11 @@ function actions(s, logoffBtn, live = false) {
     const b = el('button', { type: 'button', text: t('details'), 'aria-label': `${t('details')}: ${s.resourceName} (${s.machine})` });
     b.addEventListener('click', () => openDetails(s));
     box.append(b);
+  }
+  if (state.view === 'hduser' && live && state.shadow && s.uid) {
+    const sh = el('button', { type: 'button', text: t('shadowButton'), 'aria-label': `${t('shadowButton')}: ${s.resourceName} (${s.machine})` });
+    sh.addEventListener('click', () => startShadow(s));
+    box.append(sh);
   }
   if (state.view === 'hduser' && live && state.caps.act) {
     const m = el('button', { type: 'button', class: 'needs-broker', text: t('hdMessage'), 'aria-label': `${t('hdMessage')}: ${s.resourceName}` });
@@ -1883,6 +1888,93 @@ function buildPolicySection(ctx) {
   return el('section', { class: 'group profile' }, el('h3', { text: t('policiesTitle') }), el('p', { class: 'muted', text: t('policiesHint') }), btn, out);
 }
 
+// ---------- HDX: channels from the policies, live values of the VDA, measurements of the Monitor ----------
+const HDX_IDS = ['drive', 'clipboard', 'printing', 'audio', 'usb', 'graphics', 'network'];
+const HDX_COUNTER = { drive: /Drive/i, clipboard: /Clipboard/i, printing: /Printer/i, audio: /Audio/i, usb: /USB/i, graphics: /Thinwire|Graphics|Framehawk|Display/i };
+const HDX_GLYPH = { allowed: '✔', limited: '▲', blocked: '✖', configured: 'ℹ', unknown: '?' };
+const fmtBps = (bps) => (bps >= 1e6 ? `${(bps / 1e6).toFixed(1)} Mbit/s` : `${Math.round(bps / 1e3)} kbit/s`);
+// the counters of the VDA, read as bits per second; line speed and "available" counters are not use
+const hdxUse = (live, re) => (live?.counters ?? []).filter((c) => /Bandwidth/i.test(c.name) && !/Available|Line Speed/i.test(c.name) && re.test(c.name)).reduce((a, c) => a + c.value, 0);
+
+function hdxMetric(label, value) { return el('div', { class: 'hdxmetric' }, el('span', { class: 'muted', text: label }), el('b', { text: value })); }
+
+function renderHdx(ctx, v, out) {
+  const live = v.live, helpdesk = state.view === 'hduser';
+  const q = ctx.s.quality ?? {};
+  const find = (re) => live?.counters.find((c) => re.test(c.name))?.value;
+  const proto = (ctx.d?.groups ?? []).flatMap((g) => g.items).filter((i) => /^(hdxprotocol|protocol|transport|encryptionlevel|encryptionprotocol)$/i.test(i.key) && !/^\d{4}-\d\d-\d\d/.test(i.value)).slice(0, 2).map((i) => i.value).join(' · ');
+  const rtt = q.icaRttMs ?? find(/Latency - Session Average/i);
+  const clientBits = [ctx.s.clientName, ctx.s.clientAddress, ctx.s.clientPlatform, ctx.s.clientVersion].filter(Boolean);
+  const metrics = el('div', { class: 'hdxmetrics' },
+    clientBits.length ? hdxMetric(t('hdxClient'), clientBits.join(' · ')) : null,
+    proto ? hdxMetric(t('hdxProtocol'), proto) : null,
+    rtt != null ? hdxMetric(t('hdxRtt'), `${Math.round(rtt)} ms`) : null,
+    q.bandwidthKbps != null ? hdxMetric(t('hdxBwFree'), fmtBps(q.bandwidthKbps * 1000)) : null,
+    find(/^Output Session Bandwidth/i) != null ? hdxMetric(t('hdxBwUsed'), fmtBps(find(/^Output Session Bandwidth/i))) : null,
+    find(/Output Session Line Speed/i) ? hdxMetric(t('hdxLine'), fmtBps(find(/Output Session Line Speed/i))) : null);
+
+  const total = Math.max(1, hdxUse(live, /Session/i) || HDX_IDS.reduce((a, id) => a + (HDX_COUNTER[id] ? hdxUse(live, HDX_COUNTER[id]) : 0), 0));
+  const tiles = v.channels.map((c) => {
+    const use = HDX_COUNTER[c.id] && live ? hdxUse(live, HDX_COUNTER[c.id]) : null;
+    const mode = c.state === 'blocked' ? t('hdxMode_off') : c.mode && c.state !== 'allowed' ? t(`hdxMode_${c.mode}`, { off: (c.off ?? []).join(', ') }) : '';
+    return el('div', { class: `hdxtile st-${c.state}` },
+      el('h4', {}, el('span', { text: t(`hdxCh_${c.id}`) }), el('span', { class: `hdxchip ${c.state}`, text: `${HDX_GLYPH[c.state]} ${t(`hdxState_${c.state}`)}` })),
+      el('p', { class: 'muted', text: [mode, c.state === 'unknown' ? t('hdxDefault') : '', c.state === 'configured' ? c.policies.slice(0, 2).map((p) => `${p.name} = ${p.value}`).join(' · ') : ''].filter(Boolean).join(' · ') || ' ' }),
+      use != null && use >= 1000 ? el('div', { class: 'hdxuse' }, el('div', { class: 'hdxbar', role: 'img', 'aria-label': fmtBps(use) }, el('i', { style: `width:${Math.min(100, Math.max(2, Math.round((use / Math.max(total, use)) * 100)))}%` })), el('small', { class: 'muted', text: fmtBps(use) })) : null,
+      helpdesk && c.policies.length ? el('details', {}, el('summary', { text: t('hdxPolicies', { n: c.policies.length }) }),
+        el('ul', { class: 'hdxpol' }, ...c.policies.map((p) => el('li', { text: `${p.name} = ${p.value}` })))) : null);
+  });
+
+  const order = { crit: 0, warn: 1, info: 2 };
+  const hints = [...v.hints].sort((a, b) => order[a.level] - order[b.level]).map((h) => {
+    const args = { ...(h.args ?? {}) };
+    if (args.channel) args.channel = t(`hdxCh_${args.channel}`);
+    if (args.mode) args.mode = t(`hdxMode_${args.mode}`, { off: args.off ?? '' });
+    return el('li', { class: `finding ${h.level}` }, el('span', { class: 'dot', 'aria-hidden': 'true', text: h.level === 'info' ? 'ℹ' : '▲' }), el('span', { text: t(`hdxHint_${h.id}`, args) }));
+  });
+
+  const extra = [];
+  if (!live) extra.push(el('p', { class: 'muted', text: t('hdxNoLive') }));
+  else {
+    if (v.liveNote === 'nocounters') extra.push(el('p', { class: 'muted', text: t('hdxNoCounters') }));
+    extra.push(el('h4', { text: t('hdxPrinters') }), live.printers.length
+      ? el('ul', {}, ...live.printers.map((p) => el('li', { text: `${p.name}${p.driver ? ` · ${p.driver}` : ''}${p.default ? ` · ${t('hdxDefaultPrinter')}` : ''}` })))
+      : el('p', { class: 'muted', text: t('hdxNone') }));
+    extra.push(el('h4', { text: t('hdxDrives') }), live.drives.length
+      ? el('ul', {}, ...live.drives.map((d) => el('li', { text: d }))) : el('p', { class: 'muted', text: t('hdxNone') }));
+    const kinds = ['gpu', 'audio', 'usb', 'citrix'];
+    const devices = kinds.map((k) => [k, (live.devices ?? []).filter((d) => d.kind === k)]).filter(([, l]) => l.length);
+    extra.push(el('h4', { text: t('hdxDevices') }), devices.length
+      ? el('div', { class: 'hdxdev' }, ...devices.map(([k, l]) => el('div', {}, el('h5', { text: t(`hdxDev_${k}`) }),
+        el('ul', {}, ...l.map((d) => el('li', { text: d.detail ? `${d.name} · ${d.detail}` : d.name }))))))
+      : el('p', { class: 'muted', text: t('hdxNone') }), el('p', { class: 'muted', text: (live.devices ?? []).some((d) => d.kind === 'withheld') ? t('hdxDevicesWithheld') : t('hdxDevicesNote') }));
+    if (helpdesk && live.notes.length) extra.push(el('details', {}, el('summary', { text: t('hdxNotes') }), el('ul', { class: 'hdxpol' }, ...live.notes.map((n) => el('li', { text: n })))));
+  }
+  const series = (ctx.d?.series ?? []).filter((s) => /Rtt|Latency|Bandwidth|Frame|Fps|Thinwire|Audio|Clipboard|Drive|Printer|Usb|Graphic/i.test(s.name));
+  out.replaceChildren(metrics, el('div', { class: 'hdxgrid' }, ...tiles), hints.length ? el('ul', { class: 'hints' }, ...hints) : null,
+    ...extra, series.length ? el('h4', { text: t('hdxMonitor') }) : null, series.length ? buildCharts(series) : null,
+    el('p', { class: 'muted', text: t('hdxUnitNote') }));
+}
+
+function buildHdxSection(ctx) {
+  const out = el('div'), btn = el('button', { type: 'button', text: t('hdxRead') });
+  btn.addEventListener('click', async () => {
+    const hd = state.view === 'hduser';
+    if (hd && state.reasonRequired && !$('reason').value.trim()) { out.replaceChildren(el('p', { class: 'muted', text: t('hdReasonFirst') })); return; }
+    btn.disabled = true;
+    out.replaceChildren(el('p', { class: 'muted', text: t('profileScanning') }));
+    try {
+      const r = await fetch(hd ? `api/helpdesk/sessions/${encodeURIComponent(ctx.s.uid)}/hdx?sid=${encodeURIComponent(state.target.sid)}&reason=${encodeURIComponent($('reason').value.trim())}` : `api/sessions/${encodeURIComponent(ctx.s.uid)}/hdx`, { credentials: 'same-origin' });
+      if (state.detailsCtx !== ctx) return;
+      if (r.status === 429) { out.replaceChildren(el('p', { class: 'muted', text: t('rateLimited') })); return; }
+      if (!r.ok) { out.replaceChildren(el('p', { class: 'muted', text: t(r.status === 503 ? 'profileUnavailable' : r.status === 403 ? 'noRight' : 'error') })); return; }
+      renderHdx(ctx, await r.json(), out);
+    } catch { out.replaceChildren(el('p', { class: 'muted', text: t('error') })); }
+    finally { btn.disabled = false; }
+  });
+  return el('section', { class: 'group profile hdx' }, el('h3', { text: t('hdxTitle') }), el('p', { class: 'muted', text: t('hdxHint') }), btn, out);
+}
+
 function supportText(s, d, profile) {
   const q = s.quality;
   const lines = [
@@ -2034,6 +2126,7 @@ async function openDetails(s, tab = 'summary') {
       { id: 'summary', label: t('tabSummary'), node: el('div', {}, el('div', { class: 'summary' }, buildQuality(ctx.s), buildTopology(d, ctx.s)), buildStability(d), buildGroupLogon(ctx.s), buildWaterfall(d.waterfall)) },
       { id: 'charts', label: t('tabCharts'), node: buildCharts(d.series) },
       { id: 'props', label: t('tabProps'), node: el('div', {}, el('div', { class: 'groups' }, ...d.groups.map(groupBox)), ...d.tables.map(detailTable)) },
+      ...(state.processes && ctx.s.uid && ctx.s.state !== 'ended' && (state.view !== 'hduser' || state.caps.deep) ? [{ id: 'hdx', label: t('tabHdx'), node: buildHdxSection(ctx) }] : []),
       ...(state.profile && ctx.s.uid && ctx.s.state !== 'ended' && state.view === 'hduser' && state.caps.deep ? [{ id: 'policies', label: t('tabPolicies'), node: buildPolicySection(ctx) }] : []),
       ...(state.profile && ctx.s.uid && ctx.s.state !== 'ended' && (state.view !== 'hduser' || state.caps.deep) ? [{ id: 'profile', label: t('tabProfile'), node: buildProfileSection(ctx) }] : []),
     ];
@@ -2066,6 +2159,25 @@ function setExpert(on) {
   $('expert').setAttribute('aria-pressed', String(on));
   buildHeads();
   render();
+}
+
+// ---------- helpdesk: remote support by session shadowing ----------
+// SSS checks and audits the request; the starter on this PC (Register-SssShadow.ps1) opens mstsc /shadow for the link it gets back.
+async function startShadow(s) {
+  if (needReason() === null) { $('reason').focus(); return; }
+  setStatus(t('shadowAsking'));
+  try {
+    const r = await fetch(`api/helpdesk/sessions/${encodeURIComponent(s.uid)}/shadow?sid=${encodeURIComponent(state.target.sid)}&reason=${encodeURIComponent($('reason').value.trim())}`, { method: 'POST', credentials: 'same-origin', headers: { 'X-CSRF-TOKEN': await csrf() } });
+    if (r.status === 409) { const { problem } = await r.json(); setStatus(t(`shadow_${problem}`), true); return; }
+    if (!r.ok) throw new Error(String(r.status));
+    const { url, machine, sessionId } = await r.json();
+    const a = el('a', { href: url }); document.body.append(a); a.click(); a.remove();
+    setStatus(t('shadowStarted', { machine, id: sessionId }), false);
+    // a visible link as a fallback: the browser may refuse a link opened without a click, and a click on it always counts
+    $('status').append(' ', el('a', { href: url, text: t('shadowLink') }));
+  } catch {
+    setStatus(t('error'), true);
+  }
 }
 
 // ---------- helpdesk: message to a session ----------
@@ -2267,6 +2379,7 @@ async function init() {
     document.body.classList.toggle('cloud', !!me.cloud);
     $('cloud').hidden = !me.cloud;
     state.profile = !!me.profile;
+    state.shadow = !!me.shadow;
     syncTabs();
     refreshSeconds = me.refreshSeconds || 30;
   } catch {
@@ -2276,10 +2389,10 @@ async function init() {
   // demo mode only (README screenshots): ?shot=details opens the expert view of the first session, ?shot=profile also reads its
   // profile, ?shot=processes opens its process list, ?shot=env the Environment tab, ?shot=insights the Insights tab
   const shot = QUERY.get('shot');
-  if (!$('demo').hidden && state.data?.live[0] && ['details', 'profile', 'processes', 'charts'].includes(shot)) {
+  if (!$('demo').hidden && state.data?.live[0] && ['details', 'profile', 'processes', 'charts', 'hdx'].includes(shot)) {
     setExpert(true);
     if (shot === 'processes') await openProcesses(state.data.live[0]);
-    else { await openDetails(state.data.live[0], shot === 'profile' ? 'profile' : shot === 'charts' ? 'charts' : 'summary'); if (shot === 'profile') document.querySelector('.profile button')?.click(); }
+    else { await openDetails(state.data.live[0], shot === 'profile' ? 'profile' : shot === 'charts' ? 'charts' : shot === 'hdx' ? 'hdx' : 'summary'); if (shot === 'profile') document.querySelector('.profile button')?.click(); if (shot === 'hdx') document.querySelector('.hdx button')?.click(); }
   }
   if (!$('demo').hidden && shot === 'env' && state.caps.admin) { showView('env'); await loadEnv(); }
   if (!$('demo').hidden && shot === 'insights' && state.helpdesk) { showView('insights'); await loadInsights(); }

@@ -154,7 +154,32 @@ public sealed class MockSessionProvider : ISessionProvider, IHelpdeskProvider, I
             return Task.FromResult(new PolicyListResult("demo-vda.demo.local",
             [
                 new(2, "User\\ICA Client Redirection", "ClipboardRedirection", "1"), new(2, "User\\Printing", "AutoCreateClientPrinters", "2"),
+                new(2, "User\\ICA Client Redirection", "ClientDriveRedirection", "ReadOnly"), new(2, "User\\ICA Client Redirection", "UsbDeviceRedirection", "Prohibited"),
+                new(2, "User\\Audio", "AudioRedirection", "1"), new(2, "User\\Graphics", "FramesPerSecond", "30"), new(2, "User\\Graphics", "VisualQuality", "High"),
+                new(2, "Computer\\ICA", "OverallSessionBandwidthLimit", "4000"), new(2, "Computer\\ICA", "HdxAdaptiveTransport", "1"),
                 new(2, "Computer\\Profile Management", "PathToUserStore", "\\\\fileserver\\profiles"), new(2, "Computer\\ICA", "SessionReliabilityTimeout", "180"),
+            ]));
+        }
+    }
+
+    public Task<BrokerHdx> GetHdxAsync(string userSid, string uid, CancellationToken ct, bool idsOnly = false)
+    {
+        lock (_gate)
+        {
+            if (!_items.Any(e => e.OwnerSid == userSid && e.Info.Uid == uid && e.Info.State != SessionState.Ended)) throw new InvalidOperationException("Session not found.");
+            return Task.FromResult(new BrokerHdx("demo-vda.demo.local",
+            [
+                new HdxLive(2, "Session 2",
+                [
+                    new("Output Session Bandwidth", 3650000), new("Input Session Bandwidth", 38000), new("Output Session Line Speed", 25000000), new("Latency - Session Average", 46),
+                    new("Output Thinwire Bandwidth", 3200000), new("Output Audio Bandwidth", 41000), new("Output Printer Bandwidth", 1200), new("Output Clipboard Bandwidth", 300),
+                    new("Output Drive Bandwidth", 9000), new("Input Clipboard Bandwidth", 0),
+                ],
+                [new("Office-Printer (from DEMO-PC) in session 2", "HP Universal Printing PCL 6", true)],
+                ["V: -> \\\\Client\\C$", "W: -> \\\\Client\\D$"], [],
+                    null,
+                    [new("gpu", "NVIDIA A16-4Q (demo)", "4096 MB · 537.13 · OK"), new("audio", "Speakers (Citrix HDX Audio)", "OK"), new("audio", "Microphone (Citrix HDX Audio)", "OK"),
+                     new("usb", "USB Input Device (demo keyboard)", "OK"), new("citrix", "Citrix Virtual Display Driver", "OK")]),
             ]));
         }
     }

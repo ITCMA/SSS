@@ -171,6 +171,26 @@ public sealed partial class BrokerWorkerPool : IBrokerClient, IHostedService, ID
         return new BrokerPolicies(Str(res, "machine"), list);
     }
 
+    public async Task<BrokerHdx> HdxAsync(string userSid, string uid, CancellationToken ct, bool idsOnly = false)
+    {
+        if (!SidRegex().IsMatch(userSid)) throw new ArgumentException("Invalid SID.", nameof(userSid));
+        if (!UidRegex().IsMatch(uid)) throw new ArgumentException("Invalid session id.", nameof(uid));
+        var res = await RunAsync(new() { ["op"] = "hdx", ["sid"] = userSid, ["uid"] = uid, ["idsOnly"] = idsOnly }, ct, Math.Max(_options.RequestTimeoutSeconds, _options.Processes.TimeoutSeconds));
+        var list = new List<HdxLive>();
+        if (res.TryGetProperty("sessions", out var arr) && arr.ValueKind == JsonValueKind.Array)
+            foreach (var s in arr.EnumerateArray())
+            {
+                static List<T> Each<T>(JsonElement e, string name, Func<JsonElement, T> map) =>
+                    e.TryGetProperty(name, out var a) && a.ValueKind == JsonValueKind.Array ? a.EnumerateArray().Select(map).ToList() : [];
+                list.Add(new HdxLive(Int(s, "sessionId") ?? 0, Str(s, "instance"),
+                    Each(s, "counters", c => new HdxCounter(Str(c, "name") ?? "", c.TryGetProperty("value", out var v) && v.TryGetDouble(out var d) ? d : 0)),
+                    Each(s, "printers", p => new HdxPrinter(Str(p, "name") ?? "", Str(p, "driver"), p.TryGetProperty("default", out var b) && b.ValueKind == JsonValueKind.True)),
+                    Each(s, "drives", d => d.GetString() ?? ""), Each(s, "notes", n => n.GetString() ?? ""), Date(s, "started"),
+                    Each(s, "devices", d => new HdxDevice(Str(d, "kind") ?? "", Str(d, "name") ?? "", Str(d, "detail")))));
+            }
+        return new BrokerHdx(Str(res, "machine"), list);
+    }
+
     public async Task<ProfileInfo> ProfileAsync(string userSid, string uid, int scanSeconds, CancellationToken ct)
     {
         if (!SidRegex().IsMatch(userSid)) throw new ArgumentException("Invalid SID.", nameof(userSid));

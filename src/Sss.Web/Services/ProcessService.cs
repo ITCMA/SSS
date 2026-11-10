@@ -35,6 +35,78 @@ public sealed partial class ProcessService(IProcessProvider provider, SessionSer
         return list;
     }
 
+    /// <summary>The HDX view of one live session: the channel groups from the policies in force, and the live values of the VDA when it delivers
+    /// them (an older JEA endpoint without Get-SssHdx is reported as a note, the rest still works). Null when the session is not the target's.</summary>
+    public async Task<HdxView?> HdxAsync(UserIdentity target, string uid, UserIdentity? actor, string? reason, string? ip, CancellationToken ct)
+    {
+        if (!await OwnsAsync(target, uid, ct)) return null;
+        var policies = await provider.GetPoliciesAsync(target.Sid, uid, ct);
+        BrokerHdx? live = null; string? note = null;
+        try { live = await provider.GetHdxAsync(target.Sid, uid, ct); }
+        catch (Exception ex) when (ex is not OperationCanceledException) { note = "unavailable"; }
+        // several sessions of the user on that machine: take the one the live counters name, else the one with the most policy values
+        var sessionId = live?.Sessions.FirstOrDefault(s => s.Counters.Count > 0)?.SessionId
+            ?? policies.Entries.GroupBy(e => e.SessionId).OrderByDescending(g => g.Count()).Select(g => (int?)g.Key).FirstOrDefault();
+        var one = live?.Sessions.FirstOrDefault(s => s.SessionId == sessionId) ?? live?.Sessions.FirstOrDefault();
+        if (live is not null && one is null) note = "none";
+        if (one is not null && one.Counters.Count == 0 && note is null) note = "nocounters";
+        var channels = HdxAdvisor.Channels(policies.Entries.Where(e => sessionId is null || e.SessionId == sessionId));
+        audit.Write(new AuditEntry("hdx-info", target, uid, "success", ip, actor, reason));
+        return new HdxView(policies.Machine ?? live?.Machine, sessionId, channels, one, note, HdxAdvisor.Hints(channels, one));
+    }
+
+    /// <summary>Whether the caller's helpdesk level may use the shadow button (Sss:Shadow:AllowLevel1/2/3).</summary>
+    public bool ShadowAllowedFor(int level) => level switch
+    {
+        1 => options.Shadow.AllowLevel1,
+        2 => options.Shadow.AllowLevel2,
+        3 => options.Shadow.AllowLevel3,
+        _ => false,
+    };
+
+    /// <summary>Why the button is or is not offered (for /api/me and diagnosis): ok, disabled, processes-off, cloud, level-off or no-role.</summary>
+    public string ShadowState(int level) =>
+        !options.Shadow.Enabled ? "disabled"
+        : options.Provider.Equals("Mock", StringComparison.OrdinalIgnoreCase) ? (level == 0 ? "no-role" : ShadowAllowedFor(level) ? "ok" : "level-off")
+        : options.Citrix.Cloud.Enabled ? "cloud"
+        : !options.Citrix.Processes.Enabled ? "processes-off"
+        : level == 0 ? "no-role" : ShadowAllowedFor(level) ? "ok" : "level-off";
+
+    [GeneratedRegex(@"^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$")] private static partial Regex HostRegex();
+
+    /// <summary>Works out where to shadow the session: the VDA and the Windows session id on it (read through the JEA endpoint; with several
+    /// sessions of the user the one whose first process started closest to the Broker session). The request is audited; the link goes to the
+    /// starter on the helpdesk PC. Null when the session is not the target's.</summary>
+    public async Task<ShadowResult?> ShadowAsync(UserIdentity target, string uid, UserIdentity actor, string? reason, string? ip, CancellationToken ct)
+    {
+        var live = (await sessions.GetAsync(target, TimeSpan.Zero, ct)).Live.FirstOrDefault(s => s.Uid == uid);
+        if (live is null || !UidRegex().IsMatch(uid))
+        {
+            audit.Write(new AuditEntry("shadow", target, uid, "rejected-not-owned-or-not-live", ip, actor, reason));
+            return null;
+        }
+        BrokerHdx found;
+        try { found = await provider.GetHdxAsync(target.Sid, uid, ct, idsOnly: true); }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            audit.Write(new AuditEntry("shadow", target, uid, "failed", ip, actor, reason, "session id not readable"));
+            return new ShadowResult(null, null, null, "unavailable");
+        }
+        var host = found.Machine;
+        HdxLive? pick = found.Sessions.Count == 1 ? found.Sessions[0]
+            : found.Sessions.Where(s => s.Started is not null).OrderBy(s => Math.Abs((s.Started!.Value - live.StartTime).TotalSeconds)).FirstOrDefault();
+        // several sessions and no start time to tell them apart: refuse instead of shadowing the wrong one
+        if (found.Sessions.Count > 1 && found.Sessions.Count(s => s.Started is null) > 0) pick = null;
+        if (pick is null || host is null || !HostRegex().IsMatch(host))
+        {
+            audit.Write(new AuditEntry("shadow", target, uid, "failed", ip, actor, reason, found.Sessions.Count == 0 ? "no session found on the VDA" : "session not unique"));
+            return new ShadowResult(null, host, null, found.Sessions.Count == 0 ? "notfound" : "ambiguous");
+        }
+        var url = $"sss-shadow://{host}/{pick.SessionId}?control={(options.Shadow.Control ? 1 : 0)}";
+        audit.Write(new AuditEntry("shadow", target, uid, "success", ip, actor, reason, $"{host} session {pick.SessionId}{(options.Shadow.Control ? " control" : " view")}"));
+        return new ShadowResult(url, host, pick.SessionId, null);
+    }
+
     public async Task<ProcessListResult?> ListAsync(UserIdentity target, string uid, UserIdentity? actor, string? reason, string? ip, CancellationToken ct)
     {
         if (!await OwnsAsync(target, uid, ct)) return null;

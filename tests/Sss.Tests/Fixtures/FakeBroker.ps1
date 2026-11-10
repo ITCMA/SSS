@@ -85,6 +85,16 @@ function Get-SssPolicy {
         [pscustomobject]@{ SessionId = 2; Path = 'Computer\Printing'; Name = 'AutoCreateClientPrinters'; Value = '2' }
     }
 }
+function Get-SssHdx {
+    [CmdletBinding()]
+    param([string]$UserSid, [switch]$IdsOnly)
+    if ($UserSid -eq 'S-1-5-21-1-1-1-1001') {
+        [pscustomobject]@{ SessionId = 2; Started = '2026-11-10T08:00:00.0000000Z'; Instance = 'Session 2'
+            Counters = @([pscustomobject]@{ Name = 'Output Session Bandwidth'; Value = 1840.5 }, [pscustomobject]@{ Name = 'Latency - Session Average'; Value = 42 })
+            Printers = @([pscustomobject]@{ Name = 'Office (from PC) in session 2'; Driver = 'HP Universal'; Default = $true })
+            Drives = @('Connection\ClientDrives=C:,D:'); Notes = @() }
+    }
+}
 function Get-SssProfile {
     [CmdletBinding()]
     param([string]$UserSid, [int]$ScanSeconds)

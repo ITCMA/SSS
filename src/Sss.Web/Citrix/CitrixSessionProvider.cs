@@ -92,6 +92,8 @@ public sealed class CitrixSessionProvider(
             list.Processes.Select(p => new ProcessEntry(p.Id, p.Name, p.Started, p.MemoryMb, p.Window, p.IsApp, p.Path, p.Description)).ToList());
     }
 
+    public Task<BrokerHdx> GetHdxAsync(string userSid, string uid, CancellationToken ct, bool idsOnly = false) => broker.HdxAsync(userSid, uid, ct, idsOnly);
+
     public async Task<PolicyListResult> GetPoliciesAsync(string userSid, string uid, CancellationToken ct)
     {
         var p = await broker.PoliciesAsync(userSid, uid, ct);

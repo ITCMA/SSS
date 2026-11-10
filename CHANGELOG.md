@@ -2,6 +2,13 @@
 
 All notable changes to SSS. The project follows [Semantic Versioning](docs/COMPATIBILITY.md); versions below 1.0.0 may still change configuration keys between minor versions, and every such change is listed here.
 
+## 0.4.7 - 2026-11-10 (beta)
+
+### Added
+- **HDX tab** in the expert view (for the user's own sessions and for the helpdesk, level 3): the channel groups drives, clipboard, printing, audio, USB, graphics and network as the policies in force set them (allowed, restricted, blocked, with a plain-language hint), the live use per channel and the line speed read from the performance counters of the VDA, the printers the client created in the session, the drives mapped in it, the devices of the VDA (graphics adapters, sound devices, USB devices, Citrix virtual devices), the client device, and the Monitor measurements (latency, bandwidth) of the session. See [docs/HDX.md](docs/HDX.md). The new read-only JEA command `Get-SssHdx` needs the updated `Install-SssJea.ps1` on the VDAs; without it the tab still shows the groups rated from the policies.
+- **Remote support** button for the helpdesk, done in SSS (on by default for every helpdesk level; `Sss:Shadow:AllowLevel1/2/3` switch it off per level): it checks rights, reason and ownership, audits the request (`shadow`) and starts `mstsc /shadow` on the helpdesk PC through a small starter (`Register-SssShadow.ps1`, once per PC, no administrator rights). Windows decides who may shadow and asks the user. `Sss:Shadow:Enabled` switches it off. See [docs/SHADOW.md](docs/SHADOW.md).
+- **[Quick start](docs/QUICKSTART.md)**: what to install where, with which parameters, and a solid basic configuration.
+
 ## 0.4.6 - 2026-11-05 (beta)
 
 ### Added

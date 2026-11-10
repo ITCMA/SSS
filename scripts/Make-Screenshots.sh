@@ -20,6 +20,7 @@ shot overview "" 900
 shot expert "&shot=details" 1100
 shot overtime "&shot=charts" 1300
 shot profile "&shot=profile" 1100
+shot hdx "&shot=hdx" 1600
 shot processes "&shot=processes" 1000
 shot environment "&shot=env" 1900
 shot insights "&shot=insights" 6800

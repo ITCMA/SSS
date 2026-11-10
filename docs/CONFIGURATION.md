@@ -40,6 +40,9 @@ SSS has no configuration GUI on purpose: a web page that writes its own configur
 | `Provider` | `Mock` | `Citrix` for a real site. `Mock` serves demo data and shows a banner. |
 | `RefreshSeconds` | `30` | Automatic refresh interval of the web interface. |
 | `StoreFrontUrl` | `""` | Optional absolute `http(s)` address; the interface then shows an "Open StoreFront" link (to start or reconnect sessions). |
+| `Shadow:Enabled` | `true` | The **Remote support** button for the helpdesk: SSS checks rights, reason and ownership, audits (`shadow`) and hands the link to the starter on the helpdesk PC, which runs `mstsc /shadow`. It appears only when `Citrix:Processes:Enabled` is on too (the Windows session id is read on the VDA). See [SHADOW.md](SHADOW.md). |
+| `Shadow:AllowLevel1`, `AllowLevel2`, `AllowLevel3` | `true` | Which helpdesk level may use it; set one to `false` to switch it off for that level. |
+| `Shadow:Control` | `true` | `true`: the helpdesk may take over mouse and keyboard (the user is always asked first); `false`: view only. |
 | `PathBase` | none | Application path for local runs behind a prefix. Behind IIS the ASP.NET Core Module sets it; leave it empty. |
 
 ## Authentication (`Sss:Auth`)

@@ -43,7 +43,7 @@ One JSON object per line:
 | `server`, `requestId` | the SSS server and the request, to follow one click through all logs |
 | `chain` | hash chain, see integrity |
 
-Actions: `logoff:*`, `helpdesk-logoff:*`, `helpdesk-message`, `helpdesk:search`, `helpdesk:list-all`, `helpdesk:view`, `helpdesk:details`, `list-processes`, `end-process`, `profile-info`, `audit:view`, `audit:export`, and the alert `alert:bulk-logoff`. Looking things up is logged once per five minutes per helpdesk member and user, so the automatic refresh does not flood the trail.
+Actions: `logoff:*`, `helpdesk-logoff:*`, `helpdesk-message`, `helpdesk:search`, `helpdesk:list-all`, `helpdesk:view`, `helpdesk:details`, `shadow`, `hdx-info`, `list-processes`, `end-process`, `profile-info`, `audit:view`, `audit:export`, and the alert `alert:bulk-logoff`. Looking things up is logged once per five minutes per helpdesk member and user, so the automatic refresh does not flood the trail.
 
 ## Integrity
 

@@ -21,6 +21,7 @@ public abstract class SssFactory(bool helpdesk, string roles = "") : WebApplicat
         Environment.SetEnvironmentVariable("Sss__Auth__DevIsHelpdesk", helpdesk ? "true" : "false");
         Environment.SetEnvironmentVariable("Sss__Audit__Directory", AuditDir);
         Environment.SetEnvironmentVariable("Sss__Auth__DevRoles", roles);
+        Environment.SetEnvironmentVariable("Sss__Shadow__Enabled", "true");
         Environment.SetEnvironmentVariable("Sss__Helpdesk__ReasonRequired", "true");   // the API tests cover the requirement; it is off by default
     }
 
@@ -32,6 +33,7 @@ public abstract class SssFactory(bool helpdesk, string roles = "") : WebApplicat
         Environment.SetEnvironmentVariable("Sss__Auth__DevIsHelpdesk", null);
         Environment.SetEnvironmentVariable("Sss__Audit__Directory", null);
         Environment.SetEnvironmentVariable("Sss__Auth__DevRoles", null);
+        Environment.SetEnvironmentVariable("Sss__Shadow__Enabled", null);
         Environment.SetEnvironmentVariable("Sss__Helpdesk__ReasonRequired", null);
         if (Directory.Exists(AuditDir)) Directory.Delete(AuditDir, true);
     }
@@ -42,6 +44,24 @@ public sealed class HelpdeskOffFactory() : SssFactory(false);
 public sealed class Level1Factory() : SssFactory(false, "L1");
 public sealed class Level2Factory() : SssFactory(false, "L2");
 public sealed class AuditorFactory() : SssFactory(false, "Auditor");
+
+/// <summary>Level 2 with the shadow button switched off for level 2 (Sss:Shadow:AllowLevel2 = false).</summary>
+public sealed class Level2NoShadowFactory : SssFactory
+{
+    public Level2NoShadowFactory() : base(false, "L2") { }
+
+    protected override void ConfigureWebHost(IWebHostBuilder builder)
+    {
+        base.ConfigureWebHost(builder);
+        Environment.SetEnvironmentVariable("Sss__Shadow__AllowLevel2", "false");
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        base.Dispose(disposing);
+        Environment.SetEnvironmentVariable("Sss__Shadow__AllowLevel2", null);
+    }
+}
 
 [CollectionDefinition("Api", DisableParallelization = true)]
 public sealed class ApiCollection;
@@ -98,6 +118,23 @@ public class HelpdeskApiTests : IClassFixture<HelpdeskOnFactory>
         Assert.True(p.GetProperty("sizeMb").GetInt32() > 0);
         Assert.Contains("profile-info", string.Concat(Directory.GetFiles(_f.AuditDir).Select(File.ReadAllText)));
         Assert.Equal(HttpStatusCode.NotFound, (await _c.GetAsync("/api/sessions/does-not-exist/profile")).StatusCode);
+    }
+
+    [Fact]
+    public async Task The_shadow_link_names_the_vda_and_the_session_id_and_is_audited()
+    {
+        var url = $"/api/helpdesk/sessions/2001/shadow?sid={MockSessionProvider.OtherSid}";
+        Assert.Equal(HttpStatusCode.BadRequest, (await _c.PostJson(url, new { })).StatusCode);   // reason required
+        var ok = await _c.PostJson(url + "&reason=INC1", new { });
+        Assert.Equal(HttpStatusCode.OK, ok.StatusCode);
+        var j = await ok.Json();
+        Assert.Equal("sss-shadow://demo-vda.demo.local/2?control=1", j.GetProperty("url").GetString());
+        Assert.Equal(HttpStatusCode.NotFound, (await _c.PostJson($"/api/helpdesk/sessions/9999/shadow?sid={MockSessionProvider.OtherSid}&reason=r", new { })).StatusCode);
+        var audit = string.Concat(Directory.GetFiles(_f.AuditDir).Select(File.ReadAllText));
+        Assert.Contains("\"shadow\"", audit);
+        Assert.Contains("demo-vda.demo.local session 2 control", audit);
+        Assert.Contains("rejected-not-owned-or-not-live", audit);
+        Assert.True((await (await _c.GetAsync("/api/me")).Json()).GetProperty("shadow").GetBoolean());
     }
 
     [Fact]
@@ -378,6 +415,27 @@ public class RoleTests : IClassFixture<Level1Factory>, IClassFixture<Level2Facto
     }
 
     [Fact]
+    public async Task Every_helpdesk_level_may_shadow_by_default()
+    {
+        var url = $"/api/helpdesk/sessions/2001/shadow?sid={MockSessionProvider.OtherSid}&reason=r";
+        Assert.Equal(HttpStatusCode.OK, (await _l1.PostJson(url, new { })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await _l2.PostJson(url, new { })).StatusCode);
+        Assert.True((await (await _l1.GetAsync("/api/me")).Json()).GetProperty("shadow").GetBoolean());
+    }
+
+    [Fact]
+    public async Task An_auditor_without_a_helpdesk_role_cannot_shadow()
+    {
+        Assert.Equal(HttpStatusCode.Forbidden, (await _auditor.PostJson($"/api/helpdesk/sessions/2001/shadow?sid={MockSessionProvider.OtherSid}&reason=r", new { })).StatusCode);
+    }
+
+    [Fact]
+    public async Task Level_2_cannot_read_the_hdx_values_either()
+    {
+        Assert.Equal(HttpStatusCode.Forbidden, (await _l2.GetAsync($"/api/helpdesk/sessions/2001/hdx?sid={MockSessionProvider.OtherSid}&reason=r")).StatusCode);
+    }
+
+    [Fact]
     public async Task Level_2_cannot_read_the_policies_either()
     {
         Assert.Equal(HttpStatusCode.Forbidden, (await _l2.GetAsync($"/api/helpdesk/sessions/2001/policies?sid={MockSessionProvider.OtherSid}&reason=r")).StatusCode);
@@ -398,5 +456,21 @@ public class RoleTests : IClassFixture<Level1Factory>, IClassFixture<Level2Facto
         Assert.True(me.GetProperty("caps").GetProperty("audit").GetBoolean());
         Assert.Equal(HttpStatusCode.Forbidden, (await _auditor.GetAsync("/api/helpdesk/live")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await _auditor.GetAsync("/api/helpdesk/status")).StatusCode);
+    }
+}
+
+[Collection("Api")]
+public class ShadowLevelTests : IClassFixture<Level2NoShadowFactory>
+{
+    private readonly HttpClient _c;
+    public ShadowLevelTests(Level2NoShadowFactory f) { _c = f.NewClient(); }
+
+    [Fact]
+    public async Task A_level_switched_off_in_the_configuration_gets_no_button_and_no_link()
+    {
+        var me = await (await _c.GetAsync("/api/me")).Json();
+        Assert.False(me.GetProperty("shadow").GetBoolean());
+        Assert.Equal("level-off", me.GetProperty("shadowState").GetString());
+        Assert.Equal(HttpStatusCode.Forbidden, (await _c.PostJson($"/api/helpdesk/sessions/2001/shadow?sid={MockSessionProvider.OtherSid}&reason=r", new { })).StatusCode);
     }
 }

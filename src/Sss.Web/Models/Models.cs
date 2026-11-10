@@ -98,6 +98,31 @@ public sealed record PolicyEntry(int SessionId, string Path, string Name, string
 
 public sealed record PolicyListResult(string? Machine, IReadOnlyList<PolicyEntry> Entries);
 
+/// <summary>One virtual-channel counter of the session read on the VDA (bandwidth, latency ...); the name is the Windows counter name.</summary>
+public sealed record HdxCounter(string Name, double Value);
+public sealed record HdxPrinter(string Name, string? Driver, bool Default);
+
+/// <summary>What the VDA reports live about one session: the "ICA Session" performance counters, redirected printers and what is known about client drives.</summary>
+public sealed record HdxLive(int SessionId, string? Instance, IReadOnlyList<HdxCounter> Counters, IReadOnlyList<HdxPrinter> Printers, IReadOnlyList<string> Drives, IReadOnlyList<string> Notes, DateTimeOffset? Started = null, IReadOnlyList<HdxDevice>? Devices = null);
+
+/// <summary>A device the VDA knows: <c>Kind</c> is gpu, audio, usb or citrix; <c>Detail</c> is a short extra (driver, memory, status).</summary>
+public sealed record HdxDevice(string Kind, string Name, string? Detail);
+
+/// <summary>Where to shadow a session: the VDA, the Windows session id on it, and the link for the starter on the helpdesk PC. <c>Problem</c> is set instead when it cannot be found out (ambiguous, notfound).</summary>
+public sealed record ShadowResult(string? Url, string? Machine, int? SessionId, string? Problem);
+public sealed record BrokerHdx(string? Machine, IReadOnlyList<HdxLive> Sessions);
+
+/// <summary>One HDX channel group (drive, clipboard, printing, audio, usb, graphics, network) as the policies in force set it.
+/// <c>State</c> is allowed, limited, blocked, configured (values exist that SSS cannot rate) or unknown (no policy, so the default applies).
+/// <c>Mode</c> selects a translated text (readOnly, toClient, toServer, both, off, on, partial); <c>Off</c> names the sub-functions a "partial" group has switched off; <c>Policies</c> are the values it is based on.</summary>
+public sealed record HdxChannel(string Id, string State, string? Mode, IReadOnlyList<PolicyEntry> Policies, IReadOnlyList<string>? Off = null);
+
+/// <summary>Findings like the profile hints: <c>Id</c> selects the translated text, <c>Args</c> fills its placeholders.</summary>
+public sealed record HdxHint(string Id, string Level, IReadOnlyDictionary<string, string>? Args = null);
+
+/// <summary>The HDX view of a session. <c>Live</c> is null when the VDA delivered no live values (older JEA endpoint, counters missing); <c>LiveNote</c> then says why.</summary>
+public sealed record HdxView(string? Machine, int? SessionId, IReadOnlyList<HdxChannel> Channels, HdxLive? Live, string? LiveNote, IReadOnlyList<HdxHint> Hints);
+
 public sealed record ProcessListResult(string? Machine, IReadOnlyList<ProcessEntry> Processes);
 
 public sealed record EndProcessResult(string Result);

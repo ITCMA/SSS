@@ -36,6 +36,10 @@ Alle Bilder zeigen den eingebauten Demo-Modus mit erfundenen Daten; keines stamm
 
 ![Profilanalyse mit Befunden und Ordnerbaum](img/profile-light.png)
 
+## HDX: Kanäle, Richtlinien und Live-Werte
+
+![HDX: Kanäle, Richtlinien und Live-Werte](img/hdx-light.png)
+
 ## Anwendungen und Prozesse einer Sitzung
 
 ![Anwendungen und Prozesse einer Sitzung](img/processes-light.png)

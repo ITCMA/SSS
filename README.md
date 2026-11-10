@@ -80,7 +80,7 @@ ASPNETCORE_ENVIRONMENT=Development ASPNETCORE_URLS=http://localhost:5080 dotnet 
 
 Open <http://localhost:5080> and add `?shot=profile` or `?shot=processes` to the address to see the expert dialogs. Requires the [.NET 10 SDK](https://dotnet.microsoft.com/download).
 
-**Install on your Citrix site:** download the zip from the [releases](https://github.com/ITCMA/SSS/releases), then follow the **[set-up guide](docs/SETUP.md)**: prepare a service account, run `install.ps1`, check with `Test-SssSetup.ps1` and `Test-SssCitrix.ps1`. What the server needs is listed in the [requirements](docs/REQUIREMENTS.md).
+**Install on your Citrix site:** download the zip from the [releases](https://github.com/ITCMA/SSS/releases), start with the **[quick start](docs/QUICKSTART.md)** (what goes where, remote support needs `Register-SssShadow.ps1 -AllowedHostSuffix` on every helpdesk PC), then follow the **[set-up guide](docs/SETUP.md)**: prepare a service account, run `install.ps1`, check with `Test-SssSetup.ps1` and `Test-SssCitrix.ps1`. What the server needs is listed in the [requirements](docs/REQUIREMENTS.md).
 
 ## Security in short
 
@@ -88,18 +88,22 @@ Open <http://localhost:5080> and add `?shot=profile` or `?shot=processes` to the
 - Every log-off, message and process action is re-checked server-side against the caller's own live sessions before anything is sent to Citrix; foreign or unknown ids are rejected and audited.
 - Anti-forgery token, per-user rate limits, strict CSP and security headers, no inline scripts, no `innerHTML`.
 - The helpdesk is a separate set of endpoints behind an AD group; everything it does is audited.
-- Process control uses a restricted JEA endpoint with four commands and shows exactly what it can and cannot do ([docs](docs/PROCESSES.md#what-this-exposes-and-what-it-does-not)).
+- The **HDX tab** shows what the policies allow in a session (drives, clipboard, printing, audio, USB, graphics) and what it uses live ([docs/HDX.md](docs/HDX.md)); the helpdesk can shadow a session straight from SSS ([docs/SHADOW.md](docs/SHADOW.md)).
+- Process control uses a restricted JEA endpoint with five commands and shows exactly what it can and cannot do ([docs](docs/PROCESSES.md#what-this-exposes-and-what-it-does-not)).
 - Details and how to report a problem: [SECURITY.md](SECURITY.md), [threat model](docs/THREAT-MODEL.md).
 
 ## Documentation
 
 | | |
 |---|---|
+| [Quick start](docs/QUICKSTART.md) | what to install where, parameters, solid basic configuration |
 | [Set-up guide](docs/SETUP.md) | from nothing to a working SSS: service account, installation, connection, helpdesk |
 | [Requirements](docs/REQUIREMENTS.md) | software, accounts, Citrix, ports |
 | [Configuration reference](docs/CONFIGURATION.md) | every option with default and meaning |
 | [Permissions at a glance](docs/PERMISSIONS.md) | who needs which right, where and why |
 | [Operations](docs/OPERATIONS.md) | update, health probe, status page, audit trail, troubleshooting |
+| [Remote support](docs/SHADOW.md) | shadowing a session from SSS, starter on the helpdesk PC |
+| [HDX tab](docs/HDX.md) | channels from the policies, live values of the VDA, Director link |
 | [Applications, processes and profiles](docs/PROCESSES.md) | the JEA endpoint on the VDAs, setup, security |
 | [Roles](docs/ROLES.md) | helpdesk levels, auditor, admin, optional ticket number |
 | [Audit trail and central logging](docs/AUDIT.md) | who did what, destinations (UNC, Syslog/CEF, HTTP, SNMP), integrity |

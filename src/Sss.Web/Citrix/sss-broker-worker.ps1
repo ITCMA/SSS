@@ -1,7 +1,7 @@
 <#
   SSS broker worker: a long-running Windows PowerShell 5.1 process that talks to the Citrix Broker SDK.
   Protocol: one JSON request per line on stdin, one JSON response per line on stdout.
-  Only a few operations exist (ping, controllers, list, listall, logoff, message, processes, endprocess, profile, policies) and every value is validated before it reaches a cmdlet.
+  Only a few operations exist (ping, controllers, list, listall, logoff, message, processes, endprocess, profile, policies, hdx) and every value is validated before it reaches a cmdlet.
   Keep this file compatible with Windows PowerShell 5.1 (no ternary, no ?? operators).
 #>
 [CmdletBinding()]
@@ -170,6 +170,20 @@ function Get-SessionPolicies([string]$sid, [string]$uid) {
     return @{ machine = $machine; policies = $rows }
 }
 
+function Get-SessionHdx([string]$sid, [string]$uid, [bool]$idsOnly = $false) {
+    $machine = Get-OwnedSession $sid $uid
+    $list = Use-Jea $machine @('Get-SssHdx') { @(Get-SssHdx -UserSid $sid -IdsOnly:$idsOnly) }
+    $rows = @($list | Where-Object { $_ } | ForEach-Object {
+        @{ sessionId = [int]$_.SessionId; started = [string]$_.Started; instance = [string]$_.Instance
+           counters = @($_.Counters | Where-Object { $_ } | ForEach-Object { @{ name = [string]$_.Name; value = [double]$_.Value } })
+           printers = @($_.Printers | Where-Object { $_ } | ForEach-Object { @{ name = [string]$_.Name; driver = [string]$_.Driver; default = [bool]$_.Default } })
+           drives = @($_.Drives | Where-Object { $_ } | ForEach-Object { [string]$_ })
+           devices = @($_.Devices | Where-Object { $_ } | ForEach-Object { @{ kind = [string]$_.Kind; name = [string]$_.Name; detail = [string]$_.Detail } })
+           notes = @($_.Notes | Where-Object { $_ } | ForEach-Object { [string]$_ }) }
+    })
+    return @{ machine = $machine; sessions = $rows }
+}
+
 function Get-SessionProfile([string]$sid, [string]$uid, [int]$scanSeconds) {
     $machine = Get-OwnedSession $sid $uid
     $p = Use-Jea $machine @('Get-SssProfile') { Get-SssProfile -UserSid $sid -ScanSeconds $scanSeconds }
@@ -265,6 +279,12 @@ while ($true) {
                 if ($sid -notmatch $SidPattern) { throw 'Invalid SID.' }
                 $res = Get-SessionPolicies $sid ([string]$req.uid)
                 Send @{ id = $id; ok = $true; machine = $res.machine; policies = @($res.policies) }
+            }
+            'hdx' {
+                $sid = [string]$req.sid
+                if ($sid -notmatch $SidPattern) { throw 'Invalid SID.' }
+                $res = Get-SessionHdx $sid ([string]$req.uid) ([bool]$req.idsOnly)
+                Send @{ id = $id; ok = $true; machine = $res.machine; sessions = @($res.sessions) }
             }
             'profile' {
                 $sid = [string]$req.sid

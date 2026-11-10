@@ -24,6 +24,8 @@ public sealed class SssOptions
     public QualityThresholds Quality { get; set; } = new();
     /// <summary>Connection to the Citrix site (used when Provider is Citrix).</summary>
     public global::Sss.Web.Citrix.CitrixOptions Citrix { get; set; } = new();
+    /// <summary>Shadowing a session from the helpdesk (the "Remote support" button; needs the starter on the helpdesk PCs and the JEA endpoint).</summary>
+    public ShadowOptions Shadow { get; set; } = new();
     /// <summary>Helpdesk behaviour: group, ticket requirement, limits.</summary>
     public HelpdeskOptions Helpdesk { get; set; } = new();
     /// <summary>AD groups for the helpdesk levels and the auditor and admin roles.</summary>
@@ -299,6 +301,26 @@ public sealed class QualityThresholds
     public int LoadWarn { get; set; } = 7000;
     /// <summary>Server load index from which the light is red.</summary>
     public int LoadCrit { get; set; } = 9000;
+}
+
+/// <summary>Remote support by Windows session shadowing (mstsc /shadow). SSS checks rights, reason and ownership and audits the request; the
+/// starter script on the helpdesk PC (scripts/Register-SssShadow.ps1) runs mstsc. Windows decides who may shadow and asks the user.</summary>
+public sealed class ShadowOptions
+{
+    /// <summary>The "Remote support" button; on by default. It appears only when <c>Sss:Citrix:Processes:Enabled</c> is on as well, because the session id is read on the VDA.</summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>Helpdesk level 1 may use it.</summary>
+    public bool AllowLevel1 { get; set; } = true;
+
+    /// <summary>Helpdesk level 2 may use it.</summary>
+    public bool AllowLevel2 { get; set; } = true;
+
+    /// <summary>Helpdesk level 3 may use it.</summary>
+    public bool AllowLevel3 { get; set; } = true;
+
+    /// <summary>true = the helpdesk may take over mouse and keyboard (the user is asked first); false = view only.</summary>
+    public bool Control { get; set; } = true;
 }
 
 public sealed class HelpdeskOptions

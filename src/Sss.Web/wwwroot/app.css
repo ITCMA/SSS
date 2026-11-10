@@ -410,3 +410,22 @@ svg.chart2 .gridl { stroke: var(--border); stroke-dasharray: 2 3; } svg.chart2 .
 .chcard .daywrap { position: relative; }
 /* on a narrow screen the charts keep a readable size and scroll sideways */
 .chcard .daywrap { overflow-x: auto; } svg.chart2 { min-width: 620px; } .chrow svg.chart2 { min-width: 0; }
+
+.hdxmetrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 12px 0; }
+.hdxmetric { background: var(--bg-soft, rgba(127,127,127,.08)); border-radius: 8px; padding: 10px 12px; }
+.hdxmetric b { display: block; font-size: 1.25rem; font-weight: 600; }
+.hdxgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; margin: 12px 0; }
+.hdxtile { border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; background: var(--card, transparent); }
+.hdxtile h4 { margin: 0 0 4px; display: flex; gap: 8px; align-items: center; justify-content: space-between; font-size: .95rem; }
+.hdxtile p { margin: 0 0 6px; font-size: .85rem; }
+.hdxtile.st-blocked { border-color: var(--crit); } .hdxtile.st-limited { border-color: var(--warn); }
+.hdxchip { font-size: .75rem; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); white-space: nowrap; }
+.hdxchip.allowed { color: var(--good); border-color: var(--good); } .hdxchip.limited { color: var(--warn); border-color: var(--warn); } .hdxchip.blocked { color: var(--crit); border-color: var(--crit); }
+.hdxuse { display: flex; align-items: center; gap: 8px; }
+.hdxbar { flex: 1; height: 6px; border-radius: 3px; background: color-mix(in srgb, var(--text) 10%, transparent); overflow: hidden; }
+.hdxbar i { display: block; height: 100%; background: var(--accent); }
+.hdxdev { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 4px 16px; }
+.hdxdev h5 { margin: 10px 0 4px; font-size: .85rem; color: var(--muted); }
+.hdxdev ul { margin: 0; padding-left: 18px; font-size: .9rem; }
+.hdxpol { margin: 6px 0 0; padding-left: 18px; font-size: .8rem; word-break: break-all; }
+.hdx details summary { cursor: pointer; color: var(--muted); font-size: .8rem; }

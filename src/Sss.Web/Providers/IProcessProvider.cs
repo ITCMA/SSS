@@ -13,6 +13,9 @@ public interface IProcessProvider
     /// <summary>The Citrix policy values in force in the user's sessions on that machine (read only).</summary>
     Task<PolicyListResult> GetPoliciesAsync(string userSid, string uid, CancellationToken ct) => throw new NotSupportedException();
 
+    /// <summary>Live HDX values of the user's sessions on that machine: virtual-channel counters, redirected printers, client drives (read only).</summary>
+    Task<BrokerHdx> GetHdxAsync(string userSid, string uid, CancellationToken ct, bool idsOnly = false) => throw new NotSupportedException();
+
     /// <summary>closed, killed, no-window, not-closed, not-owned, not-found or protected.</summary>
     Task<string> EndProcessAsync(string userSid, string uid, int processId, bool force, CancellationToken ct);
 }

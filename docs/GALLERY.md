@@ -36,6 +36,10 @@ All pictures show the built-in demo mode with invented data; none comes from a r
 
 ![Profile analysis with findings and folder tree](img/profile-light.png)
 
+## HDX: channels, policies and live values
+
+![HDX: channels, policies and live values](img/hdx-light.png)
+
 ## Applications and processes of a session
 
 ![Applications and processes of a session](img/processes-light.png)

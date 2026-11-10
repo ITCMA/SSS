@@ -34,6 +34,7 @@ public sealed class CloudBrokerClient(IMonitorClient monitor) : IBrokerClient
     public Task<BrokerProcessList> ProcessesAsync(string userSid, string uid, CancellationToken ct) => throw new ActionNotSupportedException(ReadOnly);
     public Task<string> EndProcessAsync(string userSid, string uid, int processId, bool force, CancellationToken ct) => throw new ActionNotSupportedException(ReadOnly);
     public Task<BrokerPolicies> PoliciesAsync(string userSid, string uid, CancellationToken ct) => throw new ActionNotSupportedException(ReadOnly);
+    public Task<BrokerHdx> HdxAsync(string userSid, string uid, CancellationToken ct, bool idsOnly = false) => throw new ActionNotSupportedException(ReadOnly);
     public Task<ProfileInfo> ProfileAsync(string userSid, string uid, int scanSeconds, CancellationToken ct) => throw new ActionNotSupportedException(ReadOnly);
     public Task<IReadOnlyList<DiscoveredController>> DiscoverAsync(string via, CancellationToken ct) => Task.FromResult<IReadOnlyList<DiscoveredController>>([]);
 

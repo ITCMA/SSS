@@ -40,6 +40,9 @@ SSS hat absichtlich keine Konfigurations-GUI: Eine Webseite, die ihre eigene Kon
 | `Provider` | `Mock` | `Citrix` für eine echte Umgebung. `Mock` liefert Demodaten und zeigt einen Hinweis. |
 | `RefreshSeconds` | `30` | Intervall der automatischen Aktualisierung der Oberfläche. |
 | `StoreFrontUrl` | `""` | Optionale absolute `http(s)`-Adresse; die Oberfläche zeigt dann einen Link „StoreFront öffnen“ (zum Starten oder Wiederverbinden von Sitzungen). |
+| `Shadow:Enabled` | `true` | Der Knopf **Fernunterstützung** für den Helpdesk: SSS prüft Rechte, Grund und Besitzer, protokolliert (`shadow`) und übergibt den Link an den Starter auf dem Helpdesk-PC, der `mstsc /shadow` ausführt. Er erscheint nur, wenn auch `Citrix:Processes:Enabled` an ist (die Windows-Sitzungsnummer wird auf dem VDA gelesen). Siehe [SHADOW.de.md](SHADOW.de.md). |
+| `Shadow:AllowLevel1`, `AllowLevel2`, `AllowLevel3` | `true` | Welche Helpdesk-Stufe ihn nutzen darf; mit `false` schaltest du ihn für diese Stufe ab. |
+| `Shadow:Control` | `true` | `true`: Der Helpdesk darf Maus und Tastatur übernehmen (der Benutzer wird immer vorher gefragt); `false`: nur ansehen. |
 | `PathBase` | keiner | Anwendungspfad für lokale Läufe hinter einem Präfix. Hinter dem IIS setzt ihn das ASP.NET Core Module; leer lassen. |
 
 ## Authentifizierung (`Sss:Auth`)
