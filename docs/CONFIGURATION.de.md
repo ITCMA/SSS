@@ -43,6 +43,11 @@ SSS hat absichtlich keine Konfigurations-GUI: Eine Webseite, die ihre eigene Kon
 | `Shadow:Enabled` | `true` | Der Knopf **Fernunterstützung** für den Helpdesk: SSS prüft Rechte, Grund und Besitzer, protokolliert (`shadow`) und übergibt den Link an den Starter auf dem Helpdesk-PC, der `mstsc /shadow` ausführt. Er erscheint nur, wenn auch `Citrix:Processes:Enabled` an ist (die Windows-Sitzungsnummer wird auf dem VDA gelesen). Siehe [SHADOW.de.md](SHADOW.de.md). |
 | `Shadow:AllowLevel1`, `AllowLevel2`, `AllowLevel3` | `true` | Welche Helpdesk-Stufe ihn nutzen darf; mit `false` schaltest du ihn für diese Stufe ab. |
 | `Shadow:Control` | `true` | `true`: Der Helpdesk darf Maus und Tastatur übernehmen (der Benutzer wird immer vorher gefragt); `false`: nur ansehen. |
+| `Overlap:Enabled` | `true` | Der Hinweis auf **parallele Sitzungen** eines Benutzers (Tipp-Karte in der Benutzer- und der Helpdesk-Ansicht, Liste in Insights). Siehe [PARALLEL.de.md](PARALLEL.de.md). |
+| `Overlap:Days` | `7` | Wie viele Tage zurück Sitzungen verglichen werden (1 bis 30). |
+| `Overlap:MinMinutes` | `0` | Kürzere Überschneidungen werden ignoriert; `0` zeigt jede Überschneidung. |
+| `Overlap:SameDeliveryGroupOnly` | `false` | `true`: nur Sitzungen derselben Delivery Group zählen; `false`: andere werden ebenfalls gezeigt, als Hinweis formuliert. |
+| `Overlap:IgnoreDeliveryGroups` | `[]` | Delivery Groups, in denen Parallelnutzung unschädlich ist; Überschneidungen mit einer davon werden ignoriert. |
 | `PathBase` | keiner | Anwendungspfad für lokale Läufe hinter einem Präfix. Hinter dem IIS setzt ihn das ASP.NET Core Module; leer lassen. |
 
 ## Authentifizierung (`Sss:Auth`)

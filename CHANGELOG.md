@@ -2,6 +2,11 @@
 
 All notable changes to SSS. The project follows [Semantic Versioning](docs/COMPATIBILITY.md); versions below 1.0.0 may still change configuration keys between minor versions, and every such change is listed here.
 
+## 0.4.8 - 2026-11-18 (beta)
+
+### Added
+- **Parallel sessions**: a tip card for the user and the helpdesk (and a list in Insights) when sessions of one user overlapped in the last days, with a timeline of each overlap and an explanation of the risk to a shared profile (for example the Outlook cache). Uses only the session times, delivery group and machine from the Monitor, so no VDA is asked. Settings `Sss:Overlap:Enabled`, `Days` (7), `MinMinutes` (0), `SameDeliveryGroupOnly`, `IgnoreDeliveryGroups`. See [docs/PARALLEL.md](docs/PARALLEL.md).
+
 ## 0.4.7 - 2026-11-10 (beta)
 
 ### Added

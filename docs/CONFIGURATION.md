@@ -43,6 +43,11 @@ SSS has no configuration GUI on purpose: a web page that writes its own configur
 | `Shadow:Enabled` | `true` | The **Remote support** button for the helpdesk: SSS checks rights, reason and ownership, audits (`shadow`) and hands the link to the starter on the helpdesk PC, which runs `mstsc /shadow`. It appears only when `Citrix:Processes:Enabled` is on too (the Windows session id is read on the VDA). See [SHADOW.md](SHADOW.md). |
 | `Shadow:AllowLevel1`, `AllowLevel2`, `AllowLevel3` | `true` | Which helpdesk level may use it; set one to `false` to switch it off for that level. |
 | `Shadow:Control` | `true` | `true`: the helpdesk may take over mouse and keyboard (the user is always asked first); `false`: view only. |
+| `Overlap:Enabled` | `true` | The hint for **parallel sessions** of one user (tip card in the user's view and in the helpdesk view, list in Insights). See [PARALLEL.md](PARALLEL.md). |
+| `Overlap:Days` | `7` | How many days back sessions are compared (1 to 30). |
+| `Overlap:MinMinutes` | `0` | Overlaps shorter than this are ignored; `0` shows every overlap. |
+| `Overlap:SameDeliveryGroupOnly` | `false` | `true`: only sessions of the same delivery group count; `false`: others are shown too, worded as a note. |
+| `Overlap:IgnoreDeliveryGroups` | `[]` | Delivery groups where parallel use is harmless; overlaps involving one of them are ignored. |
 | `PathBase` | none | Application path for local runs behind a prefix. Behind IIS the ASP.NET Core Module sets it; leave it empty. |
 
 ## Authentication (`Sss:Auth`)

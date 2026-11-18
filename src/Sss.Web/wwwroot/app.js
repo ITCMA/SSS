@@ -148,7 +148,7 @@ const worst = (q) => Math.max(RANK[q.frontend], RANK[q.backend]);
 function el(tag, props = {}, ...kids) {
   const e = document.createElement(tag);
   for (const [k, v] of Object.entries(props)) {
-    if (k === 'class') e.className = v; else if (k === 'text') e.textContent = v; else e.setAttribute(k, v);
+    if (k === 'class') e.className = v; else if (k === 'text') e.textContent = v; else if (k === 'style') e.style.cssText = v; else e.setAttribute(k, v);   // style through the CSSOM: the page's CSP blocks style attributes
   }
   for (const k of kids) if (k) e.append(k);
   return e;
@@ -364,7 +364,67 @@ function renderTables() {
   $('updated').textContent = t('lastUpdated', { time: new Intl.DateTimeFormat(state.lang, { timeStyle: 'medium' }).format(new Date(state.data.generatedAt)) });
   $('export').href = `api/sessions.csv?range=${encodeURIComponent(state.range)}`;
   $('export').hidden = state.view !== 'mine';
+  renderOverlap();
   loadUserSummary();
+}
+
+// ---------- parallel sessions ----------
+const fmtMin = (seconds) => { if (seconds < 60) return t('ovSec', { n: Math.max(1, Math.round(seconds)) }); const m = Math.max(1, Math.round(seconds / 60)); return m < 60 ? t('ovMin', { n: m }) : t('ovHourMin', { h: Math.floor(m / 60), m: m % 60 }); };
+const ovTime = (iso) => new Intl.DateTimeFormat(state.lang, { dateStyle: 'short', timeStyle: 'short' }).format(new Date(iso));
+
+// Two bars on one time axis: the sessions of one overlap and the part where both ran.
+function ovTimeline(o) {
+  const a = o.a, b = o.b, now = new Date(state.data.generatedAt).getTime();
+  const ms = (x) => new Date(x).getTime();
+  const lo = Math.min(ms(a.start), ms(b.start)), hi = Math.max(a.end ? ms(a.end) : now, b.end ? ms(b.end) : now), span = Math.max(1, hi - lo);
+  const pos = (from, to) => `left:${(((from - lo) / span) * 100).toFixed(2)}%;width:${Math.max(1.5, (((to - from) / span) * 100)).toFixed(2)}%`;
+  const bar = (x, cls) => el('i', { class: `ovbar ${cls}`, style: pos(ms(x.start), x.end ? ms(x.end) : now) });
+  const label = (x, n) => `${n}: ${[x.client, x.machine].filter(Boolean).join(' · ')} (${t(`ovState_${x.state}`)})`;
+  return el('div', { class: 'ovline' },
+    el('div', { class: 'ovtrack', role: 'img', 'aria-label': `${ovTime(o.from)} – ${o.ongoing ? t('ovNow') : ovTime(o.to)}` },
+      bar(a, 'a'), bar(b, 'b'), el('i', { class: 'ovband', style: pos(ms(o.from), ms(o.to)) })),
+    el('div', { class: 'ovaxis muted' }, el('span', { text: ovTime(lo) }), el('span', { text: o.ongoing ? t('ovNow') : ovTime(hi) })),
+    el('ul', { class: 'ovlegend' },
+      el('li', {}, el('i', { class: 'ovkey a' }), el('span', { text: label(a, 'A') })),
+      el('li', {}, el('i', { class: 'ovkey b' }), el('span', { text: label(b, 'B') })),
+      el('li', {}, el('i', { class: 'ovkey band' }), el('span', { text: `${t('ovBoth')}: ${fmtMin(o.seconds)}${o.sameGroup ? '' : ` · ${t('ovOtherGroup', { a: a.group, b: b.group })}`}` }))));
+}
+
+function renderOverlap() {
+  const box = $('overlap'), ov = state.data?.overlap;
+  if (!ov) { box.hidden = true; box.replaceChildren(); return; }
+  const hd = state.view === 'hduser';
+  const last = ov.items[0];
+  const args = { count: ov.count, days: ov.days, last: ovTime(last.from), duration: fmtMin(last.seconds), longest: fmtMin(ov.longestSeconds) };
+  const head = el('h2', { id: 'overlap-h', text: t(ov.sameGroup ? (hd ? 'ovTitleSameHd' : 'ovTitleSame') : 'ovTitleOther') });
+  const lead = el('p', { text: t(hd ? 'ovBodyHd' : 'ovBodyUser', args) + (ov.ongoing ? ` ${t('ovOngoing')}` : '') });
+  const why = el('p', { class: 'ovwhy', hidden: true, text: t('ovWhyText') });
+  const detail = el('div', { class: 'ovdetail', hidden: true },
+    ...ov.items.slice(0, 10).map((o) => el('div', { class: 'ovitem' }, el('h3', { text: `${ovTime(o.from)} · ${fmtMin(o.seconds)}${o.ongoing ? ` · ${t('ovOngoingShort')}` : ''}` }), ovTimeline(o))),
+    ov.count > Math.min(10, ov.items.length) ? el('p', { class: 'muted', text: t('ovMore', { n: Math.min(10, ov.items.length), total: ov.count }) }) : null);
+  const toggle = (label, target, other) => {
+    const b = el('button', { type: 'button', text: label, 'aria-expanded': 'false' });
+    b.addEventListener('click', () => { const open = target.hidden; target.hidden = !open; b.setAttribute('aria-expanded', String(open)); });
+    return b;
+  };
+  box.className = `overlap ${ov.sameGroup ? 'warn' : 'note'}`;
+  box.replaceChildren(el('div', { class: 'ovicon', 'aria-hidden': 'true', text: ov.sameGroup ? '▲' : 'ℹ' }),
+    el('div', { class: 'ovbody' }, head, lead, el('div', { class: 'ovactions' }, toggle(t('ovDetails'), detail), toggle(t('ovWhy'), why)), why, detail));
+  box.hidden = false;
+}
+
+function renderOverlapList(more) {
+  const rows = more.overlaps ?? [], table = $('ins-ov');
+  table.tHead.replaceChildren(el('tr', {}, ...['insUser', 'colGroup', 'ovCount', 'ovLongest', 'ovLast', 'colAction'].map((k) => el('th', { scope: 'col', text: t(k) }))));
+  table.tBodies[0].replaceChildren(...rows.map((r) => {
+    const b = el('button', { type: 'button', text: t('insOpenUser'), 'aria-label': `${t('insOpenUser')}: ${r.name}` });
+    b.hidden = !r.sid;
+    b.addEventListener('click', () => openUser(r.sid, r.name));
+    return el('tr', {}, cell(t('insUser'), r.name), cell(t('colGroup'), r.group), cell(t('ovCount'), el('span', { class: r.ongoing ? 'state-disconnected' : '', text: `${r.count}${r.ongoing ? ` (${t('ovOngoingShort')})` : ''}` })),
+      cell(t('ovLongest'), fmtMin(r.longestSeconds)), cell(t('ovLast'), ovTime(r.last)), cell(t('colAction'), b));
+  }));
+  table.hidden = rows.length === 0;
+  $('ins-ov-none').hidden = rows.length > 0;
 }
 
 // ---------- helpdesk ----------
@@ -1241,6 +1301,7 @@ async function loadMore() {
   renderCostsChart(d.costs);
   renderGroupCards(faults, failures);
   renderStrips(d);
+  renderOverlapList(d);
   $('ins-day').replaceChildren(d.hourly?.length ? incidentDayChart(d.hourly, faults, failures) : el('p', { class: 'muted', text: t('insHourlyNone') }));
   const HEALTH = { crit: ['✖', 'state-disconnected'], warn: ['▲', 'state-disconnected'], good: ['✔', 'state-active'] };
   const sec = (ms) => `${(ms / 1000).toFixed(1)} s`;

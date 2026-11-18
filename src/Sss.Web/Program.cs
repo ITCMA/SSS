@@ -518,7 +518,7 @@ hd.MapGet("/sessions", async (HttpContext http, string? sid, string? range, Help
     if (sid is null || !HelpdeskService.SidRegex().IsMatch(sid) || sid.Length > 184) return Results.BadRequest("Invalid user.");
     if (!SessionService.Ranges.TryGetValue(range ?? "24h", out var window)) return Results.BadRequest("Unknown range.");
     var view = await svc.GetUserAsync(actor, sid, window, RemoteIp(http), ct);
-    return Results.Ok(new { user = new { name = view.User.Name, sid = view.User.Sid }, view.Sessions.Live, view.Sessions.History, view.Sessions.GeneratedAt, view.Sessions.Warnings });
+    return Results.Ok(new { user = new { name = view.User.Name, sid = view.User.Sid }, view.Sessions.Live, view.Sessions.History, view.Sessions.GeneratedAt, view.Sessions.Warnings, view.Sessions.Overlap });
 }).RequireCap(Cap.View);
 
 hd.MapGet("/sessions/{key}/details", async (HttpContext http, string key, string? sid, HelpdeskService svc, CancellationToken ct) =>

@@ -45,7 +45,17 @@ public sealed record SessionsResponse(
     IReadOnlyList<SessionInfo> Live,
     IReadOnlyList<SessionInfo> History,
     DateTimeOffset GeneratedAt,
-    IReadOnlyList<string> Warnings);
+    IReadOnlyList<string> Warnings,
+    OverlapSummary? Overlap = null);
+
+/// <summary>One of two sessions of a user that ran at the same time. <c>State</c> is active, disconnected, ended or open (live, state unknown).</summary>
+public sealed record OverlapSession(string Key, string Group, string Machine, string? Client, string State, DateTimeOffset Start, DateTimeOffset? End);
+
+/// <summary>Two sessions of one user that overlapped from <c>From</c> to <c>To</c>. <c>SameGroup</c> = same delivery group (probably the same profile).</summary>
+public sealed record SessionOverlap(OverlapSession A, OverlapSession B, DateTimeOffset From, DateTimeOffset To, bool Ongoing, bool SameGroup, int Seconds);
+
+/// <summary>The overlaps found in the last <c>Days</c> days, newest first (<c>Items</c> holds at most 30; <c>Count</c> is the real number).</summary>
+public sealed record OverlapSummary(int Count, int LongestSeconds, bool Ongoing, bool SameGroup, int Days, IReadOnlyList<SessionOverlap> Items);
 
 /// <summary>A user found by the helpdesk search. Sid identifies the user in all follow-up calls.</summary>
 public sealed record HelpdeskUser(string Name, string Sid, bool HasLiveSession);

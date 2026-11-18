@@ -154,6 +154,10 @@
       <div id="ins-groupbars"></div>
       <div id="ins-grouptrend" class="trendbox"></div>
       <div class="table-wrap"><table id="ins-groups"><caption class="sr" data-i18n="insGroups"></caption><thead></thead><tbody></tbody></table></div>
+      <h3 data-i18n="ovInsTitle">Parallel sessions</h3>
+      <p class="muted" data-i18n="ovInsNote">Users whose sessions overlapped in the last days (only sessions that started in this period are compared).</p>
+      <p id="ins-ov-none" class="muted" hidden data-i18n="ovInsNone">No parallel sessions found.</p>
+      <div class="table-wrap"><table id="ins-ov"><caption class="sr" data-i18n="ovInsTitle"></caption><thead></thead><tbody></tbody></table></div>
       <h3 data-i18n="insDisconnected">Disconnected sessions</h3>
       <p id="ins-disc-none" class="muted" hidden data-i18n="insDiscNone">No disconnected sessions.</p>
       <div class="table-wrap"><table id="ins-disc"><caption class="sr" data-i18n="insDisconnected"></caption><thead></thead><tbody></tbody></table></div>
@@ -283,6 +287,8 @@
       </section>
 
       <section id="user-summary" class="usersummary" hidden aria-labelledby="user-summary-h"><h2 id="user-summary-h" class="sr" data-i18n="sumHeading">History of the user</h2><div id="user-summary-body"></div></section>
+
+      <section id="overlap" class="overlap" hidden aria-labelledby="overlap-h"></section>
 
       <section aria-labelledby="live-h">
         <div class="section-head">

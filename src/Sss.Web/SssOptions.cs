@@ -26,6 +26,8 @@ public sealed class SssOptions
     public global::Sss.Web.Citrix.CitrixOptions Citrix { get; set; } = new();
     /// <summary>Shadowing a session from the helpdesk (the "Remote support" button; needs the starter on the helpdesk PCs and the JEA endpoint).</summary>
     public ShadowOptions Shadow { get; set; } = new();
+    /// <summary>The hint for parallel sessions of one user (they may write into the same profile).</summary>
+    public OverlapOptions Overlap { get; set; } = new();
     /// <summary>Helpdesk behaviour: group, ticket requirement, limits.</summary>
     public HelpdeskOptions Helpdesk { get; set; } = new();
     /// <summary>AD groups for the helpdesk levels and the auditor and admin roles.</summary>
@@ -342,4 +344,25 @@ public sealed class HelpdeskOptions
 
     /// <summary>Title of messages the helpdesk sends to a session.</summary>
     public string MessageTitle { get; set; } = "IT Helpdesk";
+}
+
+/// <summary>Parallel sessions of one user. Two sessions that overlap in time may write into the same profile (for example the Outlook cache with
+/// FSLogix), so SSS tells the user and the helpdesk. Detection uses only the session times, the delivery group and the machine that the Monitor
+/// delivers anyway; it never asks a VDA.</summary>
+public sealed class OverlapOptions
+{
+    /// <summary>The hint in the user's and the helpdesk's view and the list in Insights; on by default.</summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>How many days back sessions are compared (1 to 30).</summary>
+    public int Days { get; set; } = 7;
+
+    /// <summary>Overlaps shorter than this many minutes are ignored; 0 (default) shows every overlap.</summary>
+    public int MinMinutes { get; set; }
+
+    /// <summary>true = only sessions of the same delivery group count (the same group is a good sign for the same profile); false (default) shows the others too, worded as a note.</summary>
+    public bool SameDeliveryGroupOnly { get; set; }
+
+    /// <summary>Delivery groups in which parallel use is harmless (for example a group without profile management). Overlaps with one of them are ignored.</summary>
+    public List<string> IgnoreDeliveryGroups { get; set; } = [];
 }

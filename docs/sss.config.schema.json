@@ -804,6 +804,37 @@
           },
           "additionalProperties": false
         },
+        "Overlap": {
+          "description": "The hint for parallel sessions of one user (they may write into the same profile).",
+          "type": "object",
+          "properties": {
+            "Enabled": {
+              "description": "The hint in the user's and the helpdesk's view and the list in Insights; on by default.",
+              "type": "boolean",
+              "default": true
+            },
+            "Days": {
+              "description": "How many days back sessions are compared (1 to 30).",
+              "type": "integer",
+              "default": 7
+            },
+            "MinMinutes": {
+              "description": "Overlaps shorter than this many minutes are ignored; 0 (default) shows every overlap.",
+              "type": "integer",
+              "default": 0
+            },
+            "SameDeliveryGroupOnly": {
+              "description": "true = only sessions of the same delivery group count (the same group is a good sign for the same profile); false (default) shows the others too, worded as a note.",
+              "type": "boolean",
+              "default": false
+            },
+            "IgnoreDeliveryGroups": {
+              "description": "Delivery groups in which parallel use is harmless (for example a group without profile management). Overlaps with one of them are ignored.",
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
         "Helpdesk": {
           "description": "Helpdesk behaviour: group, ticket requirement, limits.",
           "type": "object",

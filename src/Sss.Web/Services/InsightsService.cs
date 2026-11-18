@@ -19,7 +19,9 @@ public sealed record AppStartRow(string Name, int Launches, int AvgMs, int P90Ms
 public sealed record CostRow(string Group, string Currency, double Compute, double Storage, double Savings);
 /// <summary>One thing that changed: a machine registered or lost its registration, was switched on, or an administrative action (audit).</summary>
 public sealed record TimelineEvent(DateTimeOffset At, string Kind, string Subject, string? Detail = null, string? Actor = null);
-public sealed record MoreView(DateTimeOffset At, IReadOnlyList<UsageRow> Usage, IReadOnlyList<AppStartRow> AppStarts, IReadOnlyList<CostRow> Costs, IReadOnlyList<TimelineEvent> Timeline, bool Demo, int AppLaunchesRead = 0, int UsageSamples = 0, IReadOnlyList<HourCount>? Hourly = null, IReadOnlyList<LoadStrip>? Strips = null, HeatView? Heat = null);
+public sealed record MoreView(DateTimeOffset At, IReadOnlyList<UsageRow> Usage, IReadOnlyList<AppStartRow> AppStarts, IReadOnlyList<CostRow> Costs, IReadOnlyList<TimelineEvent> Timeline, bool Demo, int AppLaunchesRead = 0, int UsageSamples = 0, IReadOnlyList<HourCount>? Hourly = null, IReadOnlyList<LoadStrip>? Strips = null, HeatView? Heat = null, IReadOnlyList<OverlapUserRow>? Overlaps = null);
+/// <summary>A user with parallel sessions in the last days (Sss:Overlap): how many overlaps, the longest, whether one is running now, and the delivery group of the latest.</summary>
+public sealed record OverlapUserRow(string Name, string? Sid, string Group, int Count, int LongestSeconds, bool Ongoing, bool SameGroup, DateTimeOffset Last);
 /// <summary>The load of a machine hour by hour over the last 24 hours (average CPU in percent; null = no sample).</summary>
 public sealed record LoadStrip(string Machine, string Group, IReadOnlyList<double?> Cpu);
 /// <summary>Everything about one machine on one page: state, load, the last 24 hours, crashes and failures there, and what changed.</summary>
@@ -180,7 +182,7 @@ public sealed class InsightsService(SssOptions options, IMonitorClient? monitor,
                 var launches = await monitor.GetAppLaunchesAsync(now.AddDays(-7), ct);
                 var recent = await RecentAsync(monitor, ct);
                 view = new MoreView(now, Usage(usage, byId), AppStarts(launches, byId), Costs(await monitor.GetCostsAsync(now.AddDays(-30), ct), byId), MachineEvents(machines, now), false, launches.Count, usage.Count, Hourly(recent, now),
-                    Strips(await monitor.GetHourlyUsageAsync(now.AddHours(-24), ct), byId, now), Heat(recent, now));
+                    Strips(await monitor.GetHourlyUsageAsync(now.AddHours(-24), ct), byId, now), Heat(recent, now), await OverlapRowsAsync(monitor, recent, now, ct));
             }
             _more = (now, view);
             return view;
@@ -315,7 +317,33 @@ public sealed class InsightsService(SssOptions options, IMonitorClient? monitor,
          new(now.AddHours(-3.2), "poweredOn", "vdi-02.demo.local", "DG-Desktops"), new(now.AddDays(-1), "registered", "rds-01.demo.local", "DG-Apps")], true, 0, 0,
         Enumerable.Range(0, 24).Select(i => new HourCount(now.AddHours(i - 23), new[] { 1, 0, 0, 0, 1, 2, 4, 9, 22, 31, 18, 12, 14, 19, 11, 8, 6, 4, 3, 2, 1, 1, 1, 0 }[(i + now.Hour + 1) % 24], 25 + (i * 7 % 30))).ToList(),
         [DemoStrip("rds-01.demo.local", "DG-Apps", 70, 3), DemoStrip("rds-02.demo.local", "DG-Apps", 45, 5), DemoStrip("vdi-01.demo.local", "DG-Desktops", 30, 2), DemoStrip("vdi-02.demo.local", "DG-Desktops", 25, 7)],
-        DemoHeat(now));
+        DemoHeat(now), DemoOverlaps(now));
+
+    private static IReadOnlyList<OverlapUserRow> DemoOverlaps(DateTimeOffset now) =>
+    [new("Alex Demo", null, "DG-Desktops", 3, 5100, true, true, now.AddMinutes(-20)), new("Sam Muster", null, "DG-Desktops", 2, 2400, false, true, now.AddDays(-2)), new("Kim Beispiel", null, "DG-Apps", 1, 360, false, false, now.AddDays(-4))];
+
+    /// <summary>Users with parallel sessions in the last days, from the sessions the Monitor delivers anyway (no extra query except the names).</summary>
+    private async Task<IReadOnlyList<OverlapUserRow>> OverlapRowsAsync(IMonitorClient m, IReadOnlyList<MonitorSession> recent, DateTimeOffset now, CancellationToken ct)
+    {
+        var o = options.Overlap;
+        if (!o.Enabled) return [];
+        var hits = new List<(long Id, OverlapSummary Sum)>();
+        foreach (var g in recent.Where(s => s.UserId is not null && s.Start is not null).GroupBy(s => s.UserId!.Value))
+        {
+            var sum = OverlapDetector.Detect(g.Select(s => new OverlapSession(s.SessionKey, s.DesktopGroup ?? "", s.Machine ?? "", s.ClientName, s.End is null ? "open" : "ended", s.Start!.Value, s.End)), now, o);
+            if (sum is not null) hits.Add((g.Key, sum));
+        }
+        if (hits.Count == 0) return [];
+        var top = hits.OrderByDescending(h => h.Sum.Ongoing).ThenByDescending(h => h.Sum.LongestSeconds).Take(50).ToList();
+        IReadOnlyDictionary<long, MonitorUser> users;
+        try { users = await m.GetUsersByIdAsync(top.Select(h => h.Id), ct); } catch (ProviderUnavailableException) { users = new Dictionary<long, MonitorUser>(); }
+        return top.Select(h =>
+        {
+            var latest = h.Sum.Items[0];
+            users.TryGetValue(h.Id, out var u);
+            return new OverlapUserRow(u?.Name ?? $"#{h.Id}", u?.Sid, latest.A.Group, h.Sum.Count, h.Sum.LongestSeconds, h.Sum.Ongoing, h.Sum.SameGroup, latest.From);
+        }).ToList();
+    }
 
     /// <summary>A working week: busy at 7 to 9 and a little after lunch, quiet at the weekend.</summary>
     private static HeatView DemoHeat(DateTimeOffset now)

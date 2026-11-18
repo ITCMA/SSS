@@ -96,6 +96,7 @@ ASPNETCORE_ENVIRONMENT=Development ASPNETCORE_URLS=http://localhost:5080 dotnet 
 
 | | |
 |---|---|
+| [Parallele Sitzungen](docs/PARALLEL.de.md) | Hinweis, wenn sich Sitzungen eines Benutzers überschneiden (gemeinsames Profil) |
 | [Schnellstart](docs/QUICKSTART.de.md) | was wohin, Parameter, solide Grundkonfiguration |
 | [Einrichtungsanleitung](docs/SETUP.de.md) | von null zu einem laufenden SSS: Dienstkonto, Installation, Anbindung, Helpdesk |
 | [Voraussetzungen](docs/REQUIREMENTS.de.md) | Software, Konten, Citrix, Ports |

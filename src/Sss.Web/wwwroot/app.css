@@ -429,3 +429,25 @@ svg.chart2 .gridl { stroke: var(--border); stroke-dasharray: 2 3; } svg.chart2 .
 .hdxdev ul { margin: 0; padding-left: 18px; font-size: .9rem; }
 .hdxpol { margin: 6px 0 0; padding-left: 18px; font-size: .8rem; word-break: break-all; }
 .hdx details summary { cursor: pointer; color: var(--muted); font-size: .8rem; }
+
+/* parallel sessions: tip card with a timeline of the overlaps */
+.overlap { display: flex; gap: 12px; margin: 12px 0; padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.overlap.warn { border-color: var(--warn); } .overlap.warn .ovicon { color: var(--warn); }
+.overlap .ovicon { font-size: 1.2rem; line-height: 1.4; }
+.overlap .ovbody { flex: 1; min-width: 0; }
+.overlap h2 { margin: 0; font-size: 1rem; } .overlap.warn h2 { color: var(--warn); }
+.overlap p { margin: 4px 0 8px; line-height: 1.5; }
+.ovactions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.ovdetail { display: grid; gap: 14px; margin-top: 8px; }
+.ovitem h3 { margin: 0 0 6px; font-size: .9rem; }
+.ovtrack { position: relative; height: 34px; border: 1px solid var(--border); border-radius: 6px; background: color-mix(in srgb, var(--text) 4%, transparent); overflow: hidden; }
+.ovbar, .ovband { position: absolute; display: block; }
+.ovbar { height: 11px; border-radius: 3px; }
+.ovbar.a, .ovkey.a { background: var(--accent); } .ovbar.b, .ovkey.b { background: #8a5cf6; }
+.ovbar.a { top: 4px; } .ovbar.b { top: 19px; }
+.ovband { top: 0; bottom: 0; background: var(--crit); opacity: .22; }
+.ovkey.band { background: var(--crit); opacity: .35; }
+.ovaxis { display: flex; justify-content: space-between; font-size: .75rem; margin-top: 2px; }
+.ovlegend { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: .8rem; color: var(--muted); }
+.ovlegend li { display: flex; align-items: center; gap: 5px; }
+.ovkey { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }

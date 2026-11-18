@@ -96,6 +96,7 @@ Open <http://localhost:5080> and add `?shot=profile` or `?shot=processes` to the
 
 | | |
 |---|---|
+| [Parallel sessions](docs/PARALLEL.md) | hint when a user's sessions overlap (shared profile) |
 | [Quick start](docs/QUICKSTART.md) | what to install where, parameters, solid basic configuration |
 | [Set-up guide](docs/SETUP.md) | from nothing to a working SSS: service account, installation, connection, helpdesk |
 | [Requirements](docs/REQUIREMENTS.md) | software, accounts, Citrix, ports |

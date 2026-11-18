@@ -197,6 +197,15 @@ public class HelpdeskApiTests : IClassFixture<HelpdeskOnFactory>
     }
 
     [Fact]
+    public async Task Helpdesk_view_of_a_user_carries_the_parallel_session_hint_like_the_users_own_view()
+    {
+        var other = await (await _c.GetAsync($"/api/helpdesk/sessions?sid={MockSessionProvider.OtherSid}&range=24h")).Json();
+        var overlap = other.GetProperty("overlap");
+        Assert.True(overlap.GetProperty("count").GetInt32() >= 1);
+        Assert.True(overlap.GetProperty("ongoing").GetBoolean());
+    }
+
+    [Fact]
     public async Task Helpdesk_sees_other_users_sessions_but_the_normal_endpoint_stays_own_only()
     {
         var other = await (await _c.GetAsync($"/api/helpdesk/sessions?sid={MockSessionProvider.OtherSid}&range=24h")).Json();

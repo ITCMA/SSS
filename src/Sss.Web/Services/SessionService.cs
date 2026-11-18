@@ -18,11 +18,15 @@ public sealed class SessionService(ISessionProvider provider, AuditLog audit, Ti
     public async Task<SessionsResponse> GetAsync(UserIdentity user, TimeSpan window, CancellationToken ct)
     {
         var now = clock.GetUtcNow();
-        var result = await provider.GetSessionsAsync(user, window, ct);
+        // The overlap check needs a few days of history even when a short range is shown; a zero window (live sessions only) never asks for more.
+        var o = options?.Overlap;
+        var ask = window > TimeSpan.Zero && o is { Enabled: true } ? TimeSpan.FromDays(Math.Clamp(o.Days, 1, 30)) : TimeSpan.Zero;
+        var result = await provider.GetSessionsAsync(user, window > ask ? window : ask, ct);
         var live = result.Sessions.Where(s => s.State != SessionState.Ended).OrderByDescending(s => s.StartTime).ToList();
         var history = result.Sessions.Where(s => s.State == SessionState.Ended && s.EndTime >= now - window)
             .OrderByDescending(s => s.EndTime).ToList();
-        return new SessionsResponse(live, history, now, result.Warnings);
+        var overlap = o is { Enabled: true } && window > TimeSpan.Zero ? OverlapDetector.Detect(result.Sessions.Select(OverlapDetector.Of), now, o) : null;
+        return new SessionsResponse(live, history, now, result.Warnings, overlap);
     }
 
     public async Task<LogoffResult> LogoffAsync(UserIdentity user, LogoffScope scope,
