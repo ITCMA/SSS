@@ -372,37 +372,45 @@ function renderTables() {
 const fmtMin = (seconds) => { if (seconds < 60) return t('ovSec', { n: Math.max(1, Math.round(seconds)) }); const m = Math.max(1, Math.round(seconds / 60)); return m < 60 ? t('ovMin', { n: m }) : t('ovHourMin', { h: Math.floor(m / 60), m: m % 60 }); };
 const ovTime = (iso) => new Intl.DateTimeFormat(state.lang, { dateStyle: 'short', timeStyle: 'short' }).format(new Date(iso));
 
-// Two bars on one time axis: the sessions of one overlap and the part where both ran.
-function ovTimeline(o) {
-  const a = o.a, b = o.b, now = new Date(state.data.generatedAt).getTime();
-  const ms = (x) => new Date(x).getTime();
-  const lo = Math.min(ms(a.start), ms(b.start)), hi = Math.max(a.end ? ms(a.end) : now, b.end ? ms(b.end) : now), span = Math.max(1, hi - lo);
-  const pos = (from, to) => `left:${(((from - lo) / span) * 100).toFixed(2)}%;width:${Math.max(1.5, (((to - from) / span) * 100)).toFixed(2)}%`;
-  const bar = (x, cls) => el('i', { class: `ovbar ${cls}`, style: pos(ms(x.start), x.end ? ms(x.end) : now) });
-  const label = (x, n) => `${n}: ${[x.client, x.machine].filter(Boolean).join(' · ')} (${t(`ovState_${x.state}`)})`;
+// One time axis per group of overlapping sessions, one row per session; the shaded times are those with at least two sessions.
+function ovTimeline(g) {
+  const now = new Date(state.data.generatedAt).getTime();
+  const ms = (x) => new Date(x).getTime(), end = (s) => (s.end ? ms(s.end) : now);
+  const lo = Math.min(...g.sessions.map((s) => ms(s.start))), hi = Math.max(...g.sessions.map(end)), span = Math.max(1, hi - lo);
+  // Very short stretches get a minimum width around their middle, so a few seconds stay visible without moving to the side.
+  const pos = (from, to, min) => {
+    const width = Math.max(min, ((to - from) / span) * 100);
+    const left = Math.min(100 - width, Math.max(0, (((from + to) / 2 - lo) / span) * 100 - width / 2));
+    return `left:${left.toFixed(2)}%;width:${width.toFixed(2)}%`;
+  };
+  const row = (s) => el('li', { class: 'ovrow' },
+    el('div', { class: 'ovwho' }, el('strong', { text: s.machine }),
+      el('span', { class: 'muted', text: [s.group, s.client ? t('ovClient', { name: s.client }) : null].filter(Boolean).join(' · ') }),
+      el('span', { class: 'muted', text: `${ovTime(s.start)} – ${s.end ? ovTime(s.end) : t('ovNow')} (${t(`ovState_${s.state}`)})` })),
+    el('div', { class: 'ovtrack', 'aria-hidden': 'true' },
+      ...g.shared.map((x) => el('i', { class: 'ovband', style: pos(ms(x.from), ms(x.to), 0.6) })),
+      el('i', { class: 'ovbar', style: pos(ms(s.start), end(s), 0.6) })));
   return el('div', { class: 'ovline' },
-    el('div', { class: 'ovtrack', role: 'img', 'aria-label': `${ovTime(o.from)} – ${o.ongoing ? t('ovNow') : ovTime(o.to)}` },
-      bar(a, 'a'), bar(b, 'b'), el('i', { class: 'ovband', style: pos(ms(o.from), ms(o.to)) })),
-    el('div', { class: 'ovaxis muted' }, el('span', { text: ovTime(lo) }), el('span', { text: o.ongoing ? t('ovNow') : ovTime(hi) })),
-    el('ul', { class: 'ovlegend' },
-      el('li', {}, el('i', { class: 'ovkey a' }), el('span', { text: label(a, 'A') })),
-      el('li', {}, el('i', { class: 'ovkey b' }), el('span', { text: label(b, 'B') })),
-      el('li', {}, el('i', { class: 'ovkey band' }), el('span', { text: `${t('ovBoth')}: ${fmtMin(o.seconds)}${o.sameGroup ? '' : ` · ${t('ovOtherGroup', { a: a.group, b: b.group })}`}` }))));
+    el('ul', { class: 'ovrows' }, ...g.sessions.map(row)),
+    el('div', { class: 'ovaxis muted' }, el('span', { text: ovTime(lo) }), el('span', { text: g.ongoing ? t('ovNow') : ovTime(hi) })));
 }
 
 function renderOverlap() {
   const box = $('overlap'), ov = state.data?.overlap;
-  if (!ov) { box.hidden = true; box.replaceChildren(); return; }
+  if (!ov?.groups?.length) { box.hidden = true; box.replaceChildren(); return; }
   const hd = state.view === 'hduser';
-  const last = ov.items[0];
-  const args = { count: ov.count, days: ov.days, last: ovTime(last.from), duration: fmtMin(last.seconds), longest: fmtMin(ov.longestSeconds) };
+  const last = ov.groups[0];
+  const args = { count: ov.groupCount, days: ov.days, last: ovTime(last.from), peak: last.peak, duration: fmtMin(last.seconds), longest: fmtMin(Math.max(...ov.groups.map((g) => g.seconds))) };
   const head = el('h2', { id: 'overlap-h', text: t(ov.sameGroup ? (hd ? 'ovTitleSameHd' : 'ovTitleSame') : 'ovTitleOther') });
   const lead = el('p', { text: t(hd ? 'ovBodyHd' : 'ovBodyUser', args) + (ov.ongoing ? ` ${t('ovOngoing')}` : '') });
   const why = el('p', { class: 'ovwhy', hidden: true, text: t('ovWhyText') });
   const detail = el('div', { class: 'ovdetail', hidden: true },
-    ...ov.items.slice(0, 10).map((o) => el('div', { class: 'ovitem' }, el('h3', { text: `${ovTime(o.from)} · ${fmtMin(o.seconds)}${o.ongoing ? ` · ${t('ovOngoingShort')}` : ''}` }), ovTimeline(o))),
-    ov.count > Math.min(10, ov.items.length) ? el('p', { class: 'muted', text: t('ovMore', { n: Math.min(10, ov.items.length), total: ov.count }) }) : null);
-  const toggle = (label, target, other) => {
+    el('p', { class: 'ovlegend' }, el('i', { class: 'ovkey band' }), el('span', { text: t('ovShared') })),
+    ...ov.groups.map((g) => el('div', { class: 'ovitem' },
+      el('h3', { text: `${t('ovGroupHead', { from: ovTime(g.from), to: g.ongoing ? t('ovNow') : ovTime(g.to), peak: g.peak, duration: fmtMin(g.seconds) })}${g.ongoing ? ` · ${t('ovOngoingShort')}` : ''}` }),
+      ovTimeline(g))),
+    ov.groupCount > ov.groups.length ? el('p', { class: 'muted', text: t('ovMore', { n: ov.groups.length, total: ov.groupCount }) }) : null);
+  const toggle = (label, target) => {
     const b = el('button', { type: 'button', text: label, 'aria-expanded': 'false' });
     b.addEventListener('click', () => { const open = target.hidden; target.hidden = !open; b.setAttribute('aria-expanded', String(open)); });
     return b;
@@ -2455,6 +2463,7 @@ async function init() {
     if (shot === 'processes') await openProcesses(state.data.live[0]);
     else { await openDetails(state.data.live[0], shot === 'profile' ? 'profile' : shot === 'charts' ? 'charts' : shot === 'hdx' ? 'hdx' : 'summary'); if (shot === 'profile') document.querySelector('.profile button')?.click(); if (shot === 'hdx') document.querySelector('.hdx button')?.click(); }
   }
+  if (!$('demo').hidden && shot === 'parallel') document.querySelector('#overlap .ovactions button')?.click();   // opens the details of the parallel-session card
   if (!$('demo').hidden && shot === 'env' && state.caps.admin) { showView('env'); await loadEnv(); }
   if (!$('demo').hidden && shot === 'insights' && state.helpdesk) { showView('insights'); await loadInsights(); }
   if (!$('demo').hidden && shot === 'machine' && state.helpdesk) { showView('insights'); await loadInsights(); await openMachine('rds-02.demo.local'); }

@@ -54,8 +54,18 @@ public sealed record OverlapSession(string Key, string Group, string Machine, st
 /// <summary>Two sessions of one user that overlapped from <c>From</c> to <c>To</c>. <c>SameGroup</c> = same delivery group (probably the same profile).</summary>
 public sealed record SessionOverlap(OverlapSession A, OverlapSession B, DateTimeOffset From, DateTimeOffset To, bool Ongoing, bool SameGroup, int Seconds);
 
-/// <summary>The overlaps found in the last <c>Days</c> days, newest first (<c>Items</c> holds at most 30; <c>Count</c> is the real number).</summary>
-public sealed record OverlapSummary(int Count, int LongestSeconds, bool Ongoing, bool SameGroup, int Days, IReadOnlyList<SessionOverlap> Items);
+/// <summary>A stretch of time in which at least two sessions ran.</summary>
+public sealed record OverlapSpan(DateTimeOffset From, DateTimeOffset To);
+
+/// <summary>Sessions that are connected by overlaps (A with B, B with C), shown together on one time axis. <c>Shared</c> are the times with at least two
+/// sessions, <c>Seconds</c> their total length, <c>Peak</c> the most sessions that ran at once.</summary>
+public sealed record OverlapGroup(DateTimeOffset From, DateTimeOffset To, bool Ongoing, bool SameGroup, int Seconds, int Peak,
+    IReadOnlyList<OverlapSession> Sessions, IReadOnlyList<OverlapSpan> Shared);
+
+/// <summary>The overlaps found in the last <c>Days</c> days, newest first. <c>Count</c> counts pairs of sessions, <c>Items</c> holds at most 30 of them;
+/// <c>Groups</c> (at most 10, <c>GroupCount</c> is the real number) is what the view draws.</summary>
+public sealed record OverlapSummary(int Count, int LongestSeconds, bool Ongoing, bool SameGroup, int Days, IReadOnlyList<SessionOverlap> Items,
+    IReadOnlyList<OverlapGroup> Groups, int GroupCount);
 
 /// <summary>A user found by the helpdesk search. Sid identifies the user in all follow-up calls.</summary>
 public sealed record HelpdeskUser(string Name, string Sid, bool HasLiveSession);

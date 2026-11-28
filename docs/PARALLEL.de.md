@@ -9,9 +9,11 @@ SSS weist dort darauf hin, wo man hinschaut, mit einer Erklärung und den Detail
 ## Wo es erscheint
 
 - **Ansicht des Benutzers**: eine Tipp-Karte über den Sitzungen, in einfachen Worten, mit Knöpfen für die Details und für „Warum ist das ein Problem?".
-- **Helpdesk**: dieselbe Karte nach Auswahl eines Benutzers, mit der Zahl der Überschneidungen, der längsten und dem Hinweis, ob gerade Sitzungen parallel laufen.
-- **Details**: für jede Überschneidung eine **Zeitleiste** mit einem Balken je Sitzung und dem überlappenden Teil markiert, dazu Client, Maschine und Zustand (aktiv, getrennt, beendet) beider Sitzungen. Gezeigt werden die letzten 10 Überschneidungen.
+- **Helpdesk**: dieselbe Karte nach Auswahl eines Benutzers, mit der Zahl der Zeiträume mit parallelen Sitzungen, dem längsten und dem Hinweis, ob gerade Sitzungen parallel laufen.
+- **Details**: Sitzungen, die durch Überschneidungen zusammenhängen (A mit B, B mit C), bilden einen **Zeitraum** mit einer gemeinsamen Zeitachse: je Sitzung eine Zeile mit Maschine, Delivery Group, dem Gerät, von dem sie gestartet wurde, Beginn, Ende und Zustand. Hinterlegt sind die Zeiten, in denen mindestens zwei Sitzungen liefen; die Überschrift nennt die meisten gleichzeitigen Sitzungen und die gesamte parallele Zeit. Gezeigt werden die letzten 10 Zeiträume. (Die Insights-Liste zählt weiterhin Sitzungspaare.)
 - **Insights-Tab**: eine Liste der Benutzer mit parallelen Sitzungen in den letzten Tagen, laufende zuerst. Der Helpdesk öffnet den Benutzer von dort.
+
+![Parallele Sitzungen auf einer Zeitachse (Demodaten)](img/parallel-light.png)
 
 ## Wie es gefunden wird
 

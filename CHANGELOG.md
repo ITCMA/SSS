@@ -2,6 +2,11 @@
 
 All notable changes to SSS. The project follows [Semantic Versioning](docs/COMPATIBILITY.md); versions below 1.0.0 may still change configuration keys between minor versions, and every such change is listed here.
 
+## 0.4.9 - 2026-11-28 (beta)
+
+### Fixed
+- **Parallel sessions, details**: sessions that overlap are now drawn together, one row per session on one time axis, instead of one small picture per pair with the labels "A" and "B" (which changed from picture to picture and listed the starting device like a second machine). Very short overlaps are marked where they happened; before, the marking was widened to one side and appeared next to the session it belonged to. The text counts periods and the most sessions at once instead of pairs.
+
 ## 0.4.8 - 2026-11-18 (beta)
 
 ### Added

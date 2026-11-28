@@ -6,7 +6,7 @@ namespace Sss.Web.Services;
 /// view and the Insights list use the same rule and need no extra query.</summary>
 public static class OverlapDetector
 {
-    private const int MaxItems = 30, MaxSessions = 200;
+    private const int MaxItems = 30, MaxGroups = 10, MaxSessions = 200;
 
     /// <summary>The overlaps among <paramref name="sessions"/> (open sessions run until <paramref name="now"/>), or null when there are none.</summary>
     public static OverlapSummary? Detect(IEnumerable<OverlapSession> sessions, DateTimeOffset now, OverlapOptions o)
@@ -36,7 +36,39 @@ public static class OverlapDetector
         }
         if (found.Count == 0) return null;
         found = found.OrderByDescending(x => x.From).ToList();
-        return new OverlapSummary(found.Count, found.Max(x => x.Seconds), found.Any(x => x.Ongoing), found.Any(x => x.SameGroup), days, found.Take(MaxItems).ToList());
+        var groups = Group(found, now);
+        return new OverlapSummary(found.Count, found.Max(x => x.Seconds), found.Any(x => x.Ongoing), found.Any(x => x.SameGroup), days, found.Take(MaxItems).ToList(),
+            groups.Take(MaxGroups).ToList(), groups.Count);
+    }
+
+    // Pairs that share a session belong together: six sessions running side by side are one picture with six rows, not fifteen pictures of two.
+    private static List<OverlapGroup> Group(List<SessionOverlap> pairs, DateTimeOffset now)
+    {
+        var parent = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        string Root(string k)
+        {
+            if (!parent.TryGetValue(k, out var p)) { parent[k] = k; return k; }
+            return string.Equals(p, k, StringComparison.OrdinalIgnoreCase) ? k : parent[k] = Root(p);
+        }
+        foreach (var x in pairs) parent[Root(x.A.Key)] = Root(x.B.Key);
+
+        return pairs.GroupBy(x => Root(x.A.Key), StringComparer.OrdinalIgnoreCase).Select(g =>
+        {
+            var sessions = g.SelectMany(x => new[] { x.A, x.B }).DistinctBy(s => s.Key, StringComparer.OrdinalIgnoreCase)
+                .OrderBy(s => s.Start).ThenBy(s => s.Machine, StringComparer.OrdinalIgnoreCase).ToList();
+            var shared = new List<OverlapSpan>();
+            foreach (var x in g.OrderBy(x => x.From))
+            {
+                if (shared.Count > 0 && x.From <= shared[^1].To) { if (x.To > shared[^1].To) shared[^1] = shared[^1] with { To = x.To }; }
+                else shared.Add(new OverlapSpan(x.From, x.To));
+            }
+            // most sessions at the same moment: count starts and ends in time order, an end before a start at the same instant
+            int running = 0, peak = 0;
+            foreach (var step in sessions.SelectMany(s => new[] { (At: s.Start, Delta: 1), (At: s.End ?? now, Delta: -1) }).OrderBy(e => e.At).ThenBy(e => e.Delta))
+                peak = Math.Max(peak, running += step.Delta);
+            var seconds = (int)Math.Min(int.MaxValue, shared.Sum(s => (s.To - s.From).TotalSeconds));
+            return new OverlapGroup(shared[0].From, shared[^1].To, g.Any(x => x.Ongoing), g.Any(x => x.SameGroup), seconds, peak, sessions, shared);
+        }).OrderByDescending(x => x.To).ThenByDescending(x => x.From).ToList();
     }
 
     public static OverlapSession Of(SessionInfo s) => new(s.SessionKey ?? s.Uid, s.DeliveryGroup ?? "", s.Machine ?? "", s.ClientName,

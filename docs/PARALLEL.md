@@ -9,9 +9,11 @@ SSS points this out where people look, with an explanation and the details if th
 ## Where it shows
 
 - **User's view**: a tip card above the sessions, in plain words, with buttons for the details and for "Why is this a problem?".
-- **Helpdesk**: the same card after selecting a user, with the number of overlaps, the longest one and whether sessions run in parallel right now.
-- **Details**: for each overlap a **timeline** with one bar per session and the overlapping part marked, plus client, machine and state (active, disconnected, ended) of both sessions. The latest 10 overlaps are shown.
+- **Helpdesk**: the same card after selecting a user, with the number of periods with parallel sessions, the longest one and whether sessions run in parallel right now.
+- **Details**: sessions that are connected by overlaps (A with B, B with C) form one **period** with one time axis: one row per session with machine, delivery group, the device it was started from, start, end and state. Shaded are the times in which at least two sessions ran; the heading names the most sessions at the same moment and the total parallel time. The latest 10 periods are shown. (The Insights list keeps counting pairs of sessions.)
 - **Insights** tab: a list of the users with parallel sessions in the last days, running ones first. The helpdesk opens the user from there.
+
+![Parallel sessions on one time axis (demo data)](img/parallel-light.png)
 
 ## How it is found
 

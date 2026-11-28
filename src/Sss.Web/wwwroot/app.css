@@ -440,14 +440,17 @@ svg.chart2 .gridl { stroke: var(--border); stroke-dasharray: 2 3; } svg.chart2 .
 .ovactions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
 .ovdetail { display: grid; gap: 14px; margin-top: 8px; }
 .ovitem h3 { margin: 0 0 6px; font-size: .9rem; }
-.ovtrack { position: relative; height: 34px; border: 1px solid var(--border); border-radius: 6px; background: color-mix(in srgb, var(--text) 4%, transparent); overflow: hidden; }
+.ovrows { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.ovrow, .ovaxis { display: grid; grid-template-columns: minmax(180px, 30%) 1fr; gap: 12px; align-items: center; }
+.ovwho { display: flex; flex-direction: column; min-width: 0; font-size: .8rem; overflow-wrap: anywhere; }
+.ovtrack { position: relative; height: 24px; border: 1px solid var(--border); border-radius: 6px; background: color-mix(in srgb, var(--text) 4%, transparent); overflow: hidden; }
 .ovbar, .ovband { position: absolute; display: block; }
-.ovbar { height: 11px; border-radius: 3px; }
-.ovbar.a, .ovkey.a { background: var(--accent); } .ovbar.b, .ovkey.b { background: #8a5cf6; }
-.ovbar.a { top: 4px; } .ovbar.b { top: 19px; }
-.ovband { top: 0; bottom: 0; background: var(--crit); opacity: .22; }
-.ovkey.band { background: var(--crit); opacity: .35; }
-.ovaxis { display: flex; justify-content: space-between; font-size: .75rem; margin-top: 2px; }
-.ovlegend { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: .8rem; color: var(--muted); }
-.ovlegend li { display: flex; align-items: center; gap: 5px; }
+.ovbar { top: 6px; height: 10px; border-radius: 3px; background: var(--accent); }
+.ovband { top: 0; bottom: 0; background: color-mix(in srgb, var(--crit) 24%, transparent); }
+.ovkey.band { background: color-mix(in srgb, var(--crit) 40%, transparent); }
+.ovaxis { font-size: .75rem; margin-top: 2px; }
+.ovaxis span:first-child { grid-column: 2; justify-self: start; grid-row: 1; }
+.ovaxis span:last-child { grid-column: 2; justify-self: end; grid-row: 1; }
+.ovlegend { display: flex; align-items: center; gap: 6px; margin: 0; font-size: .8rem; color: var(--muted); }
 .ovkey { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
+@media (max-width: 640px) { .ovrow, .ovaxis { grid-template-columns: 1fr; gap: 2px; } .ovaxis span:first-child, .ovaxis span:last-child { grid-column: 1; } }

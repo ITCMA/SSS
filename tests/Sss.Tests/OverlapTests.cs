@@ -41,6 +41,41 @@ public class OverlapTests
     }
 
     [Fact]
+    public void Sessions_connected_by_overlaps_form_one_group_with_one_row_each()
+    {
+        // one long session, five sessions next to each other inside it, and a late one that touches two of them for a few seconds
+        var day = new DateTimeOffset(2026, 11, 17, 0, 0, 0, TimeSpan.Zero);
+        OverlapSession At(string key, int h1, int m1, int s1, int h2, int m2, int s2) =>
+            new(key, "G", key, "PC", "ended", day.AddHours(h1).AddMinutes(m1).AddSeconds(s1), day.AddHours(h2).AddMinutes(m2).AddSeconds(s2));
+        var sessions = new List<OverlapSession> { At("long", 14, 3, 26, 23, 2, 57), At("late", 22, 8, 52, 22, 40, 19) };
+        for (var i = 1; i <= 5; i++) sessions.Add(At($"vda-{i}", 14, 12 + (i > 3 ? 1 : 0), 40 + i, 22, 8, 29 + (i == 5 ? 31 : i)));
+        sessions.Add(At("earlier", 6, 0, 0, 7, 0, 0));                       // overlaps with nothing
+
+        var r = OverlapDetector.Detect(sessions, day.AddDays(1), new OverlapOptions())!;
+
+        var g = Assert.Single(r.Groups);
+        Assert.Equal(1, r.GroupCount);
+        Assert.Equal(17, r.Count);                                            // pairs, as the Insights list counts them
+        Assert.Equal(7, g.Sessions.Count);
+        Assert.Equal("long", g.Sessions[0].Key);                              // rows in the order the sessions started
+        Assert.Equal("late", g.Sessions[^1].Key);
+        Assert.Equal(6, g.Peak);
+        var shared = Assert.Single(g.Shared);                                 // the late session starts while one of the five still runs
+        Assert.Equal(sessions[1].End, shared.To);
+        Assert.Equal(g.Seconds, (int)g.Shared.Sum(x => (x.To - x.From).TotalSeconds));
+        Assert.All(g.Shared, x => Assert.True(x.From >= g.From && x.To <= g.To));
+    }
+
+    [Fact]
+    public void Unrelated_overlaps_stay_separate_groups_newest_first()
+    {
+        var r = OverlapDetector.Detect([S("a", "G", 30, 28), S("b", "G", 29, 27), S("c", "G", 10, 8), S("d", "G", 9, 7)], Now, new OverlapOptions())!;
+        Assert.Equal(2, r.GroupCount);
+        Assert.True(r.Groups[0].To > r.Groups[1].To);
+        Assert.All(r.Groups, g => { Assert.Equal(2, g.Peak); Assert.Equal(3600, g.Seconds); });
+    }
+
+    [Fact]
     public void Two_open_sessions_overlap_until_now_and_are_ongoing()
     {
         var r = OverlapDetector.Detect([S("a", "G", 5, null), S("b", "G", 2, null)], Now, new OverlapOptions())!;
